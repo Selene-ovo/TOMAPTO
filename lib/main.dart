@@ -2,25 +2,26 @@ import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // .env 파일 경로
   await dotenv.load(fileName: '.env');
-  
+
   await NaverMapSdk.instance.initialize(
     clientId: dotenv.env['NAVER_API_KEY'] ?? '',
     onAuthFailed: (error) {
       print('네이버 맵 인증 실패: $error');
     },
   );
-  
+
   runApp(MyApp());
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({Key? key}) : super(key: key);
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +37,7 @@ class MyApp extends StatelessWidget {
 }
 
 class NaverMapPage extends StatefulWidget {
-  const NaverMapPage({Key? key}) : super(key: key);
+  const NaverMapPage({super.key});
 
   @override
   _NaverMapPageState createState() => _NaverMapPageState();
