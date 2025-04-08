@@ -1,21 +1,79 @@
+// lib/main.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'widgets/bottom_nav_bar.dart'; // 네비게이션바 임포트
 
-// 기존 friendPage 클래스 유지 (FriendScreen 대신 사용)
-class friendPage extends StatelessWidget {
-  const friendPage({Key? key}) : super(key: key);
+// FriendScreen 클래스 정의 (StatefulWidget으로 변경)
+class FriendScreen extends StatefulWidget {
+  const FriendScreen({Key? key}) : super(key: key);
+
+  @override
+  _FriendScreenState createState() => _FriendScreenState();
+}
+
+class _FriendScreenState extends State<FriendScreen> {
+  // 임시 친구 데이터 (실제로는 API나 DB에서 가져옴)
+  final List<Map<String, dynamic>> friends = [
+    {
+      'name': '하수용',
+      'avatar': 'assets/images/profile1.png',
+      'distance': '0.5km',
+      'lastUpdated': '1분 전',
+      'isSharing': true,
+    },
+    {
+      'name': '심종완',
+      'avatar': 'assets/images/profile2.png',
+      'distance': '1.2km',
+      'lastUpdated': '5분 전',
+      'isSharing': true,
+    },
+    {
+      'name': '황중혁',
+      'avatar': 'assets/images/profile3.png',
+      'distance': '3.7km',
+      'lastUpdated': '30분 전',
+      'isSharing': true,
+    },
+    {
+      'name': '원종호',
+      'avatar': 'assets/images/profile4.png',
+      'distance': '오프라인',
+      'lastUpdated': '1시간 전',
+      'isSharing': false,
+    },
+  ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('친구 위치')),
+      appBar: AppBar(
+        title: Text('친구 위치'),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.refresh),
+            onPressed: () {
+              // 위치 새로고침 로직
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text('위치 정보를 새로고침했습니다')));
+            },
+          ),
+          IconButton(
+            icon: Icon(Icons.settings),
+            onPressed: () {
+              // 설정 화면 이동 로직
+            },
+          ),
+        ],
+      ),
       body: Column(
         children: [
           // 내 위치 공유 상태 카드
-          _buildMyLocationCard(context),
+          _buildMyLocationCard(),
 
           // 구분선
           Divider(thickness: 1),
@@ -30,40 +88,19 @@ class friendPage extends StatelessWidget {
                   '내 근처 친구',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
-                Text('3명 온라인'),
+                Text('${friends.where((f) => f['isSharing']).length}명 온라인'),
               ],
             ),
           ),
 
           // 친구 목록
           Expanded(
-            child: ListView(
-              children: [
-                _buildFriendItem(context, {
-                  'name': '하수용',
-                  'distance': '0.5km',
-                  'lastUpdated': '1분 전',
-                  'isSharing': true,
-                }),
-                _buildFriendItem(context, {
-                  'name': '심종완',
-                  'distance': '1.2km',
-                  'lastUpdated': '5분 전',
-                  'isSharing': true,
-                }),
-                _buildFriendItem(context, {
-                  'name': '황중혁',
-                  'distance': '3.7km',
-                  'lastUpdated': '30분 전',
-                  'isSharing': true,
-                }),
-                _buildFriendItem(context, {
-                  'name': '원종호',
-                  'distance': '오프라인',
-                  'lastUpdated': '1시간 전',
-                  'isSharing': false,
-                }),
-              ],
+            child: ListView.builder(
+              itemCount: friends.length,
+              itemBuilder: (context, index) {
+                final friend = friends[index];
+                return _buildFriendItem(friend);
+              },
             ),
           ),
         ],
@@ -79,8 +116,7 @@ class friendPage extends StatelessWidget {
     );
   }
 
-  // 위젯 메서드들을 static으로 변경
-  static Widget _buildMyLocationCard(BuildContext context) {
+  Widget _buildMyLocationCard() {
     return Card(
       margin: EdgeInsets.all(16),
       elevation: 4,
@@ -117,6 +153,9 @@ class friendPage extends StatelessWidget {
                   value: true,
                   onChanged: (value) {
                     // 위치 공유 토글 로직
+                    setState(() {
+                      // 위치 공유 상태 변경
+                    });
                   },
                 ),
               ],
@@ -138,10 +177,7 @@ class friendPage extends StatelessWidget {
     );
   }
 
-  static Widget _buildFriendItem(
-    BuildContext context,
-    Map<String, dynamic> friend,
-  ) {
+  Widget _buildFriendItem(Map<String, dynamic> friend) {
     return ListTile(
       leading: CircleAvatar(
         backgroundColor: friend['isSharing'] ? Colors.green : Colors.grey,
@@ -171,10 +207,7 @@ class friendPage extends StatelessWidget {
     );
   }
 
-  static void _showFriendDetail(
-    BuildContext context,
-    Map<String, dynamic> friend,
-  ) {
+  void _showFriendDetail(BuildContext context, Map<String, dynamic> friend) {
     showModalBottomSheet(
       context: context,
       shape: RoundedRectangleBorder(
@@ -252,7 +285,7 @@ class friendPage extends StatelessWidget {
     );
   }
 
-  static void _showMapFullScreen(BuildContext context) {
+  void _showMapFullScreen(BuildContext context) {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder:
@@ -281,38 +314,48 @@ class friendPage extends StatelessWidget {
                       height: 120,
                       padding: EdgeInsets.symmetric(vertical: 8),
                       color: Colors.white,
-                      child: ListView(
+                      child: ListView.builder(
                         scrollDirection: Axis.horizontal,
+                        itemCount: friends.where((f) => f['isSharing']).length,
                         padding: EdgeInsets.symmetric(horizontal: 16),
-                        children: [
-                          _buildFriendCard('하수용', '0.5km'),
-                          _buildFriendCard('심종완', '1.2km'),
-                          _buildFriendCard('황중혁', '3.7km'),
-                        ],
+                        itemBuilder: (context, index) {
+                          final onlineFriends =
+                              friends.where((f) => f['isSharing']).toList();
+                          return Container(
+                            width: 100,
+                            margin: EdgeInsets.only(right: 12),
+                            child: Column(
+                              children: [
+                                CircleAvatar(
+                                  child: Text(
+                                    onlineFriends[index]['name'].substring(
+                                      0,
+                                      1,
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  onlineFriends[index]['name'],
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                Text(
+                                  onlineFriends[index]['distance'],
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
                       ),
                     ),
                   ),
                 ],
               ),
             ),
-      ),
-    );
-  }
-
-  static Widget _buildFriendCard(String name, String distance) {
-    return Container(
-      width: 100,
-      margin: EdgeInsets.only(right: 12),
-      child: Column(
-        children: [
-          CircleAvatar(child: Text(name.substring(0, 1))),
-          SizedBox(height: 4),
-          Text(name, overflow: TextOverflow.ellipsis),
-          Text(
-            distance,
-            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-          ),
-        ],
       ),
     );
   }
@@ -335,8 +378,6 @@ void main() async {
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({Key? key}) : super(key: key);
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -364,7 +405,7 @@ class _MainPageState extends State<MainPage> {
   // 각 탭에 해당하는 페이지 목록
   final List<Widget> _pages = [
     const NaverMapPage(), // 메인 페이지 (지도)
-    const friendPage(), // 기존 친구 페이지 유지 (수정된 코드 포함)
+    const FriendScreen(), // FriendScreen으로 변경
     const NavigatePage(), // 네비게이션 페이지
     const FavoritesPage(), // 즐겨찾기 페이지
     const ProfilePage(), // 프로필 페이지
@@ -389,7 +430,7 @@ class _MainPageState extends State<MainPage> {
   }
 }
 
-// 기존 네이버 맵 페이지 (일부 수정)
+// NaverMapPage 클래스 완전히 재구현
 class NaverMapPage extends StatefulWidget {
   const NaverMapPage({Key? key}) : super(key: key);
 
@@ -400,7 +441,6 @@ class NaverMapPage extends StatefulWidget {
 class _NaverMapPageState extends State<NaverMapPage> {
   NaverMapController? _mapController;
   NLatLng? _currentPosition;
-  final Set<NMarker> _markers = {};
 
   @override
   void initState() {
@@ -408,48 +448,48 @@ class _NaverMapPageState extends State<NaverMapPage> {
     _getCurrentLocation();
   }
 
+  // 현재 위치 가져오기
   Future<void> _getCurrentLocation() async {
-    // 위치 권한 요청
-    LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        return;
-      }
-    }
-
-    // 현재 위치 가져오기
     try {
-      Position position = await Geolocator.getCurrentPosition();
+      // 위치 권한 확인
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          // 권한이 거부되면 기본 위치 사용
+          return;
+        }
+      }
+
+      // 현재 위치 가져오기
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
       setState(() {
         _currentPosition = NLatLng(position.latitude, position.longitude);
       });
 
-      // 카메라 이동
+      // 지도 컨트롤러가 초기화되었다면 카메라 이동
       if (_mapController != null && _currentPosition != null) {
         _mapController!.updateCamera(
           NCameraUpdate.withParams(target: _currentPosition, zoom: 15),
         );
-
-        // 마커 업데이트
         _updateMarkers();
       }
     } catch (e) {
-      print('위치 가져오기 실패: $e');
+      print('위치 가져오기 오류: $e');
     }
   }
 
+  // 마커 업데이트
   void _updateMarkers() {
-    if (_mapController != null && _currentPosition != null) {
-      setState(() {
-        // 새로운 마커 세트 생성
-        _markers.clear();
+    if (_mapController == null || _currentPosition == null) return;
 
-        final marker = NMarker(id: '현재위치', position: _currentPosition!);
-
-        _markers.add(marker);
-      });
-    }
+    // 현재 위치 마커 추가
+    _mapController!.addOverlay(
+      NMarker(id: 'current_location', position: _currentPosition!),
+    );
   }
 
   @override
