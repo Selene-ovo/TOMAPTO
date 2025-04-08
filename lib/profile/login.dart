@@ -460,7 +460,7 @@ class _LoginPageState extends State<LoginPage> {
               ),
             ),
 
-            // 로딩 상태일 때 블러 처리된 오버레이
+            // 로딩 상태일 때 블러 처리된 오버레이.
             if (_isLoading)
               Positioned.fill(
                 child: BackdropFilter(
