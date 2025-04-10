@@ -7,11 +7,11 @@ class BottomNavBar extends StatelessWidget {
   final double curveHeight;
 
   const BottomNavBar({
-    Key? key,
+    super.key,
     required this.currentIndex,
     required this.onTap,
-    this.curveHeight = 25.0, // 기본 높이 조정
-  }) : super(key: key);
+    this.curveHeight = 30.0, // 기본값 설정
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -71,11 +71,11 @@ class BottomNavBar extends StatelessWidget {
           // 중앙 볼록 부분 (하단 바 위에 추가) - 곡선 개선 및 크기 조정
           Positioned(
             bottom: kBottomNavigationBarHeight - 1,
-            left: screenWidth / 2 - 52, // 좌측 위치 중간 정도로 조정 (60 -> 52)
+            left: screenWidth / 2 - 60, // 좌측 위치 더 넓게 조정 (52 -> 60)
             child: ClipPath(
               clipper: CenterCurveClipper(iconRadius: 30), // 아이콘 반지름 조정
               child: Container(
-                width: 105, // 너비 중간 정도로 조정 (120 -> 105)
+                width: 120, // 너비 더 넓게 조정 (105 -> 120)
                 height: curveHeight * 1.2, // 높이 조정
                 decoration: BoxDecoration(
                   color: Colors.white,
@@ -95,12 +95,12 @@ class BottomNavBar extends StatelessWidget {
           // 중앙 둥근 버튼 (Stack의 맨 마지막에 배치하여 항상 최상위에 표시)
           Positioned(
             bottom: kBottomNavigationBarHeight - 45, // 위치 조정
-            left: screenWidth / 2 - 25, // 중앙 위치 원래대로 조정
+            left: screenWidth / 2 - 28, // 중앙 위치 원래대로 조정
             child: GestureDetector(
               onTap: () => onTap(2),
               child: Container(
-                width: 50, // 크기 원래대로 복원
-                height: 50, // 크기 원래대로 복원
+                width: 57, // 크기 원래대로 복원
+                height: 57, // 크기 원래대로 복원
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
@@ -185,37 +185,37 @@ class CenterCurveClipper extends CustomClipper<Path> {
     // 좌측 하단에서 시작
     path.moveTo(0, height);
 
-    // 왼쪽 하단 직선 부분 (적절한 크기로 조정)
-    path.lineTo(width * 0.08, height); // 0.05 -> 0.08로 조정
+    // 왼쪽 하단 직선 부분 (더 넓게 조정)
+    path.lineTo(width * 0.05, height); // 0.08 -> 0.05로 줄여서 곡선 시작점을 더 왼쪽으로
 
-    // 왼쪽에서 중앙으로 올라가는 곡선 (적절한 크기로 조정)
+    // 왼쪽에서 중앙으로 올라가는 곡선 (더 넓게 조정)
     path.cubicTo(
-      width * 0.13,
-      height, // 첫 번째 제어점 (0.1 -> 0.13으로 조정)
-      width * 0.18,
-      height * 0.55, // 두 번째 제어점 (0.15 -> 0.18로, 높이도 0.5 -> 0.55로 조정)
-      width * 0.33,
-      height * 0.35, // 끝점 (0.3 -> 0.33으로 조정)
+      width * 0.10, // 첫 번째 제어점 (0.13 -> 0.10으로 왼쪽으로 이동)
+      height,
+      width * 0.15, // 두 번째 제어점 (0.18 -> 0.15로 왼쪽으로 이동)
+      height * 0.55,
+      width * 0.30, // 끝점 (0.33 -> 0.30으로 왼쪽으로 이동)
+      height * 0.35,
     );
 
-    // 중앙 상단 부분 (적절한 크기로 조정)
+    // 중앙 상단 부분 (더 넓게 조정)
     path.cubicTo(
-      width * 0.4,
-      height * 0.15, // 첫 번째 제어점 (0.37 -> 0.4로, 높이도 0.1 -> 0.15로 조정)
-      width * 0.6,
-      height * 0.15, // 두 번째 제어점 (0.63 -> 0.6으로, 높이도 0.1 -> 0.15로 조정)
-      width * 0.67,
-      height * 0.35, // 끝점 (0.7 -> 0.67로 조정)
+      width * 0.38, // 첫 번째 제어점 (0.4 -> 0.38로 왼쪽으로 약간 이동)
+      height * 0.15,
+      width * 0.62, // 두 번째 제어점 (0.6 -> 0.62로 오른쪽으로 이동)
+      height * 0.15,
+      width * 0.70, // 끝점 (0.67 -> 0.70으로 오른쪽으로 이동)
+      height * 0.35,
     );
 
-    // 중앙에서 오른쪽으로 내려가는 곡선 (적절한 크기로 조정)
+    // 중앙에서 오른쪽으로 내려가는 곡선 (더 넓게 조정)
     path.cubicTo(
-      width * 0.82,
-      height * 0.55, // 첫 번째 제어점 (0.85 -> 0.82로 조정)
-      width * 0.87,
-      height, // 두 번째 제어점 (0.9 -> 0.87로 조정)
-      width * 0.92,
-      height, // 끝점 (0.95 -> 0.92로 조정)
+      width * 0.85, // 첫 번째 제어점 (0.82 -> 0.85로 오른쪽으로 이동)
+      height * 0.55,
+      width * 0.90, // 두 번째 제어점 (0.87 -> 0.90으로 오른쪽으로 이동)
+      height,
+      width * 0.95, // 끝점 (0.92 -> 0.95로 오른쪽으로 이동)
+      height,
     );
 
     // 오른쪽 하단 직선 부분
