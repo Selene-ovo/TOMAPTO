@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'widgets/bottom_nav_bar.dart'; // 네비게이션바 임포트
+import 'package:flutter_svg/flutter_svg.dart'; // SVG 패키지 추가
+import 'widgets/bottom_nav_bar.dart';
+import 'pages/friend_screen.dart'; // 친구 화면 임포트
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,7 +30,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'TOMAPTO',
       theme: ThemeData(
-        primarySwatch: Colors.red, // 네비게이션바의 테마색상과 맞춤
+        primarySwatch: Colors.red,
         visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
       home: const MainPage(),
@@ -47,10 +49,10 @@ class MainPage extends StatefulWidget {
 class _MainPageState extends State<MainPage> {
   int _currentIndex = 0; // 현재 선택된 탭 인덱스
 
-  // 각 탭에 해당하는 페이지 목록
+  // 각 탭에 해당하는 페이지 목록 - FriendScreen으로 교체
   final List<Widget> _pages = [
     const NaverMapPage(), // 메인 페이지 (지도)
-    const SearchPage(), // 검색 페이지
+    FriendScreen(),
     const NavigatePage(), // 네비게이션 페이지
     const FavoritesPage(), // 즐겨찾기 페이지
     const ProfilePage(), // 프로필 페이지
@@ -70,13 +72,12 @@ class _MainPageState extends State<MainPage> {
       bottomNavigationBar: BottomNavBar(
         currentIndex: _currentIndex,
         onTap: _onTabTapped,
-        // curveHeight: 30.0, // 기본값이 설정되어 있으므로 생략 가능
       ),
     );
   }
 }
 
-// 기존 네이버 맵 페이지 (일부 수정)
+// 기존 네이버 맵 페이지 (유지)
 class NaverMapPage extends StatefulWidget {
   const NaverMapPage({super.key});
 
@@ -183,19 +184,7 @@ class _NaverMapPageState extends State<NaverMapPage> {
   }
 }
 
-// 추가 페이지들 (간단한 구현)
-class SearchPage extends StatelessWidget {
-  const SearchPage({Key? key}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('검색')),
-      body: const Center(child: Text('검색 페이지')),
-    );
-  }
-}
-
+// 나머지 기존 페이지들 (유지)
 class NavigatePage extends StatelessWidget {
   const NavigatePage({Key? key}) : super(key: key);
 

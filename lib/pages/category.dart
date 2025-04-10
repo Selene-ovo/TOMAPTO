@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-class HomeScreen extends StatelessWidget {
+class Category extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Center(child: Text('홈 화면'));
+    return Center(child: Text('카테고리'));
   }
 }
