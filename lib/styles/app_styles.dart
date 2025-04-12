@@ -1,5 +1,38 @@
 import 'package:flutter/material.dart';
 
+// transit.dart
+class AppStyles {
+  // 앱의 기본 테마
+  static ThemeData get theme => ThemeData(
+    primarySwatch: Colors.red,
+    fontFamily: 'Pretendard',
+    // 필요한 다른 테마 속성들 추가
+  );
+
+  // 색상 상수
+  static const Color primaryColor = Color(0xFFFB233B);
+  static const Color searchBarColor = Color(0xFFFB5063);
+  static const Color busNumberColor = Color(0xFF00C73C);
+
+  // 텍스트 스타일
+  static const TextStyle searchTextStyle = TextStyle(
+    color: Colors.white,
+    fontWeight: FontWeight.w500,
+  );
+
+  static const TextStyle routeTimeStyle = TextStyle(
+    fontSize: 24,
+    fontWeight: FontWeight.bold,
+  );
+
+  // 기타 필요한 스타일 추가
+}
+
+//
+//
+//
+// login.dart
+
 // 앱 색상 상수
 class AppColors {
   static const Color primary = Color(0xFFFB233B);
