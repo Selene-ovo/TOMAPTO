@@ -51,8 +51,9 @@ SPEC CHECKSUMS:
   geolocator_apple: 66b711889fd333205763b83c9dcf0a57a28c7afd
   NMapsGeometry: 4e02554fa9880ef02ed96b075dc84355d6352479
   NMapsMap: 99c10429d93340780b6f88d3fc7c0a3850b43664
-  path_provider_foundation: 080d55be775b7414fd5a5ef3ac137b97b097e564
-  permission_handler_apple: 4ed2196e43d0651e8ff7ca3483a069d469701f2d
+  path_provider_foundation: 2b6b4c569c0fb62ec74538f866245ac84301af46
+  permission_handler_apple: 9878588469a2b0d0fc1e048d9f43605f92e6cec2
+  shared_preferences_foundation: fcdcbc04712aee1108ac7fda236f363274528f78
 
 PODFILE CHECKSUM: a3c17a8829469f488623fdcca929b461242fbfb4
 
