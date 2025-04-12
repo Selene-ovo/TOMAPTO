@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:tomapto/widgets/bottom_nav_bar.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -49,6 +50,9 @@ class _NaverMapPageState extends State<NaverMapPage> {
   NLatLng? _currentPosition;
   final Set<NMarker> _markers = {};
   final TextEditingController _searchController = TextEditingController();
+
+  // 현재 선택된 네비게이션 탭 인덱스
+  int _currentNavIndex = 0;
 
   @override
   void initState() {
@@ -153,6 +157,21 @@ class _NaverMapPageState extends State<NaverMapPage> {
         '마커 추가됨: ${_currentPosition!.latitude}, ${_currentPosition!.longitude}',
       );
     }
+  }
+
+  // 네비게이션 탭 변경 처리
+  void _handleNavIndexChanged(int index) {
+    setState(() {
+      _currentNavIndex = index;
+    });
+
+    // 현재 위치 버튼 처리 (중앙 버튼 - 인덱스 2)
+    if (index == 2) {
+      _getCurrentLocation();
+    }
+
+    // 여기에 각 탭에 따른 추가 동작 구현
+    print('네비게이션 탭 변경: $index');
   }
 
   @override
@@ -321,86 +340,15 @@ class _NaverMapPageState extends State<NaverMapPage> {
           ),
 
           // 하단 네비게이션 바
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: Container(
-              height: 60,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 4,
-                    offset: const Offset(0, -2),
-                  ),
-                ],
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _buildNavItem(Icons.navigation, '메인'),
-                  _buildNavItem(Icons.sentiment_satisfied_alt, ''),
-                  _buildNavItem(Icons.add_circle, '', isCenter: true),
-                  _buildNavItem(Icons.star_border, ''),
-                  _buildNavItem(Icons.person_outline, ''),
-                ],
-              ),
-            ),
-          ),
-
-          // 중앙 빨간색 버튼
-          Positioned(
-            bottom: 30,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: Container(
-                width: 60,
-                height: 60,
-                decoration: const BoxDecoration(
-                  color: Colors.red,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black26,
-                      blurRadius: 6,
-                      offset: Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: IconButton(
-                  icon: const Icon(
-                    Icons.my_location,
-                    color: Colors.white,
-                    size: 26,
-                  ),
-                  onPressed: _getCurrentLocation,
-                ),
-              ),
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: BottomNavBar(
+              currentIndex: _currentNavIndex,
+              onTap: _handleNavIndexChanged,
             ),
           ),
         ],
       ),
     );
-  }
-
-  Widget _buildNavItem(IconData icon, String label, {bool isCenter = false}) {
-    return isCenter
-        ? SizedBox(width: 60)
-        : Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 24, color: Colors.black54),
-            if (label.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: const TextStyle(fontSize: 12, color: Colors.black54),
-              ),
-            ],
-          ],
-        );
   }
 }
