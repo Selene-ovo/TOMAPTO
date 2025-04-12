@@ -4,7 +4,6 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:tomapto/controllers/login_controller.dart';
 import 'package:tomapto/widgets/bottom_nav_bar.dart';
-import 'package:tomapto/styles/app_styles.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized(); // Flutter 바인딩 초기화 (비동기 작업 전 필요)
@@ -54,33 +53,41 @@ class CustomTextField extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(labelText, style: AppTextStyles.caption(context)),
-        SizedBox(height: ResponsiveValue.height(context, base: 2)),
+        Text(
+          labelText,
+          style: TextStyle(
+            color: const Color(0xFF363636),
+            fontSize: 14.0 * MediaQuery.of(context).textScaleFactor,
+            fontWeight: FontWeight.w500,
+            fontFamily: 'Pretendard',
+          ),
+        ),
+        const SizedBox(height: 2),
         TextFormField(
           controller: controller,
           focusNode: focusNode,
           obscureText: obscureText,
           validator: validator,
           style: TextStyle(
-            fontSize: ResponsiveValue.fontSize(context, base: 16),
+            fontSize: 16.0 * MediaQuery.of(context).textScaleFactor,
           ),
           decoration: InputDecoration(
             border: UnderlineInputBorder(
               borderSide: BorderSide(
                 color:
                     focusNode?.hasFocus == true
-                        ? AppColors.primary
-                        : AppColors.textSecondary,
+                        ? const Color(0xFFFB233B) // 앱의 주요 색상 (빨간색)
+                        : const Color(0xFF757575), // 텍스트 보조 색상
               ),
             ),
-            enabledBorder: UnderlineInputBorder(
-              borderSide: BorderSide(color: AppColors.textSecondary),
+            enabledBorder: const UnderlineInputBorder(
+              borderSide: BorderSide(color: Color(0xFF757575)),
             ),
-            focusedBorder: UnderlineInputBorder(
-              borderSide: BorderSide(color: AppColors.primary),
+            focusedBorder: const UnderlineInputBorder(
+              borderSide: BorderSide(color: Color(0xFFFB233B)),
             ),
             suffixIcon: suffixIcon,
-            contentPadding: EdgeInsets.symmetric(vertical: 10), // 패딩 조절
+            contentPadding: const EdgeInsets.symmetric(vertical: 10),
           ),
         ),
       ],
@@ -103,25 +110,23 @@ class PrimaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final double height = 50.0 * (MediaQuery.of(context).size.height / 812);
+    final double radius = 25.0 * (MediaQuery.of(context).size.width / 375);
+
     return ElevatedButton(
       onPressed: onPressed,
       style: ElevatedButton.styleFrom(
         backgroundColor: backgroundColor,
-        minimumSize: Size(
-          MediaQuery.of(context).size.width,
-          ResponsiveValue.height(context, base: 50),
-        ),
+        minimumSize: Size(MediaQuery.of(context).size.width, height),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(
-            ResponsiveValue.width(context, base: 25),
-          ),
+          borderRadius: BorderRadius.circular(radius),
         ),
       ),
       child: Text(
         text,
         style: TextStyle(
           color: Colors.white,
-          fontSize: ResponsiveValue.fontSize(context, base: 16),
+          fontSize: 16.0 * MediaQuery.of(context).textScaleFactor,
           fontWeight: FontWeight.bold,
         ),
       ),
@@ -211,14 +216,13 @@ class _LoginPageState extends State<LoginPage> {
 
   // 로고 위젯 생성 메서드
   Widget _buildLogo(BuildContext context) {
+    final double height = 40.0 * (MediaQuery.of(context).size.height / 812);
+    final double verticalPadding =
+        10.0 * (MediaQuery.of(context).size.height / 812);
+
     return Padding(
-      padding: EdgeInsets.symmetric(
-        vertical: ResponsiveValue.height(context, base: 10),
-      ),
-      child: SvgPicture.asset(
-        'assets/icons/tomaptologo.svg',
-        height: ResponsiveValue.height(context, base: 40),
-      ),
+      padding: EdgeInsets.symmetric(vertical: verticalPadding),
+      child: SvgPicture.asset('assets/icons/tomaptologo.svg', height: height),
     );
   }
 
@@ -245,8 +249,8 @@ class _LoginPageState extends State<LoginPage> {
       suffixIcon: IconButton(
         icon: Icon(
           _controller.obscureText ? Icons.visibility_off : Icons.visibility,
-          color: AppColors.textSecondary,
-          size: ResponsiveValue.width(context, base: 20),
+          color: const Color(0xFF757575),
+          size: 20.0 * (MediaQuery.of(context).size.width / 375),
         ),
         onPressed: () {
           _controller.togglePasswordVisibility(setState);
@@ -262,6 +266,11 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Widget _buildRememberMeAndPasswordReset(BuildContext context) {
+    final double circleSize = 20.0 * (MediaQuery.of(context).size.width / 375);
+    final double spaceBetween = 5.0 * (MediaQuery.of(context).size.width / 375);
+    final double underlineWidth =
+        65.0 * (MediaQuery.of(context).size.width / 375);
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -273,23 +282,26 @@ class _LoginPageState extends State<LoginPage> {
           child: Row(
             children: [
               Container(
-                width: ResponsiveValue.width(context, base: 20),
-                height: ResponsiveValue.width(context, base: 20),
+                width: circleSize,
+                height: circleSize,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(color: Colors.grey[300]!),
                   color:
                       _controller.rememberMe
-                          ? AppColors.primary
+                          ? const Color(0xFFFB233B)
                           : Colors.transparent,
                 ),
               ),
-              SizedBox(width: ResponsiveValue.width(context, base: 5)),
+              SizedBox(width: spaceBetween),
               Text(
                 '로그인 유지',
-                style: AppTextStyles.caption(
-                  context,
-                ).copyWith(color: Colors.grey[600]),
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontSize: 14.0 * MediaQuery.of(context).textScaleFactor,
+                  fontFamily: 'Pretendard',
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ],
           ),
@@ -302,14 +314,17 @@ class _LoginPageState extends State<LoginPage> {
             children: [
               Text(
                 '비밀번호 찾기',
-                style: AppTextStyles.caption(
-                  context,
-                ).copyWith(color: AppColors.textSecondary),
+                style: TextStyle(
+                  color: const Color(0xFF757575),
+                  fontSize: 14.0 * MediaQuery.of(context).textScaleFactor,
+                  fontFamily: 'Pretendard',
+                  fontWeight: FontWeight.w500,
+                ),
               ),
               Container(
                 height: 1,
-                width: ResponsiveValue.width(context, base: 65),
-                color: AppColors.textSecondary,
+                width: underlineWidth,
+                color: const Color(0xFF757575),
               ),
             ],
           ),
@@ -320,6 +335,17 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    // 반응형 사이즈 계산
+    final screenHeight = MediaQuery.of(context).size.height;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final double topSpace = 80.0 * (screenHeight / 812);
+    final double logoToFormSpace = 60.0 * (screenHeight / 812);
+    final double fieldSpacing = 20.0 * (screenHeight / 812);
+    final double smallSpacing = 15.0 * (screenHeight / 812);
+    final double buttonSpacing = 35.0 * (screenHeight / 812);
+    final double bottomSpace = 20.0 * (screenHeight / 812);
+    final double horizontalPadding = 35.0 * (screenWidth / 375);
+
     return GestureDetector(
       onTap: _unfocusAll, // 배경을 터치하면 모든 포커스 해제
       child: Scaffold(
@@ -333,37 +359,34 @@ class _LoginPageState extends State<LoginPage> {
                   child: SingleChildScrollView(
                     child: Padding(
                       padding: EdgeInsets.symmetric(
-                        horizontal: ResponsiveValue.padding(context, base: 35),
+                        horizontal: horizontalPadding,
                       ),
                       child: Form(
                         key: _controller.formKey,
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.start,
                           children: [
-                            SizedBox(
-                              height: ResponsiveValue.height(context, base: 80),
-                            ),
+                            SizedBox(height: topSpace),
 
-                            // 로고 - 올바른 메서드 호출로 수정
+                            // 로고
                             _buildLogo(context),
 
-                            SizedBox(
-                              height: ResponsiveValue.height(context, base: 60),
-                            ),
+                            SizedBox(height: logoToFormSpace),
 
                             // 에러 메시지 표시
                             if (_controller.errorMessage.isNotEmpty)
                               Container(
-                                padding: EdgeInsets.symmetric(vertical: 10),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 10,
+                                ),
                                 width: double.infinity,
                                 child: Text(
                                   _controller.errorMessage,
                                   style: TextStyle(
                                     color: Colors.red,
-                                    fontSize: ResponsiveValue.fontSize(
-                                      context,
-                                      base: 14,
-                                    ),
+                                    fontSize:
+                                        14.0 *
+                                        MediaQuery.of(context).textScaleFactor,
                                   ),
                                   textAlign: TextAlign.center,
                                 ),
@@ -372,34 +395,26 @@ class _LoginPageState extends State<LoginPage> {
                             // 아이디 입력 필드
                             _buildIdField(),
 
-                            SizedBox(
-                              height: ResponsiveValue.height(context, base: 20),
-                            ),
+                            SizedBox(height: fieldSpacing),
 
                             // 비밀번호 입력 필드
                             _buildPasswordField(),
 
-                            SizedBox(
-                              height: ResponsiveValue.height(context, base: 15),
-                            ),
+                            SizedBox(height: smallSpacing),
 
                             // 로그인 유지 및 비밀번호 찾기
                             _buildRememberMeAndPasswordReset(context),
 
-                            SizedBox(
-                              height: ResponsiveValue.height(context, base: 35),
-                            ),
+                            SizedBox(height: buttonSpacing),
 
                             // 로그인 버튼
                             PrimaryButton(
                               text: '로그인',
                               onPressed: _login,
-                              backgroundColor: AppColors.primary,
+                              backgroundColor: const Color(0xFFFB233B),
                             ),
 
-                            SizedBox(
-                              height: ResponsiveValue.height(context, base: 15),
-                            ),
+                            SizedBox(height: smallSpacing),
 
                             // 회원가입 버튼
                             PrimaryButton(
@@ -408,9 +423,7 @@ class _LoginPageState extends State<LoginPage> {
                               backgroundColor: Colors.black,
                             ),
 
-                            SizedBox(
-                              height: ResponsiveValue.height(context, base: 20),
-                            ),
+                            SizedBox(height: bottomSpace),
                           ],
                         ),
                       ),
@@ -440,10 +453,10 @@ class _LoginPageState extends State<LoginPage> {
                   filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
                   child: Container(
                     color: Colors.black.withOpacity(0.3),
-                    child: Center(
+                    child: const Center(
                       child: CircularProgressIndicator(
                         valueColor: AlwaysStoppedAnimation<Color>(
-                          AppColors.primary,
+                          Color(0xFFFB233B),
                         ),
                       ),
                     ),
