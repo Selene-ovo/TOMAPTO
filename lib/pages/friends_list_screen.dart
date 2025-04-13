@@ -1,4 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:tomapto/widgets/ad_placeholder.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'dart:io' show Platform;
+import 'package:tomapto/modal/friends_modal_connection.dart';
+import 'package:tomapto/pages/real_time_location_sharing.dart';
 
 class FriendScreen extends StatefulWidget {
   @override
@@ -7,13 +15,112 @@ class FriendScreen extends StatefulWidget {
 
 class _FriendScreenState extends State<FriendScreen> {
   // 친구 데이터 - 새 디자인에 맞춰 업데이트
-  final List<Map<String, dynamic>> friends = [
-    {'name': '원종호', 'isOnline': true},
-    {'name': '김종호', 'isOnline': true},
-    {'name': '심종완', 'isOnline': true},
-    {'name': '하수용', 'isOnline': false},
-    {'name': '황중혁', 'isOnline': true},
+  List<Map<String, dynamic>> friends = [
+    {'id': '1', 'name': '원종호', 'isOnline': true},
+    {'id': '2', 'name': '김중호', 'isOnline': true},
+    {'id': '3', 'name': '심종완', 'isOnline': true},
+    {'id': '4', 'name': '하수용', 'isOnline': false},
+    {'id': '5', 'name': '황중혁', 'isOnline': true},
   ];
+
+  // 검색어 컨트롤러
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+
+    // 서버에서 친구 목록 가져오기
+    _fetchFriendsFromServer().then((_) {
+      // 서버 연결 실패 시 로컬 데이터 유지
+      if (friends.isEmpty) {
+        setState(() {
+          friends = [
+            {'id': '1', 'name': '원종호', 'isOnline': true},
+            {'id': '2', 'name': '김중호', 'isOnline': true},
+            {'id': '3', 'name': '심종완', 'isOnline': true},
+            {'id': '4', 'name': '하수용', 'isOnline': false},
+            {'id': '5', 'name': '황중혁', 'isOnline': true},
+          ];
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  // API 서버 기본 URL 가져오기
+  String _getApiBaseUrl() {
+    String baseUrl = dotenv.env['API_BASE_URL'] ?? 'http://localhost:8080/api';
+    // Android 플랫폼이면서 URL이 localhost를 포함하는 경우
+    if (Platform.isAndroid && baseUrl.contains('localhost')) {
+      // 에뮬레이터에서는 10.0.2.2로 localhost 대체
+      return baseUrl.replaceAll('localhost', '10.0.2.2');
+    }
+    // 다른 플랫폼이거나 이미 localhost가 아닌 경우 원래 URL 반환
+    return baseUrl;
+  }
+
+  // 서버에서 친구 목록 가져오기
+  Future<void> _fetchFriendsFromServer() async {
+    try {
+      // SharedPreferences에서 토큰 가져오기
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+
+      if (token == null) {
+        print('로그인이 필요합니다');
+        return;
+      }
+
+      // API 호출
+      final apiBaseUrl = _getApiBaseUrl();
+      final response = await http.get(
+        Uri.parse('$apiBaseUrl/friends/list'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+
+        setState(() {
+          // 서버에서 받은 친구 목록으로 업데이트
+          friends = List<Map<String, dynamic>>.from(data['friends']);
+        });
+      } else {
+        print('친구 목록 불러오기 실패: ${response.statusCode} - ${response.body}');
+      }
+    } catch (e) {
+      print('친구 목록 불러오기 오류: $e');
+      // 오류 발생 시 로컬 데이터 유지 (변경하지 않음)
+    }
+  }
+
+  // 친구 검색
+  void _searchFriends(String query) {
+    if (query.isEmpty) {
+      _fetchFriendsFromServer(); // 검색어가 없으면 서버에서 다시 불러오기
+      return;
+    }
+
+    // 로컬 필터링 (이름에 검색어 포함된 친구만 표시)
+    final List<Map<String, dynamic>> filteredFriends =
+        friends
+            .where(
+              (friend) => friend['name'].toString().toLowerCase().contains(
+                query.toLowerCase(),
+              ),
+            )
+            .toList();
+
+    setState(() {
+      friends = filteredFriends;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -22,132 +129,356 @@ class _FriendScreenState extends State<FriendScreen> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        title: Text(
+        title: const Text(
           '친구',
-          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-        ),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.search, color: Colors.black),
-            onPressed: () {
-              // 검색 기능
-            },
+          style: TextStyle(
+            color: Colors.black,
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
           ),
-        ],
+        ),
+        centerTitle: true, // 제목 중앙 정렬
+        leading: IconButton(
+          icon: const Icon(Icons.menu, color: Colors.black),
+          onPressed: () {
+            // 메뉴 기능
+            print('메뉴 버튼 클릭됨');
+          },
+        ),
+        // 오른쪽 돋보기 아이콘 제거
       ),
       body: Column(
         children: [
-          // 검색창
+          // 검색창과 돋보기를 별도의 Row로 배치하여 돋보기를 밖으로 이동
           Padding(
             padding: const EdgeInsets.symmetric(
-              horizontal: 16.0,
-              vertical: 8.0,
+              horizontal: 56.0,
+              vertical: 10.0,
             ),
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.grey[200],
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: TextField(
-                decoration: InputDecoration(
-                  hintText: '닉네임을 입력해주세요.',
-                  border: InputBorder.none,
-                  prefixIcon: Icon(Icons.search, color: Colors.grey),
-                  contentPadding: EdgeInsets.symmetric(vertical: 12),
-                ),
-              ),
-            ),
-          ),
-
-          // 광고 배너 (플레이스홀더)
-          Container(
-            padding: EdgeInsets.all(8),
-            margin: EdgeInsets.symmetric(vertical: 8),
-            color: Colors.grey[100],
-            height: 50,
-            width: double.infinity,
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Image.asset(
-                  'assets/images/ad_icon.png',
-                  width: 24,
-                  height: 24,
-                  errorBuilder:
-                      (context, error, stackTrace) =>
-                          Icon(Icons.ad_units, color: Colors.blue),
+                // 검색창 (돋보기 없이)
+                Expanded(
+                  child: Container(
+                    height: 35,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[200],
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 20.0),
+                      child: TextField(
+                        controller: _searchController,
+                        style: TextStyle(fontSize: 10),
+                        decoration: InputDecoration(
+                          hintText: '닉네임을 입력해주세요.',
+                          hintStyle: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[500],
+                          ),
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(vertical: 11),
+                        ),
+                        onChanged: _searchFriends,
+                        onSubmitted: _searchFriends,
+                      ),
+                    ),
+                  ),
                 ),
-                SizedBox(width: 8),
-                Text(
-                  'Google AdSense',
-                  style: TextStyle(color: Colors.grey[700]),
+
+                // 회색 원 밖에 있는 돋보기 아이콘
+                Padding(
+                  padding: const EdgeInsets.only(left: 8.0),
+                  child: Container(
+                    width: 15,
+                    height: 42,
+                    decoration: BoxDecoration(shape: BoxShape.circle),
+                    child: InkWell(
+                      onTap: () {
+                        _searchFriends(_searchController.text);
+                      },
+                      child: Icon(Icons.search, color: Colors.black, size: 22),
+                    ),
+                  ),
                 ),
               ],
             ),
           ),
 
-          // 친구 목록 타이틀
-          Container(
-            width: double.infinity,
-            padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-            decoration: BoxDecoration(
-              border: Border(
-                top: BorderSide(color: Colors.red, width: 2),
-                bottom: BorderSide(color: Colors.grey[300]!, width: 1),
+          // 광고 플레이스홀더 (기존 스타일 유지)
+          AdPlaceholder(),
+
+          // 광고 하단 텍스트
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 16.0,
+              vertical: 4.0,
+            ),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                '광고',
+                style: TextStyle(color: Colors.grey[600], fontSize: 12),
               ),
             ),
-            child: Text('친구 목록', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+
+          // 빨간색 선 위에 친구 목록 텍스트 위치
+          Container(
+            width: double.infinity,
+            color: Colors.white,
+            child: Column(
+              children: [
+                // 친구 목록 타이틀
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8.0),
+                  child: Center(
+                    child: Text(
+                      '친구 목록',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900, // 더 굵게 수정
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                ),
+                // 빨간색 선 - 더 얇게 수정
+                Container(height: 3, color: Colors.red), // 2px → 1px
+              ],
+            ),
           ),
 
           // 친구 목록
           Expanded(
-            child: ListView.separated(
-              itemCount: friends.length,
-              separatorBuilder: (context, index) => Divider(height: 1),
-              itemBuilder: (context, index) {
-                final friend = friends[index];
-                return ListTile(
-                  leading: Stack(
-                    children: [
-                      CircleAvatar(
-                        backgroundColor: Colors.grey[300],
-                        child: Icon(Icons.person, color: Colors.grey[700]),
-                      ),
-                      Positioned(
-                        bottom: 0,
-                        right: 0,
-                        child: Container(
-                          width: 12,
-                          height: 12,
-                          decoration: BoxDecoration(
-                            color:
-                                friend['isOnline'] ? Colors.green : Colors.red,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 2),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  title: Text(
-                    friend['name'],
-                    style: TextStyle(fontWeight: FontWeight.w500),
-                  ),
-                  trailing: IconButton(
-                    icon: Icon(Icons.more_vert),
-                    onPressed: () {
-                      // 더 보기 메뉴
-                    },
-                  ),
-                  onTap: () {
-                    // 친구 상세 정보 보기
-                  },
-                );
-              },
-            ),
+            child:
+                friends.isEmpty
+                    ? Center(child: Text('친구가 없습니다.'))
+                    : ListView.builder(
+                      itemCount: friends.length,
+                      itemBuilder: (context, index) {
+                        final friend = friends[index];
+                        return Column(
+                          children: [
+                            ListTile(
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 25,
+                                vertical: 4,
+                              ),
+                              leading: Stack(
+                                children: [
+                                  // 흰색 네모 프로필 (회색 원 대신)
+                                  Container(
+                                    width: 50,
+                                    height: 50,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      border: Border.all(
+                                        color: Colors.grey[300]!,
+                                        width: 0.5, // 더 얇은 테두리
+                                      ),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Icon(
+                                      Icons.person,
+                                      color: const Color.fromARGB(255, 0, 0, 0),
+                                      size: 30,
+                                    ),
+                                  ),
+                                  // 상태 표시 아이콘을 오른쪽 위로 이동
+                                  Positioned(
+                                    top: 2,
+                                    right: 2,
+                                    child: Container(
+                                      width: 10,
+                                      height: 10,
+                                      decoration: BoxDecoration(
+                                        color:
+                                            friend['isOnline']
+                                                ? Colors.green
+                                                : Colors.red,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: Colors.white,
+                                          width: 1, // 더 얇은 테두리
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              title: Text(
+                                friend['name'],
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w500,
+                                  fontSize: 15,
+                                ),
+                              ),
+                              trailing: IconButton(
+                                icon: Icon(
+                                  Icons.more_vert,
+                                  color: const Color.fromARGB(255, 0, 0, 0),
+                                ),
+                                onPressed: () {
+                                  // 더 보기 메뉴
+                                  print('More options for ${friend['name']}');
+                                  showFriendOptions(
+                                    context,
+                                    friend.ensureValidFriend(),
+                                  );
+                                },
+                              ),
+                              onTap: () {
+                                // 친구 선택 시 실시간 위치 공유 모달 표시
+                                print('Tapped on ${friend['name']}');
+                                showFriendOptions(
+                                  context,
+                                  friend.ensureValidFriend(),
+                                );
+                              },
+                            ),
+                            // 줄바꿈 구분선 (모든 항목 아래 표시) - 더 얇게 수정
+                            Divider(
+                              height: 1,
+                              thickness: 0.5, // 더 얇은 구분선
+                              color: Colors.grey[300],
+                            ),
+                          ],
+                        );
+                      },
+                    ),
           ),
         ],
       ),
+    );
+  }
+
+  // 친구 옵션 메뉴 표시 (기존 메서드 유지)
+  void showFriendOptions(BuildContext context, Map<String, dynamic> friend) {
+    showModalBottomSheet(
+      context: context,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Container(
+          padding: EdgeInsets.symmetric(vertical: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: Icon(Icons.location_on, color: Colors.red),
+                title: Text('실시간 위치 공유'),
+                onTap: () {
+                  Navigator.pop(context);
+                  // MaterialPageRoute를 사용하여 실시간 위치 공유 페이지로 이동
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder:
+                          (context) => RealTimeLocationSharingPage(
+                            selectedFriend: friend,
+                          ),
+                    ),
+                  );
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.chat, color: Colors.blue),
+                title: Text('채팅하기'),
+                onTap: () {
+                  Navigator.pop(context);
+                  print('채팅하기: ${friend['name']}');
+                  // 채팅 화면으로 이동하는 코드 추가
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.block, color: Colors.red),
+                title: Text('친구 차단'),
+                onTap: () {
+                  Navigator.pop(context);
+                  print('친구 차단: ${friend['name']}');
+                  // 차단 확인 대화상자 표시
+                  showBlockConfirmation(context, friend);
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.person_remove, color: Colors.grey),
+                title: Text('친구 삭제'),
+                onTap: () {
+                  Navigator.pop(context);
+                  print('친구 삭제: ${friend['name']}');
+                  // 삭제 확인 대화상자 표시
+                  showDeleteConfirmation(context, friend);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // 친구 차단 확인 대화상자
+  void showBlockConfirmation(
+    BuildContext context,
+    Map<String, dynamic> friend,
+  ) {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: Text('친구 차단'),
+            content: Text('${friend['name']}님을 차단하시겠습니까?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('취소'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  // 실제 차단 로직 구현
+                  print('${friend['name']}님이 차단되었습니다.');
+                  // 상태 업데이트 등 추가 작업
+                },
+                child: Text('차단', style: TextStyle(color: Colors.red)),
+              ),
+            ],
+          ),
+    );
+  }
+
+  // 친구 삭제 확인 대화상자
+  void showDeleteConfirmation(
+    BuildContext context,
+    Map<String, dynamic> friend,
+  ) {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: Text('친구 삭제'),
+            content: Text('${friend['name']}님을 친구 목록에서 삭제하시겠습니까?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('취소'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  // 실제 삭제 로직 구현
+                  setState(() {
+                    friends.removeWhere(
+                      (item) => item['name'] == friend['name'],
+                    );
+                  });
+                  print('${friend['name']}님이 삭제되었습니다.');
+                },
+                child: Text('삭제', style: TextStyle(color: Colors.red)),
+              ),
+            ],
+          ),
     );
   }
 }

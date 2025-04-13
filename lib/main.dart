@@ -3,10 +3,11 @@ import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:tomapto/widgets/bottom_nav_bar.dart';
-import 'package:tomapto/pages/map/transit.dart';
-import 'package:tomapto/styles/app_styles.dart';
 import 'package:tomapto/controllers/map_controller.dart';
+import 'package:tomapto/styles/app_styles.dart';
+import 'package:tomapto/widgets/bottom_nav_bar.dart';
+import 'package:tomapto/widgets/ad_placeholder.dart'; // 광고 플레이스홀더 위젯 import
+import 'package:tomapto/pages/friends_list_screen.dart'; // 경로 수정 - screens → pages
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,13 +33,121 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: '네이버 맵',
-      theme: AppStyles.theme, // AppStyles에서 정의된 테마 사용
-      home: const NaverMapPage(),
+      title: 'Tomapto',
+      theme: ThemeData(
+        primarySwatch: Colors.red,
+        visualDensity: VisualDensity.adaptivePlatformDensity,
+      ),
+      home: const MainScreen(),
     );
   }
 }
 
+// 메인 화면 클래스 추가 - 네비게이션 및 화면 전환 관리
+class MainScreen extends StatefulWidget {
+  const MainScreen({super.key});
+
+  @override
+  _MainScreenState createState() => _MainScreenState();
+}
+
+class _MainScreenState extends State<MainScreen> {
+  int _currentNavIndex = 0;
+
+  // 각 탭에 해당하는 화면들
+  late final List<Widget> _screens;
+
+  @override
+  void initState() {
+    super.initState();
+    _screens = [
+      const NaverMapPage(), // 메인 탭 (지도)
+      FriendScreen(), // 친구 탭
+      const NaverMapPage(), // 카테고리 탭 (임시로 지도 재사용)
+      const PlaceholderScreen(title: '즐겨찾기'), // 즐겨찾기 탭
+      const PlaceholderScreen(title: '마이페이지'), // 마이 프로필 탭
+    ];
+  }
+
+  void _handleNavIndexChanged(int index) {
+    setState(() {
+      _currentNavIndex = index;
+    });
+
+    // 현재 위치 버튼 처리 (중앙 버튼 - 인덱스 2)
+    if (index == 2 && _screens[0] is NaverMapPage) {
+      // NaverMapPage의 현재 위치 메서드 호출하기 (이 예제에서는 단순화)
+      print('중앙 버튼 - 현재 위치 요청');
+    }
+
+    print('네비게이션 탭 변경: $index');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: IndexedStack(index: _currentNavIndex, children: _screens),
+      bottomNavigationBar: BottomNavBar(
+        currentIndex: _currentNavIndex,
+        onTap: _handleNavIndexChanged,
+      ),
+    );
+  }
+}
+
+// 임시 플레이스홀더 화면
+class PlaceholderScreen extends StatelessWidget {
+  final String title;
+
+  const PlaceholderScreen({super.key, required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        title: Text(
+          title,
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+        ),
+      ),
+      body: Column(
+        children: [
+          // 광고 배너
+          AdPlaceholder(),
+
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.construction, size: 80, color: Colors.grey),
+                  SizedBox(height: 16),
+                  Text(
+                    '준비 중입니다',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey[700],
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    '곧 만나볼 수 있어요!',
+                    style: TextStyle(color: Colors.grey[600]),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// 기존 NaverMapPage 클래스
 class NaverMapPage extends StatefulWidget {
   const NaverMapPage({super.key});
 
@@ -48,18 +157,11 @@ class NaverMapPage extends StatefulWidget {
 
 class _NaverMapPageState extends State<NaverMapPage> {
   // 맵 컨트롤러
-  final MapController _mapController = MapController();
+  MapController _mapController = MapController();
 
   NLatLng? _currentPosition;
   final Set<NMarker> _markers = {};
   final TextEditingController _searchController = TextEditingController();
-
-  // 현재 선택된 네비게이션 탭 인덱스
-  int _currentNavIndex = 0;
-
-  // 거리 스케일 정보
-  String _distanceText = '100m';
-  double _distanceWidth = 40.0;
 
   @override
   void initState() {
@@ -95,11 +197,11 @@ class _NaverMapPageState extends State<NaverMapPage> {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('위치 권한이 필요합니다.', style: AppTextStyle.mediumRegular),
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('위치 권한이 필요합니다.')));
+        }
         return;
       }
     }
@@ -107,38 +209,40 @@ class _NaverMapPageState extends State<NaverMapPage> {
     // 위치 서비스가 활성화 되어있는지 확인
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('위치 서비스를 활성화해주세요.', style: AppTextStyle.mediumRegular),
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('위치 서비스를 활성화해주세요.')));
+      }
       return;
     }
 
     // 현재 위치 가져오기
     try {
       Position position = await Geolocator.getCurrentPosition();
-      setState(() {
-        _currentPosition = NLatLng(position.latitude, position.longitude);
-      });
+      if (mounted) {
+        setState(() {
+          _currentPosition = NLatLng(position.latitude, position.longitude);
+        });
+      }
       print('현재 위치: ${position.latitude}, ${position.longitude}');
 
       // 카메라 이동
-      if (_mapController.controller != null && _currentPosition != null) {
-        // 기본 줌 레벨 15로 설정
-        await _mapController.moveCamera(_currentPosition!, 15);
-        _updateDistanceScaleFromZoom(15);
+      if (_mapController != null && _currentPosition != null && mounted) {
+        _mapController!.updateCamera(
+          NCameraUpdate.withParams(target: _currentPosition!, zoom: 15),
+        );
 
         // 마커 업데이트
         _updateMarkers();
       }
     } catch (e) {
       print('위치 가져오기 실패: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('위치 가져오기 실패: $e', style: AppTextStyle.mediumRegular),
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('위치 가져오기 실패: $e')));
+      }
     }
   }
 
@@ -159,14 +263,15 @@ class _NaverMapPageState extends State<NaverMapPage> {
 
       // 마커 탭 이벤트 설정
       marker.setOnTapListener((NMarker marker) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '현재 위치: ${_currentPosition!.latitude}, ${_currentPosition!.longitude}',
-              style: AppTextStyle.mediumRegular,
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '현재 위치: ${_currentPosition!.latitude}, ${_currentPosition!.longitude}',
+              ),
             ),
-          ),
-        );
+          );
+        }
       });
 
       try {
@@ -184,249 +289,172 @@ class _NaverMapPageState extends State<NaverMapPage> {
     }
   }
 
-  // 네비게이션 탭 변경 처리
-  void _handleNavIndexChanged(int index) {
-    setState(() {
-      _currentNavIndex = index;
-    });
-
-    // 현재 위치 버튼 처리 (중앙 버튼 - 인덱스 2)
-    if (index == 2) {
-      _getCurrentLocation();
-    }
-
-    // 여기에 각 탭에 따른 추가 동작 구현
-    print('네비게이션 탭 변경: $index');
-  }
-
   @override
   Widget build(BuildContext context) {
-    // 반응형 사이즈 계산을 위한 값들
-    final horizontalPadding = ResponsiveValue.padding(context, base: 16.0);
-    final verticalPadding = ResponsiveValue.padding(context, base: 8.0);
-    final iconSize = ResponsiveValue.width(context, base: 45.0);
-    final bottomPadding = ResponsiveValue.height(context, base: 85.0);
-    final rightPadding = ResponsiveValue.width(context, base: 7.0);
-    final distanceRightPadding = ResponsiveValue.width(context, base: 50.0);
-    final distanceBottomPadding = ResponsiveValue.height(context, base: 90.0);
-    final contentPadding = EdgeInsets.fromLTRB(
-      0,
-      0,
-      0,
-      ResponsiveValue.height(context, base: 80.0),
-    );
-
-    return Scaffold(
-      // AppBar 제거하고 전체 화면을 지도로 채움
-      body: Stack(
-        children: [
-          // 맵 뷰 - 전체 화면 차지
-          NaverMap(
-            options: NaverMapViewOptions(
-              initialCameraPosition: NCameraPosition(
-                target:
-                    _currentPosition ??
-                    NLatLng(37.5666805, 126.9784147), // 서울 시청 (기본값)
-                zoom: _mapController.currentZoom,
-              ),
-              mapType: NMapType.basic,
-              contentPadding: contentPadding,
+    return Stack(
+      children: [
+        // 맵 뷰
+        NaverMap(
+          options: NaverMapViewOptions(
+            initialCameraPosition: NCameraPosition(
+              target:
+                  _currentPosition ??
+                  NLatLng(37.5666805, 126.9784147), // 서울 시청 (기본값)
+              zoom: 15,
             ),
-            onMapReady: (controller) {
-              print('맵 컨트롤러 준비 완료');
-              _mapController.setMapController(controller);
-
-              if (_currentPosition != null) {
-                print('현재 위치로 카메라 이동: $_currentPosition');
-                _mapController.moveCamera(
-                  _currentPosition!,
-                  _mapController.currentZoom,
-                );
-                _updateMarkers();
-              }
-
-              // 맵이 준비되면 초기 줌 레벨에 따른 거리 스케일 설정
-              _mapController.getCurrentCameraPosition().then((cameraPosition) {
-                if (cameraPosition != null) {
-                  double zoom = cameraPosition.zoom;
-                  _mapController.setZoomLevel(zoom);
-                  _updateDistanceScaleFromZoom(zoom);
-                }
+            mapType: NMapType.basic,
+            contentPadding: const EdgeInsets.fromLTRB(0, 70, 0, 80),
+          ),
+          onMapReady: (controller) {
+            print('맵 컨트롤러 준비 완료');
+            if (mounted) {
+              setState(() {
+                _mapController = controller as MapController;
               });
-            },
-            onCameraIdle: () {
-              // 카메라 움직임이 멈추었을 때 줌 레벨 업데이트
-              if (_mapController.controller != null) {
-                _mapController.getCurrentCameraPosition().then((
-                  cameraPosition,
-                ) {
-                  if (cameraPosition != null) {
-                    double zoom = cameraPosition.zoom;
-                    _mapController.setZoomLevel(zoom);
-                    _updateDistanceScaleFromZoom(zoom);
-                    print('줌 레벨 업데이트됨: $zoom');
-                  }
-                });
-              }
-            },
-            onMapTapped: (point, latLng) {
-              print('지도가 탭되었습니다: $latLng');
-            },
-          ),
+            }
 
-          // 로딩 표시
-          if (_mapController.controller == null)
-            Center(
-              child: CircularProgressIndicator(color: AppStyles.primaryColor),
-            ),
+            if (_currentPosition != null) {
+              print('현재 위치로 카메라 이동: $_currentPosition');
+              _mapController!.updateCamera(
+                NCameraUpdate.withParams(target: _currentPosition!, zoom: 15),
+              );
+              _updateMarkers();
+            }
+          },
+          onCameraChange: (position, reason) {
+            print('카메라 변경: $position, 이유: $reason');
+          },
+          onMapTapped: (point, latLng) {
+            print('지도가 탭되었습니다: $latLng');
+          },
+        ),
 
-          // 상단 검색바와 길찾기 버튼
-          SafeArea(
-            child: Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: horizontalPadding,
-                vertical: verticalPadding,
-              ),
-              child: Row(
-                children: [
-                  // 검색 텍스트 필드
-                  Expanded(
-                    child: Container(
-                      height: ResponsiveValue.height(context, base: 45.0),
-                      decoration: ShapeDecoration(
-                        color: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        shadows: const [
-                          BoxShadow(
-                            color: Color(0x19000000),
-                            blurRadius: 5,
-                            offset: Offset(0, 2),
-                            spreadRadius: 0,
-                          ),
-                        ],
+        // 로딩 표시
+        if (_mapController == null)
+          const Center(child: CircularProgressIndicator(color: Colors.red)),
+
+        // 상단 검색바 및 길찾기 버튼
+        Positioned(
+          top: 40,
+          left: 16,
+          right: 16,
+          child: Row(
+            children: [
+              // 검색 텍스트 필드
+              Expanded(
+                child: Container(
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(4),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
                       ),
-                      child: TextField(
-                        controller: _searchController,
-                        style: AppTextStyle.regularRegular,
-                        decoration: InputDecoration(
-                          hintText: '검색어를 입력해주세요.',
-                          hintStyle: AppTextStyle.mediumRegular.copyWith(
-                            color: AppColors.textSecondary,
-                          ),
-                          prefixIcon: Icon(
-                            Icons.search,
-                            size: ResponsiveValue.width(context, base: 20.0),
-                            color: AppColors.textSecondary,
-                          ),
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: ResponsiveValue.padding(
-                              context,
-                              base: 13.0,
-                            ),
-                            vertical: ResponsiveValue.padding(
-                              context,
-                              base: 11.0,
-                            ),
-                          ),
-                        ),
+                    ],
+                  ),
+                  child: TextField(
+                    controller: _searchController,
+                    decoration: const InputDecoration(
+                      hintText: '장소, 주소 검색하기',
+                      prefixIcon: Icon(Icons.search),
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
                       ),
                     ),
                   ),
+                ),
+              ),
 
-                  // 길찾기 버튼
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const TransitApp(),
-                        ),
-                      );
-                      print('길찾기 페이지로 이동');
-                    },
-                    child: Container(
-                      margin: EdgeInsets.only(
-                        left: ResponsiveValue.padding(context, base: 8.0),
-                      ),
-                      child: SvgPicture.asset(
-                        'assets/icons/transit_B.svg',
-                        width: iconSize,
-                        height: iconSize,
-                      ),
+              // 길찾기 버튼
+              Container(
+                margin: const EdgeInsets.only(left: 8),
+                height: 48,
+                width: 48,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(4),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
                     ),
-                  ),
-                ],
+                  ],
+                ),
+                child: IconButton(
+                  icon: const Icon(Icons.directions),
+                  color: Colors.red,
+                  onPressed: () {
+                    // 길찾기 기능 구현
+                    print('길찾기 버튼 클릭됨');
+                  },
+                ),
               ),
-            ),
+            ],
           ),
+        ),
 
-          // 현재 위치 버튼
-          Positioned(
-            bottom: bottomPadding,
-            right: rightPadding,
-            child: GestureDetector(
-              onTap: _getCurrentLocation,
-              child: SvgPicture.asset(
-                'assets/icons/gps_B.svg',
-                width: iconSize,
-                height: iconSize,
-              ),
+        // 거리 표시
+        Positioned(
+          top: 100,
+          right: 16,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(width: 40, height: 2, color: Colors.black54),
+                const SizedBox(width: 4),
+                const Text(
+                  '100m',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                ),
+              ],
             ),
           ),
+        ),
 
-          // 거리 표시 - 동적으로 크기와 텍스트가 변경됨
-          Positioned(
-            bottom: distanceBottomPadding,
-            right: distanceRightPadding,
-            child: Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: ResponsiveValue.padding(context, base: 8.0),
-                vertical: ResponsiveValue.padding(context, base: 4.0),
-              ),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: ResponsiveValue.width(context, base: _distanceWidth),
-                    height: ResponsiveValue.height(context, base: 2.0),
-                    color: Colors.black54,
-                  ),
-                  SizedBox(width: ResponsiveValue.width(context, base: 4.0)),
-                  Text(
-                    _distanceText,
-                    style: AppTextStyle.smallRegular.copyWith(
-                      fontWeight: AppFontWeight.medium,
-                    ),
-                  ),
-                ],
-              ),
+        // 현재 위치 버튼 (하단 우측)
+        Positioned(
+          bottom: 90,
+          right: 16,
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.my_location, size: 20),
+              onPressed: _getCurrentLocation,
             ),
           ),
-
-          // 하단 네비게이션 바
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: BottomNavBar(
-              currentIndex: _currentNavIndex,
-              onTap: _handleNavIndexChanged,
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
