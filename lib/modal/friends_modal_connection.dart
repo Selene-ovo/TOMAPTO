@@ -3,21 +3,10 @@ import 'package:tomapto/modal/friends_show.dart';
 
 // 친구 목록에서 친구를 선택했을 때 호출되는 함수
 void showFriendOptions(BuildContext context, Map<String, dynamic> friend) {
-  // 친구 모달 표시
-  showModalBottomSheet(
+  // 친구 모달을 다이얼로그로 표시 (바텀시트 대신)
+  showDialog(
     context: context,
-    isScrollControlled: true,
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
-    builder: (context) {
-      return Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-        ),
-        child: SingleChildScrollView(child: FriendsShowModal(friend: friend)),
-      );
-    },
+    builder: (context) => FriendsShowModal(friend: friend),
   );
 }
 

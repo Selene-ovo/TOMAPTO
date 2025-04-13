@@ -52,7 +52,9 @@ class SignController {
 
   // Tooltip related variables
   OverlayEntry? _currentTooltip;
+  // ignore: unused_field
   String? _currentTooltipType;
+  // ignore: unused_field
   final GlobalKey _fixedTooltipKey = GlobalKey();
 
   // Tooltip image paths

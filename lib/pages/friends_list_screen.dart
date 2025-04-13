@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'dart:io' show Platform;
 import 'package:tomapto/modal/friends_modal_connection.dart';
+import 'package:tomapto/modal/friends_show.dart';
 import 'package:tomapto/pages/real_time_location_sharing.dart';
 
 class FriendScreen extends StatefulWidget {
@@ -122,6 +123,22 @@ class _FriendScreenState extends State<FriendScreen> {
     });
   }
 
+  // 친구 데이터 유효성 확인 (확장 메서드 대신 일반 함수 사용)
+  Map<String, dynamic> _ensureValidFriend(Map<String, dynamic> friend) {
+    // ID가 없는 경우 임의 ID 부여
+    if (!friend.containsKey('id')) {
+      friend['id'] =
+          friend['name']?.toString().hashCode.toString() ?? 'unknown';
+    }
+
+    // isOnline 필드가 없는 경우 기본값 false 부여
+    if (!friend.containsKey('isOnline')) {
+      friend['isOnline'] = false;
+    }
+
+    return friend;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -207,22 +224,7 @@ class _FriendScreenState extends State<FriendScreen> {
 
           // 광고 플레이스홀더 (기존 스타일 유지)
           AdPlaceholder(),
-
-          // 광고 하단 텍스트
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16.0,
-              vertical: 4.0,
-            ),
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: Text(
-                '광고',
-                style: TextStyle(color: Colors.grey[600], fontSize: 12),
-              ),
-            ),
-          ),
-
+          SizedBox(height: 5),
           // 빨간색 선 위에 친구 목록 텍스트 위치
           Container(
             width: double.infinity,
@@ -257,6 +259,11 @@ class _FriendScreenState extends State<FriendScreen> {
                       itemCount: friends.length,
                       itemBuilder: (context, index) {
                         final friend = friends[index];
+                        // 확장 메서드 대신 일반 함수 사용
+                        final validFriend = _ensureValidFriend(
+                          Map<String, dynamic>.from(friend),
+                        );
+
                         return Column(
                           children: [
                             ListTile(
@@ -293,7 +300,7 @@ class _FriendScreenState extends State<FriendScreen> {
                                       height: 10,
                                       decoration: BoxDecoration(
                                         color:
-                                            friend['isOnline']
+                                            validFriend['isOnline']
                                                 ? Colors.green
                                                 : Colors.red,
                                         shape: BoxShape.circle,
@@ -307,7 +314,7 @@ class _FriendScreenState extends State<FriendScreen> {
                                 ],
                               ),
                               title: Text(
-                                friend['name'],
+                                validFriend['name'],
                                 style: TextStyle(
                                   fontWeight: FontWeight.w500,
                                   fontSize: 15,
@@ -319,21 +326,17 @@ class _FriendScreenState extends State<FriendScreen> {
                                   color: const Color.fromARGB(255, 0, 0, 0),
                                 ),
                                 onPressed: () {
-                                  // 더 보기 메뉴
-                                  print('More options for ${friend['name']}');
-                                  showFriendOptions(
-                                    context,
-                                    friend.ensureValidFriend(),
+                                  // 더 보기 메뉴 - 확장 메서드 대신 일반 함수 사용
+                                  print(
+                                    'More options for ${validFriend['name']}',
                                   );
+                                  showFriendProfile(context, validFriend);
                                 },
                               ),
                               onTap: () {
-                                // 친구 선택 시 실시간 위치 공유 모달 표시
-                                print('Tapped on ${friend['name']}');
-                                showFriendOptions(
-                                  context,
-                                  friend.ensureValidFriend(),
-                                );
+                                // 친구 선택 시 - 확장 메서드 대신 일반 함수 사용
+                                print('Tapped on ${validFriend['name']}');
+                                showFriendProfile(context, validFriend);
                               },
                             ),
                             // 줄바꿈 구분선 (모든 항목 아래 표시) - 더 얇게 수정
@@ -349,136 +352,6 @@ class _FriendScreenState extends State<FriendScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  // 친구 옵션 메뉴 표시 (기존 메서드 유지)
-  void showFriendOptions(BuildContext context, Map<String, dynamic> friend) {
-    showModalBottomSheet(
-      context: context,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return Container(
-          padding: EdgeInsets.symmetric(vertical: 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: Icon(Icons.location_on, color: Colors.red),
-                title: Text('실시간 위치 공유'),
-                onTap: () {
-                  Navigator.pop(context);
-                  // MaterialPageRoute를 사용하여 실시간 위치 공유 페이지로 이동
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder:
-                          (context) => RealTimeLocationSharingPage(
-                            selectedFriend: friend,
-                          ),
-                    ),
-                  );
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.chat, color: Colors.blue),
-                title: Text('채팅하기'),
-                onTap: () {
-                  Navigator.pop(context);
-                  print('채팅하기: ${friend['name']}');
-                  // 채팅 화면으로 이동하는 코드 추가
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.block, color: Colors.red),
-                title: Text('친구 차단'),
-                onTap: () {
-                  Navigator.pop(context);
-                  print('친구 차단: ${friend['name']}');
-                  // 차단 확인 대화상자 표시
-                  showBlockConfirmation(context, friend);
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.person_remove, color: Colors.grey),
-                title: Text('친구 삭제'),
-                onTap: () {
-                  Navigator.pop(context);
-                  print('친구 삭제: ${friend['name']}');
-                  // 삭제 확인 대화상자 표시
-                  showDeleteConfirmation(context, friend);
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  // 친구 차단 확인 대화상자
-  void showBlockConfirmation(
-    BuildContext context,
-    Map<String, dynamic> friend,
-  ) {
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: Text('친구 차단'),
-            content: Text('${friend['name']}님을 차단하시겠습니까?'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text('취소'),
-              ),
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  // 실제 차단 로직 구현
-                  print('${friend['name']}님이 차단되었습니다.');
-                  // 상태 업데이트 등 추가 작업
-                },
-                child: Text('차단', style: TextStyle(color: Colors.red)),
-              ),
-            ],
-          ),
-    );
-  }
-
-  // 친구 삭제 확인 대화상자
-  void showDeleteConfirmation(
-    BuildContext context,
-    Map<String, dynamic> friend,
-  ) {
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: Text('친구 삭제'),
-            content: Text('${friend['name']}님을 친구 목록에서 삭제하시겠습니까?'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text('취소'),
-              ),
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  // 실제 삭제 로직 구현
-                  setState(() {
-                    friends.removeWhere(
-                      (item) => item['name'] == friend['name'],
-                    );
-                  });
-                  print('${friend['name']}님이 삭제되었습니다.');
-                },
-                child: Text('삭제', style: TextStyle(color: Colors.red)),
-              ),
-            ],
-          ),
     );
   }
 }

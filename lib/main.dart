@@ -183,10 +183,7 @@ class _NaverMapPageState extends State<NaverMapPage> {
     // MapController에서 거리 스케일 계산 결과 가져오기
     final distanceScale = _mapController.getDistanceScale(zoom);
 
-    setState(() {
-      _distanceText = distanceScale.text;
-      _distanceWidth = distanceScale.width;
-    });
+    setState(() {});
   }
 
   Future<void> _getCurrentLocation() async {
