@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:tomapto/widgets/bottom_nav_bar.dart';
-import 'package:tomapto/controllers/profile_controller.dart';
+import 'package:tomapto/controllers/account/profile_controller.dart';
 import 'package:tomapto/pages/profile/login.dart';
 
 class ProfilePage extends StatefulWidget {

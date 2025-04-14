@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:tomapto/controllers/signup_controller.dart';
+import 'package:tomapto/controllers/account/signup_controller.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized(); // Flutter 바인딩 초기화 (비동기 작업 전 필요)
@@ -27,7 +27,7 @@ class MyApp extends StatelessWidget {
 }
 
 class SignUpPage extends StatefulWidget {
-  const SignUpPage({Key? key}) : super(key: key);
+  const SignUpPage({super.key});
 
   @override
   _SignUpPageState createState() => _SignUpPageState();
@@ -79,7 +79,7 @@ class _SignUpPageState extends State<SignUpPage> {
             child: Material(
               //elevation: 4.0,
               borderRadius: BorderRadius.circular(8),
-              child: Container(
+              child: SizedBox(
                 width: 120,
                 height: 110,
                 child: Stack(
@@ -129,7 +129,7 @@ class _SignUpPageState extends State<SignUpPage> {
                           ),
                         ),
                       );
-                    }).toList(),
+                    }),
                   ],
                 ),
               ),

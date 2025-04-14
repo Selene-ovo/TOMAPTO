@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:tomapto/controllers/login_controller.dart';
+import 'package:tomapto/controllers/account/login_controller.dart';
 import 'package:tomapto/widgets/bottom_nav_bar.dart';
 import 'package:tomapto/pages/profile/profile.dart';
 
