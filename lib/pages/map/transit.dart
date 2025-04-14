@@ -1,24 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:tomapto/styles/app_styles.dart';
 import 'package:tomapto/search/search_transit.dart';
-
-void main() {
-  runApp(const MyApp());
-}
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: '대중교통 길찾기 앱',
-      theme: AppStyles.theme,
-      home: const TransitApp(),
-      debugShowCheckedModeBanner: false,
-    );
-  }
-}
+import 'package:tomapto/controllers/map/location_controller.dart';
+import 'package:tomapto/controllers/map/address_controller.dart';
+import 'package:tomapto/controllers/map/transit_map_controller.dart';
+import 'package:tomapto/controllers/map/route_controller.dart';
 
 class TransitApp extends StatefulWidget {
   const TransitApp({super.key});
@@ -28,11 +15,201 @@ class TransitApp extends StatefulWidget {
 }
 
 class _TransitAppState extends State<TransitApp> {
+  // 선택된 탭 인덱스
   int _selectedIndex = 0;
 
   // 출발지와 도착지를 저장할 변수
-  String _originPlace = '강원 강릉시 포남동';
+  String _originPlace = '위치 확인 중...';
   String _destinationPlace = '도착지 입력';
+
+  // 컨트롤러 인스턴스 생성
+  final LocationController _locationController = LocationController();
+  final AddressController _addressController = AddressController();
+  final TransitMapController _transitMapController = TransitMapController();
+  final RouteController _routeController = RouteController();
+
+  // 로딩 상태 추적
+  bool _isCarMapLoading = false;
+  bool _isWalkMapLoading = false;
+
+  // 대중교통 경로 데이터
+  List<RouteData>? _transitRoutes;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeLocation();
+  }
+
+  @override
+  void dispose() {
+    _transitMapController.dispose();
+    super.dispose();
+  }
+
+  // 위치 초기화 및 주소 변환
+  Future<void> _initializeLocation() async {
+    // 권한 체크
+    final hasPermission = await _locationController.checkLocationPermission(
+      context,
+    );
+    if (!hasPermission) {
+      setState(() {
+        _originPlace = '위치 권한 없음';
+      });
+      return;
+    }
+
+    // 현재 위치 가져오기
+    final position = await _locationController.getCurrentLocation();
+    if (position != null) {
+      // 위치 정보를 TransitMapController에 설정
+      _transitMapController.setCurrentPosition(position);
+
+      // 위치 기반 주소 가져오기
+      final address = await _addressController.getAddressFromLatLng(position);
+      setState(() {
+        _originPlace = address;
+      });
+
+      // 대중교통 경로 가져오기
+      _loadTransitRoutes();
+
+      // 이미 초기화된 맵이 있으면 현재 위치로 카메라 이동
+      if (_transitMapController.isCarMapInitialized) {
+        _transitMapController.moveCamera(
+          TransitMode.car,
+          position,
+          _transitMapController.getDefaultZoomLevel(TransitMode.car),
+        );
+      }
+
+      if (_transitMapController.isWalkMapInitialized) {
+        _transitMapController.moveCamera(
+          TransitMode.walk,
+          position,
+          _transitMapController.getDefaultZoomLevel(TransitMode.walk),
+        );
+      }
+    } else {
+      setState(() {
+        _originPlace = '위치 확인 실패';
+      });
+    }
+  }
+
+  // 대중교통 경로 로드
+  Future<void> _loadTransitRoutes() async {
+    final routes = await _routeController.searchPublicTransportRoutes(
+      _originPlace,
+      _destinationPlace != '도착지 입력' ? _destinationPlace : '서울역',
+    );
+
+    setState(() {
+      _transitRoutes = routes;
+    });
+  }
+
+  // 네비게이션 탭 변경 처리
+  void _handleNavIndexChanged(int index) {
+    // 현재 선택된 인덱스와 동일한 인덱스가 선택되었는지 확인 (같은 탭 다시 누름)
+    final isSameTab = _selectedIndex == index;
+
+    // 이전 인덱스 저장
+    final prevIndex = _selectedIndex;
+
+    setState(() {
+      _selectedIndex = index;
+
+      // 자동차 탭으로 변경 시 지도 로딩 표시 (처음 선택 시에만)
+      if (prevIndex != 1 &&
+          index == 1 &&
+          !_transitMapController.isCarMapInitialized) {
+        _isCarMapLoading = true;
+      }
+
+      // 도보 탭으로 변경 시 지도 로딩 표시 (처음 선택 시에만)
+      if (prevIndex != 2 &&
+          index == 2 &&
+          !_transitMapController.isWalkMapInitialized) {
+        _isWalkMapLoading = true;
+      }
+    });
+
+    // 같은 탭을 다시 눌렀거나 처음 선택한 경우 카메라 이동
+    if (index == 1) {
+      // 자동차 탭
+      if (_transitMapController.isCarMapInitialized) {
+        final position = _transitMapController.getCurrentPosition();
+        if (position != null) {
+          _transitMapController.moveCamera(
+            TransitMode.car,
+            position,
+            _transitMapController.getDefaultZoomLevel(TransitMode.car),
+          );
+
+          // 같은 탭을 다시 눌렀을 때는 마커도 업데이트 (현재 위치 재확인)
+          if (isSameTab) {
+            _refreshCurrentLocation(TransitMode.car);
+          }
+        }
+      }
+    } else if (index == 2) {
+      // 도보 탭
+      if (_transitMapController.isWalkMapInitialized) {
+        final position = _transitMapController.getCurrentPosition();
+        if (position != null) {
+          _transitMapController.moveCamera(
+            TransitMode.walk,
+            position,
+            _transitMapController.getDefaultZoomLevel(TransitMode.walk),
+          );
+
+          // 같은 탭을 다시 눌렀을 때는 마커도 업데이트 (현재 위치 재확인)
+          if (isSameTab) {
+            _refreshCurrentLocation(TransitMode.walk);
+          }
+        }
+      }
+    }
+
+    print('네비게이션 탭 변경: $index, 같은 탭 다시 선택: $isSameTab');
+  }
+
+  // 현재 위치를 새로고침하고 해당 맵의 카메라와 마커를 업데이트하는 메서드
+  void _refreshCurrentLocation(TransitMode mode) async {
+    // 현재 위치 다시 가져오기
+    final position = await _locationController.getCurrentLocation();
+    if (position != null) {
+      // TransitMapController에 위치 업데이트
+      _transitMapController.setCurrentPosition(position);
+
+      // 해당 모드의 지도 카메라 이동
+      _transitMapController.moveCamera(
+        mode,
+        position,
+        _transitMapController.getDefaultZoomLevel(mode),
+      );
+
+      // 마커 업데이트
+      _transitMapController.updateMarkers(mode, position, _originPlace);
+
+      // 위치 기반 주소 갱신
+      final address = await _addressController.getAddressFromLatLng(position);
+      setState(() {
+        _originPlace = address;
+      });
+
+      // 출발지가 변경되었으므로 경로 다시 로드
+      _routeController.invalidateCache();
+      _loadTransitRoutes();
+    } else {
+      // 위치 가져오기 실패 시 스낵바 표시
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('현재 위치를 가져오는 데 실패했습니다.')));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -47,6 +224,14 @@ class _TransitAppState extends State<TransitApp> {
     final double iconSize = isSmallScreen ? 22.0 : 28.0; // 작은 화면에서는 작은 아이콘
     final double routeItemPadding = width * 0.035; // 화면 너비의 3.5%
     final double fontSize = isSmallScreen ? 12.0 : 14.0; // 작은 화면에서는 작은 폰트
+
+    // 컨텐츠 패딩 (지도 사용 시 필요)
+    final contentPadding = EdgeInsets.fromLTRB(
+      0,
+      0,
+      0,
+      ResponsiveValue.height(context, base: 80.0),
+    );
 
     return Scaffold(
       backgroundColor: Colors.white, // 배경색을 흰색으로 설정
@@ -87,6 +272,10 @@ class _TransitAppState extends State<TransitApp> {
                                 _originPlace = _destinationPlace;
                                 _destinationPlace = temp;
                               });
+
+                              // 캐시 무효화 및 경로 다시 로드
+                              _routeController.invalidateCache();
+                              _loadTransitRoutes();
                             },
                             iconSize: iconSize,
                           ),
@@ -115,6 +304,10 @@ class _TransitAppState extends State<TransitApp> {
                                     setState(() {
                                       _originPlace = result as String;
                                     });
+
+                                    // 캐시 무효화 및 경로 다시 로드
+                                    _routeController.invalidateCache();
+                                    _loadTransitRoutes();
                                   }
                                 },
                                 child: Container(
@@ -165,6 +358,10 @@ class _TransitAppState extends State<TransitApp> {
                                     setState(() {
                                       _destinationPlace = result as String;
                                     });
+
+                                    // 캐시 무효화 및 경로 다시 로드
+                                    _routeController.invalidateCache();
+                                    _loadTransitRoutes();
                                   }
                                 },
                                 child: Container(
@@ -204,14 +401,16 @@ class _TransitAppState extends State<TransitApp> {
                       ],
                     ),
 
-                    // X 버튼을 절대 위치로 배치
+                    // X 버튼을 절대 위치로 배치 - main.dart로 이동하도록 수정
                     Positioned(
                       top: maxWidth * 0.0000009,
                       right: -5,
                       child: IconButton(
                         icon: const Icon(Icons.close, color: Colors.white),
                         onPressed: () {
-                          // 검색 초기화 또는 뒤로가기
+                          // main.dart 화면으로 돌아가기
+                          Navigator.pop(context);
+                          print('이전 화면으로 돌아가기');
                         },
                         iconSize: iconSize,
                       ),
@@ -259,82 +458,252 @@ class _TransitAppState extends State<TransitApp> {
             ),
           ),
 
-          // 시간 및 날짜 선택 바 - 그림자 추가
-          Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: width * 0.04,
-              vertical: width * 0.025,
-            ),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: const Border(bottom: BorderSide(color: Colors.white)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.03),
-                  blurRadius: 2,
-                  offset: const Offset(0, 2),
+          // 시간 및 날짜 선택 바 - 대중교통 탭에서만 표시
+          _selectedIndex == 0
+              ? Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: width * 0.04,
+                  vertical: width * 0.025,
                 ),
-              ],
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Text('오늘 오후 9:41 출발', style: TextStyle(fontSize: fontSize)),
-                    Icon(Icons.keyboard_arrow_down, size: fontSize + 4),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: const Border(bottom: BorderSide(color: Colors.white)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.03),
+                      blurRadius: 2,
+                      offset: const Offset(0, 2),
+                    ),
                   ],
                 ),
-                Row(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('추천순', style: TextStyle(fontSize: fontSize)),
-                    Icon(Icons.keyboard_arrow_down, size: fontSize + 4),
+                    Row(
+                      children: [
+                        Text(
+                          '오늘 오후 9:41 출발',
+                          style: TextStyle(fontSize: fontSize),
+                        ),
+                        Icon(Icons.keyboard_arrow_down, size: fontSize + 4),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        Text('추천순', style: TextStyle(fontSize: fontSize)),
+                        Icon(Icons.keyboard_arrow_down, size: fontSize + 4),
+                      ],
+                    ),
                   ],
                 ),
-              ],
-            ),
-          ),
+              )
+              : const SizedBox.shrink(),
 
-          // 경로 목록 - 배경색을 흰색으로 설정
+          // 콘텐츠 영역 - 탭에 따라 다른 내용 표시
           Expanded(
-            child: Container(
-              color: Colors.white,
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  return ListView(
-                    padding: EdgeInsets.only(top: width * 0.02),
-                    children: [
-                      _buildRouteItem(
-                        '14분',
-                        '도보 4분',
-                        '카드 1,530원',
-                        '225',
-                        '교보생명 정류장',
-                        constraints.maxWidth,
-                        fontSize,
+            child: Stack(
+              children: [
+                // 대중교통 목록 - 대중교통 탭에서만 표시
+                Visibility(
+                  visible: _selectedIndex == 0,
+                  child: Container(
+                    color: Colors.white,
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        // 경로 데이터가 없으면 로딩 표시
+                        if (_transitRoutes == null) {
+                          return Center(
+                            child: CircularProgressIndicator(
+                              color: AppStyles.primaryColor,
+                            ),
+                          );
+                        }
+
+                        // 경로 목록 표시
+                        return ListView.builder(
+                          padding: EdgeInsets.only(top: width * 0.02),
+                          itemCount: _transitRoutes!.length,
+                          itemBuilder: (context, index) {
+                            final route = _transitRoutes![index];
+                            return _buildRouteItem(
+                              route.totalTime,
+                              route.walkTime,
+                              route.price,
+                              route.busNumber,
+                              route.stationName,
+                              constraints.maxWidth,
+                              fontSize,
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ),
+
+                // 자동차 네이버 맵
+                Visibility(
+                  visible: _selectedIndex == 1,
+                  child: NaverMap(
+                    options: NaverMapViewOptions(
+                      initialCameraPosition: NCameraPosition(
+                        target:
+                            _transitMapController.getCurrentPosition() ??
+                            NLatLng(
+                              37.5666805,
+                              126.9784147,
+                            ), // 현재 위치 또는 서울 시청 (기본값)
+                        zoom: _transitMapController.getDefaultZoomLevel(
+                          TransitMode.car,
+                        ),
                       ),
-                      _buildRouteItem(
-                        '9분',
-                        '도보 4분',
-                        '카드 1,530원',
-                        '104, 104-1',
-                        '교보생명 정류장',
-                        constraints.maxWidth,
-                        fontSize,
+                      mapType: NMapType.basic,
+                      contentPadding: contentPadding,
+                    ),
+                    onMapReady: (controller) {
+                      print('자동차 맵 컨트롤러 준비 완료');
+                      setState(() {
+                        _isCarMapLoading = false; // 맵 로딩 완료
+                        _transitMapController.carMapController.setMapController(
+                          controller,
+                        );
+                        _transitMapController.setMapInitialized(
+                          TransitMode.car,
+                          true,
+                        );
+                      });
+
+                      // 현재 위치가 있으면 카메라 이동 및 마커 표시
+                      final currentPosition =
+                          _transitMapController.getCurrentPosition();
+                      if (currentPosition != null) {
+                        _transitMapController.moveCamera(
+                          TransitMode.car,
+                          currentPosition,
+                          _transitMapController.getDefaultZoomLevel(
+                            TransitMode.car,
+                          ),
+                        );
+                        // 출발지 마커 자동 추가
+                        _transitMapController.updateMarkers(
+                          TransitMode.car,
+                          currentPosition,
+                          _originPlace,
+                        );
+                      }
+                    },
+                    onCameraIdle: () {
+                      // 카메라 움직임이 멈추었을 때 줌 레벨 업데이트
+                      if (_transitMapController.carMapController.controller !=
+                          null) {
+                        _transitMapController.carMapController
+                            .getCurrentCameraPosition()
+                            .then((cameraPosition) {
+                              if (cameraPosition != null) {
+                                double zoom = cameraPosition.zoom;
+                                _transitMapController.carMapController
+                                    .setZoomLevel(zoom);
+                                print('자동차 탭 줌 레벨 업데이트됨: $zoom');
+                              }
+                            });
+                      }
+                    },
+                    onMapTapped: (point, latLng) {
+                      print('자동차 지도가 탭되었습니다: $latLng');
+                      // 자동차 탭 전용 추가 기능 구현 가능
+                    },
+                  ),
+                ),
+
+                // 도보 네이버 맵
+                Visibility(
+                  visible: _selectedIndex == 2,
+                  child: NaverMap(
+                    options: NaverMapViewOptions(
+                      initialCameraPosition: NCameraPosition(
+                        target:
+                            _transitMapController.getCurrentPosition() ??
+                            NLatLng(
+                              37.5666805,
+                              126.9784147,
+                            ), // 현재 위치 또는 서울 시청 (기본값)
+                        zoom: _transitMapController.getDefaultZoomLevel(
+                          TransitMode.walk,
+                        ),
                       ),
-                      _buildRouteItem(
-                        '12분',
-                        '도보 4분',
-                        '카드 1,530원',
-                        '330, 302',
-                        '교보생명 정류장',
-                        constraints.maxWidth,
-                        fontSize,
-                      ),
-                    ],
-                  );
-                },
-              ),
+                      mapType: NMapType.basic,
+                      contentPadding: contentPadding,
+                    ),
+                    onMapReady: (controller) {
+                      print('도보 맵 컨트롤러 준비 완료');
+                      setState(() {
+                        _isWalkMapLoading = false; // 맵 로딩 완료
+                        _transitMapController.walkMapController
+                            .setMapController(controller);
+                        _transitMapController.setMapInitialized(
+                          TransitMode.walk,
+                          true,
+                        );
+                      });
+
+                      // 현재 위치가 있으면 카메라 이동 및 마커 표시
+                      final currentPosition =
+                          _transitMapController.getCurrentPosition();
+                      if (currentPosition != null) {
+                        _transitMapController.moveCamera(
+                          TransitMode.walk,
+                          currentPosition,
+                          _transitMapController.getDefaultZoomLevel(
+                            TransitMode.walk,
+                          ),
+                        );
+                        // 출발지 마커 자동 추가
+                        _transitMapController.updateMarkers(
+                          TransitMode.walk,
+                          currentPosition,
+                          _originPlace,
+                        );
+                      }
+                    },
+                    onCameraIdle: () {
+                      // 카메라 움직임이 멈추었을 때 줌 레벨 업데이트
+                      if (_transitMapController.walkMapController.controller !=
+                          null) {
+                        _transitMapController.walkMapController
+                            .getCurrentCameraPosition()
+                            .then((cameraPosition) {
+                              if (cameraPosition != null) {
+                                double zoom = cameraPosition.zoom;
+                                _transitMapController.walkMapController
+                                    .setZoomLevel(zoom);
+                                print('도보 탭 줌 레벨 업데이트됨: $zoom');
+                              }
+                            });
+                      }
+                    },
+                    onMapTapped: (point, latLng) {
+                      print('도보 지도가 탭되었습니다: $latLng');
+                      // 도보 탭 전용 추가 기능 구현 가능
+                    },
+                  ),
+                ),
+
+                // 맵 로딩 표시 - 자동차 탭이 선택되었고 초기화 중일 때
+                if (_selectedIndex == 1 && _isCarMapLoading)
+                  Center(
+                    child: CircularProgressIndicator(
+                      color: AppStyles.primaryColor,
+                    ),
+                  ),
+
+                // 맵 로딩 표시 - 도보 탭이 선택되었고 초기화 중일 때
+                if (_selectedIndex == 2 && _isWalkMapLoading)
+                  Center(
+                    child: CircularProgressIndicator(
+                      color: AppStyles.primaryColor, // 도보 탭도 빨간색으로 변경
+                    ),
+                  ),
+              ],
             ),
           ),
         ],
@@ -351,36 +720,30 @@ class _TransitAppState extends State<TransitApp> {
     // 텍스트 크기는 아이콘 크기에 비례하게 조정
     final double textSize = iconSize * 0.42;
 
+    // 선택된 탭에 따라 색상 설정 - 모든 탭이 동일한 색상(AppStyles.primaryColor) 사용
+    Color iconColor;
+    if (_selectedIndex == index) {
+      iconColor = AppStyles.primaryColor; // 모든 탭에 동일한 색상 적용
+    } else {
+      iconColor = Colors.grey;
+    }
+
     return Expanded(
       child: InkWell(
         onTap: () {
-          setState(() {
-            _selectedIndex = index;
-          });
+          // 탭 변경 핸들러 호출
+          _handleNavIndexChanged(index);
         },
         child: Padding(
           padding: EdgeInsets.symmetric(vertical: iconSize * 0.42),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                icon,
-                color:
-                    _selectedIndex == index
-                        ? AppStyles.primaryColor
-                        : Colors.grey,
-                size: iconSize,
-              ),
+              Icon(icon, color: iconColor, size: iconSize),
               SizedBox(height: iconSize * 0.14),
               Text(
                 label,
-                style: TextStyle(
-                  color:
-                      _selectedIndex == index
-                          ? AppStyles.primaryColor
-                          : Colors.grey,
-                  fontSize: textSize,
-                ),
+                style: TextStyle(color: iconColor, fontSize: textSize),
               ),
             ],
           ),
@@ -459,6 +822,7 @@ class _TransitAppState extends State<TransitApp> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // 버스 아이
               // 버스 아이콘
               Container(
                 padding: EdgeInsets.all(maxWidth * 0.015),

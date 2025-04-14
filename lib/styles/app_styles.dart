@@ -25,6 +25,8 @@ class AppStyles {
     fontWeight: FontWeight.bold,
   );
 
+  static var secondaryTextColor;
+
   // 기타 필요한 스타일 추가
 }
 
