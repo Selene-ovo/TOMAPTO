@@ -4,6 +4,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:tomapto/controllers/login_controller.dart';
 import 'package:tomapto/widgets/bottom_nav_bar.dart';
+import 'package:tomapto/pages/profile/profile.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized(); // Flutter 바인딩 초기화 (비동기 작업 전 필요)
@@ -56,7 +57,7 @@ class CustomTextField extends StatelessWidget {
         Text(
           labelText,
           style: TextStyle(
-            color: const Color(0xFF363636),
+            color: const Color(0xFF9DB2CE),
             fontSize: 14.0 * MediaQuery.of(context).textScaleFactor,
             fontWeight: FontWeight.w500,
             fontFamily: 'Pretendard',
@@ -77,11 +78,11 @@ class CustomTextField extends StatelessWidget {
                 color:
                     focusNode?.hasFocus == true
                         ? const Color(0xFFFB233B) // 앱의 주요 색상 (빨간색)
-                        : const Color(0xFF757575), // 텍스트 보조 색상
+                        : const Color(0xFF9DB2CE), // 텍스트 보조 색상
               ),
             ),
             enabledBorder: const UnderlineInputBorder(
-              borderSide: BorderSide(color: Color(0xFF757575)),
+              borderSide: BorderSide(color: Color(0xFF9DB2CE)),
             ),
             focusedBorder: const UnderlineInputBorder(
               borderSide: BorderSide(color: Color(0xFFFB233B)),
@@ -198,13 +199,16 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   // 로그인 처리
+  // login.dart 파일의 _LoginPageState 클래스 내부
+
+  // 로그인 처리
   Future<void> _login() async {
     final success = await _controller.login(context, setState);
     if (success && mounted) {
-      // 홈 화면으로 이동 (실제 구현 필요)
-      // Navigator.of(context).pushReplacement(
-      //   MaterialPageRoute(builder: (context) => HomePage()),
-      // );
+      // 로그인 성공 시 프로필 페이지로 이동
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (context) => const ProfilePage()),
+      );
     }
   }
 
@@ -297,7 +301,7 @@ class _LoginPageState extends State<LoginPage> {
               Text(
                 '로그인 유지',
                 style: TextStyle(
-                  color: Colors.grey[600],
+                  color: Color(0xFF9DB2CE),
                   fontSize: 14.0 * MediaQuery.of(context).textScaleFactor,
                   fontFamily: 'Pretendard',
                   fontWeight: FontWeight.w500,
@@ -315,16 +319,16 @@ class _LoginPageState extends State<LoginPage> {
               Text(
                 '비밀번호 찾기',
                 style: TextStyle(
-                  color: const Color(0xFF757575),
+                  color: const Color(0xFF9DB2CE),
                   fontSize: 14.0 * MediaQuery.of(context).textScaleFactor,
                   fontFamily: 'Pretendard',
                   fontWeight: FontWeight.w500,
                 ),
               ),
               Container(
-                height: 1,
+                height: 0.6,
                 width: underlineWidth,
-                color: const Color(0xFF757575),
+                color: const Color(0xFF9DB2CE),
               ),
             ],
           ),
@@ -437,7 +441,7 @@ class _LoginPageState extends State<LoginPage> {
             Positioned(
               left: 0,
               right: 0,
-              bottom: -30, // 화면 최하단에 배치
+              bottom: 0, // 화면 최하단에 배치
               child: BottomNavBar(
                 currentIndex: 4,
                 onTap: (index) {

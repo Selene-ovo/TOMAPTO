@@ -4,51 +4,45 @@ import 'package:flutter_svg/flutter_svg.dart';
 class BottomNavBar extends StatelessWidget {
   final int currentIndex;
   final Function(int) onTap;
+  final double curveHeight; // 곡선의 높이를 조절하는 속성
 
   const BottomNavBar({
     super.key,
-    required this.currentIndex,
-    required this.onTap,
+    required this.currentIndex, // 현재 선택된 탭 인덱스
+    required this.onTap, // 탭 선택 시 호출될 콜백 함수
+    this.curveHeight = 30.0, // 기본 커브 높이 (더 크게 설정할수록 더 볼록해집니다)
   });
 
   @override
   Widget build(BuildContext context) {
+    // 표준 Flutter 하단 네비게이션 바 높이
+    const double kBottomNavigationBarHeight = 80.0;
     final double screenWidth = MediaQuery.of(context).size.width;
 
-    // 고정된 높이 설정
-    const double navBarHeight = 75.0;
-
-    return SizedBox(
+    return Container(
       width: screenWidth,
-      height: navBarHeight + 40, // 중앙 버튼을 위한 추가 공간
+      height: kBottomNavigationBarHeight,
       child: Stack(
+        clipBehavior: Clip.none, // 자식 위젯이 부모 경계를 넘어갈 수 있도록 설정
         children: [
-          // 기본 네비게이션 바 (둥근 모서리)
+          // 기본 네비게이션 바 배경 (전체 너비)
           Positioned(
             bottom: 0,
             left: 0,
             right: 0,
+            height: kBottomNavigationBarHeight,
             child: Container(
-              width: screenWidth,
-              height: navBarHeight,
-              decoration: ShapeDecoration(
+              decoration: const BoxDecoration(
                 color: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(6),
-                    topRight: Radius.circular(6),
-                    bottomLeft: Radius.circular(26),
-                    bottomRight: Radius.circular(26),
+                // 상단에 0.2 두께의 구분선 추가
+                border: Border(
+                  top: BorderSide(
+                    width: 0.2,
+                    color: Color(0xFFCCCCCC), // 연한 회색 구분선
                   ),
                 ),
-                shadows: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 5,
-                    offset: Offset(0, -2),
-                  ),
-                ],
               ),
+              width: screenWidth,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
@@ -68,7 +62,7 @@ class BottomNavBar extends StatelessWidget {
                   Container(width: 60, height: 50),
                   _buildNavItem(
                     3,
-                    '즐겨찾기',
+                    '저장',
                     'assets/icons/favorites_B.svg',
                     'assets/icons/favorites_W.svg',
                   ),
@@ -83,36 +77,51 @@ class BottomNavBar extends StatelessWidget {
             ),
           ),
 
-          // 중앙 원형 배경 (중앙 버튼 아래 깔리는 원)
+          // 중앙 볼록 부분 (하단 바 위에 추가) - 곡선 개선 및 크기 조정
           Positioned(
-            bottom: navBarHeight - 40, // 네비게이션 바 위로 절반 올라옴
-            left: screenWidth / 2 - 40, // 중앙 정렬 (72의 절반은 36)
-            child: Container(
-              width: 80,
-              height: 80,
-              decoration: const ShapeDecoration(
-                color: Colors.white,
-                shape: OvalBorder(),
-                shadows: [
-                  BoxShadow(
-                    color: Colors.black12,
-                    blurRadius: 5,
-                    spreadRadius: 1,
+            bottom: kBottomNavigationBarHeight - 1,
+            left: screenWidth / 2 - 70, // 좌측 위치 더 넓게 조정 (60 -> 70)
+            child: ClipPath(
+              // CenterCurveClipper에 적절한 값을 전달하여 커브 모양 조절
+              clipper: CenterCurveClipper(
+                iconRadius: 30, // 아이콘 반지름
+                curveBulge: 0.5, // 볼록한 정도 (0.5~1.0 사이 권장, 값이 클수록 더 볼록함)
+                curveWidth: 120, // 곡선의 너비 (더 넓게 설정)
+              ),
+              child: Container(
+                width: 140, // 너비 더 넓게 조정 (120 -> 140)
+                height: curveHeight * 1.6, // 높이 조정 (1.2 -> 1.5로 증가)
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  // 상단 경계에 0.2의 구분선 추가 (중앙 볼록 부분에도 동일한 구분선 적용)
+                  border: const Border(
+                    top: BorderSide(
+                      width: 0.2,
+                      color: Color(0xFFCCCCCC), // 연한 회색 구분선
+                    ),
                   ),
-                ],
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 5,
+                      spreadRadius: 1,
+                      offset: const Offset(0, -2),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
 
-          // 중앙 둥근 버튼 (빨간색)
+          // 중앙 둥근 버튼 (Stack의 맨 마지막에 배치하여 항상 최상위에 표시)
           Positioned(
-            bottom: navBarHeight - 28, // 위치 조정
-            left: screenWidth / 2 - 28, // 중앙 위치 (56의 절반은 28)
+            bottom: kBottomNavigationBarHeight - 45, // 위치 조정
+            left: screenWidth / 2 - 30, // 중앙 위치
             child: GestureDetector(
               onTap: () => onTap(2),
               child: Container(
-                width: 56,
-                height: 56,
+                width: 60, // 버튼 크기
+                height: 60, // 버튼 크기
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
@@ -134,8 +143,8 @@ class BottomNavBar extends StatelessWidget {
                 child: Center(
                   child: SvgPicture.asset(
                     'assets/icons/category_Bf.svg',
-                    width: 21,
-                    height: 21,
+                    width: 21, // 아이콘 크기
+                    height: 21, // 아이콘 크기
                     color: Colors.white,
                   ),
                 ),
@@ -147,20 +156,22 @@ class BottomNavBar extends StatelessWidget {
     );
   }
 
+  // 각 네비게이션 아이템을 구성하는 메서드
   Widget _buildNavItem(
     int index,
     String label,
     String selectedSvgPath,
     String unselectedSvgPath,
   ) {
+    // 현재 선택된 아이템인지 확인
     final bool isSelected = currentIndex == index;
 
     // 모든 아이템에 고정된 높이와 너비를 부여하여 움직임 방지
     return GestureDetector(
       onTap: () => onTap(index),
-      child: SizedBox(
-        width: 60,
-        height: 50,
+      child: Container(
+        width: 60, // 모든 아이템에 동일한 너비
+        height: 50, // 모든 아이템에 동일한 높이
         child: Column(
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
@@ -185,4 +196,76 @@ class BottomNavBar extends StatelessWidget {
       ),
     );
   }
+}
+
+// 종형 곡선 모양의 클리퍼 구현 - 더 볼록하게 수정
+class CenterCurveClipper extends CustomClipper<Path> {
+  // 커스터마이징 가능한 속성들
+  final double iconRadius; // 중앙 아이콘의 반지름
+  final double curveBulge; // 곡선의 볼록한 정도 (0.5~1.0 권장, 값이 클수록 더 볼록함)
+  final double curveWidth; // 곡선의 너비
+
+  // 생성자: 클리퍼의 속성을 설정할 수 있습니다
+  CenterCurveClipper({
+    this.iconRadius = 25.0, // 기본 아이콘 반지름
+    this.curveBulge = 0.8, // 기본 볼록함 정도
+    this.curveWidth = 80.0, // 기본 곡선 너비
+  });
+
+  @override
+  Path getClip(Size size) {
+    final path = Path();
+    final width = size.width;
+    final height = size.height;
+
+    // 볼록한 정도에 따라 조절되는 높이 계수
+    final heightFactor = height * (1.0 - curveBulge);
+
+    // 좌측 하단에서 시작
+    path.moveTo(0, height);
+
+    // 왼쪽 하단 직선 부분
+    path.lineTo(width * 0.05, height);
+
+    // 왼쪽에서 중앙으로 올라가는 곡선 (더 볼록하게 조정)
+    path.cubicTo(
+      width * 0.10, // 첫 번째 제어점 X 좌표
+      height, // 첫 번째 제어점 Y 좌표
+      width * 0.15, // 두 번째 제어점 X 좌표
+      heightFactor * 0.9, // 두 번째 제어점 Y 좌표 (낮을수록 더 볼록해짐)
+      width * 0.30, // 끝점 X 좌표
+      heightFactor * 0.7, // 끝점 Y 좌표 (낮을수록 더 볼록해짐)
+    );
+
+    // 중앙 상단 부분 (더 볼록하게 조정)
+    path.cubicTo(
+      width * 0.38, // 첫 번째 제어점 X 좌표
+      heightFactor * 0.3, // 첫 번째 제어점 Y 좌표 (낮을수록 더 볼록해짐)
+      width * 0.62, // 두 번째 제어점 X 좌표
+      heightFactor * 0.3, // 두 번째 제어점 Y 좌표 (낮을수록 더 볼록해짐)
+      width * 0.70, // 끝점 X 좌표
+      heightFactor * 0.7, // 끝점 Y 좌표 (낮을수록 더 볼록해짐)
+    );
+
+    // 중앙에서 오른쪽으로 내려가는 곡선
+    path.cubicTo(
+      width * 0.85, // 첫 번째 제어점 X 좌표
+      heightFactor * 0.9, // 첫 번째 제어점 Y 좌표 (낮을수록 더 볼록해짐)
+      width * 0.90, // 두 번째 제어점 X 좌표
+      height, // 두 번째 제어점 Y 좌표
+      width * 0.95, // 끝점 X 좌표
+      height, // 끝점 Y 좌표
+    );
+
+    // 오른쪽 하단 직선 부분
+    path.lineTo(width, height);
+
+    // 경로 닫기
+    path.close();
+
+    return path;
+  }
+
+  @override
+  bool shouldReclip(CustomClipper<Path> oldClipper) => true;
 }

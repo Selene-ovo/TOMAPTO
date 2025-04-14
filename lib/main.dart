@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:tomapto/widgets/bottom_nav_bar.dart';
 import 'package:tomapto/pages/map/transit.dart';
 import 'package:tomapto/styles/app_styles.dart';
@@ -25,16 +25,69 @@ void main() async {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  bool _isLoading = true;
+  bool _isLoggedIn = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkLoginStatus();
+  }
+
+  // 로그인 상태 확인
+  Future<void> _checkLoginStatus() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+      final rememberMe = prefs.getBool('remember_me') ?? false;
+
+      setState(() {
+        _isLoggedIn = token != null && rememberMe;
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('로그인 상태 확인 오류: $e');
+      setState(() {
+        _isLoggedIn = false;
+        _isLoading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: '네이버 맵',
-      theme: AppStyles.theme, // AppStyles에서 정의된 테마 사용
+      theme: ThemeData(
+        primarySwatch: Colors.red,
+        visualDensity: VisualDensity.adaptivePlatformDensity,
+      ),
       home: const NaverMapPage(),
+    );
+  }
+}
+
+// 로딩 화면
+class LoadingScreen extends StatelessWidget {
+  const LoadingScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFB233B)),
+        ),
+      ),
     );
   }
 }
@@ -193,6 +246,11 @@ class _NaverMapPageState extends State<NaverMapPage> {
     // 현재 위치 버튼 처리 (중앙 버튼 - 인덱스 2)
     if (index == 2) {
       _getCurrentLocation();
+    }
+
+    // 프로필 버튼 처리 (마이페이지 - 인덱스 4)
+    if (index == 4) {
+      Navigator.of(context).pushNamed('/profile');
     }
 
     // 여기에 각 탭에 따른 추가 동작 구현
@@ -417,12 +475,15 @@ class _NaverMapPageState extends State<NaverMapPage> {
             ),
           ),
 
-          // 하단 네비게이션 바
-          Align(
-            alignment: Alignment.bottomCenter,
+          // 커스텀 하단 네비게이션 바 추가
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
             child: BottomNavBar(
               currentIndex: _currentNavIndex,
               onTap: _handleNavIndexChanged,
+              curveHeight: 30.0,
             ),
           ),
         ],
