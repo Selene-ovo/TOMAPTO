@@ -6,7 +6,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:tomapto/widgets/bottom_nav_bar.dart';
 import 'package:tomapto/pages/map/transit.dart';
 import 'package:tomapto/styles/app_styles.dart';
-import 'package:tomapto/controllers/map_controller.dart';
+import 'package:tomapto/controllers/map/map_controller.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
