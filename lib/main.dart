@@ -6,7 +6,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:tomapto/styles/app_styles.dart';
 import 'package:tomapto/widgets/bottom_nav_bar.dart';
 import 'package:tomapto/widgets/ad_placeholder.dart'; // 광고 플레이스홀더 위젯 import
-import 'package:tomapto/pages/friends_list_screen.dart'; // 경로 수정 - screens → pages
+import 'package:tomapto/pages/friends/friends_list_screen.dart'; // 경로 수정 - screens → pages
 import 'package:tomapto/pages/map/transit.dart';
 import 'package:tomapto/controllers/map/map_controller.dart';
 

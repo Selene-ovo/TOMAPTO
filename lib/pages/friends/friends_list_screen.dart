@@ -7,7 +7,8 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'dart:io' show Platform;
 import 'package:tomapto/modal/friends_modal_connection.dart';
 import 'package:tomapto/modal/friends_show.dart';
-import 'package:tomapto/pages/real_time_location_sharing.dart';
+import 'package:tomapto/pages/friends/real_time_location_sharing.dart';
+import 'package:tomapto/widgets/bottom_nav_bar.dart'; // 바텀 네비게이션 바 추가
 
 class FriendScreen extends StatefulWidget {
   @override
@@ -26,6 +27,9 @@ class _FriendScreenState extends State<FriendScreen> {
 
   // 검색어 컨트롤러
   final TextEditingController _searchController = TextEditingController();
+
+  // 현재 선택된 탭 인덱스 (친구 페이지는 인덱스 1)
+  int _currentNavIndex = 1;
 
   @override
   void initState() {
@@ -52,6 +56,13 @@ class _FriendScreenState extends State<FriendScreen> {
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  // 바텀 네비게이션 바 탭 변경 처리
+  void _handleNavIndexChanged(int index) {
+    setState(() {
+      _currentNavIndex = index;
+    });
   }
 
   // API 서버 기본 URL 가져오기
@@ -351,6 +362,11 @@ class _FriendScreenState extends State<FriendScreen> {
                     ),
           ),
         ],
+      ),
+      // 바텀 네비게이션 바 추가
+      bottomNavigationBar: BottomNavBar(
+        currentIndex: _currentNavIndex,
+        onTap: _handleNavIndexChanged,
       ),
     );
   }
