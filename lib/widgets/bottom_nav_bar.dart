@@ -1,5 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:tomapto/main.dart'; // 메인 페이지 임포트
+import 'package:tomapto/pages/friends/friends_list_screen.dart'; // 친구 페이지 임포트
+import 'package:tomapto/pages/favorites/favorites_screen.dart'; // 즐겨찾기 페이지 임포트
+import 'package:tomapto/pages/map/naver_map.dart';
+import 'package:tomapto/pages/profile/login.dart'; // 로그인 페이지 임포트
+import 'package:tomapto/pages/profile/profile.dart'; // 프로필 페이지 임포트
+import 'package:shared_preferences/shared_preferences.dart'; // 로그인 상태 확인용
 
 class BottomNavBar extends StatelessWidget {
   final int currentIndex;
@@ -12,6 +19,68 @@ class BottomNavBar extends StatelessWidget {
     required this.onTap, // 탭 선택 시 호출될 콜백 함수
     this.curveHeight = 30.0, // 기본 커브 높이 (더 크게 설정할수록 더 볼록해집니다)
   });
+
+  // 로그인 상태 확인 메서드
+  Future<bool> _checkIfUserIsLoggedIn() async {
+    final prefs = await SharedPreferences.getInstance();
+    // 예시: 'user_token' 키를 사용하여 로그인 상태 확인
+    final userToken = prefs.getString('user_token');
+    return userToken != null && userToken.isNotEmpty;
+  }
+
+  // 페이지 이동 처리 메서드
+  Future<void> _handleNavTap(BuildContext context, int index) async {
+    // 탭 상태 업데이트를 위해 콜백 호출
+    onTap(index);
+
+    // 현재 인덱스와 같으면 아무것도 하지 않음 (이미 같은 페이지에 있음)
+    if (index == currentIndex) return;
+
+    // 페이지 이동 로직
+    switch (index) {
+      case 0:
+        // 메인 페이지로 이동
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => NaverMapPage()),
+          (route) => false,
+        );
+        break;
+      case 1:
+        // 친구 페이지로 이동
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => FriendScreen()),
+        );
+        break;
+      case 2:
+        // 중앙 버튼 - 카테고리리
+        // 현재는 메인 페이지의 특정 기능만 활성화 (페이지 이동 없음)
+        break;
+      case 3:
+        // 즐겨찾기 페이지로 이동
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => FavoritesScreen()),
+        );
+        break;
+      case 4:
+        // 프로필 탭 - 로그인 상태에 따라 다른 페이지로 이동
+        bool isLoggedIn = await _checkIfUserIsLoggedIn();
+        if (isLoggedIn) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => ProfilePage()),
+          );
+        } else {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => LoginPage()),
+          );
+        }
+        break;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -47,12 +116,14 @@ class BottomNavBar extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   _buildNavItem(
+                    context,
                     0,
                     '메인',
                     'assets/icons/main_B.svg',
                     'assets/icons/main_W.svg',
                   ),
                   _buildNavItem(
+                    context,
                     1,
                     '친구',
                     'assets/icons/friend_B.svg',
@@ -61,12 +132,14 @@ class BottomNavBar extends StatelessWidget {
                   // 중앙 버튼을 위한 공간 - 고정 너비 사용
                   Container(width: 60, height: 50),
                   _buildNavItem(
+                    context,
                     3,
                     '저장',
                     'assets/icons/favorites_B.svg',
                     'assets/icons/favorites_W.svg',
                   ),
                   _buildNavItem(
+                    context,
                     4,
                     '마이',
                     'assets/icons/user_B.svg',
@@ -118,7 +191,10 @@ class BottomNavBar extends StatelessWidget {
             bottom: kBottomNavigationBarHeight - 45, // 위치 조정
             left: screenWidth / 2 - 30, // 중앙 위치
             child: GestureDetector(
-              onTap: () => onTap(2),
+              onTap: () {
+                onTap(2);
+                _handleNavTap(context, 2);
+              },
               child: Container(
                 width: 60, // 버튼 크기
                 height: 60, // 버튼 크기
@@ -158,6 +234,7 @@ class BottomNavBar extends StatelessWidget {
 
   // 각 네비게이션 아이템을 구성하는 메서드
   Widget _buildNavItem(
+    BuildContext context,
     int index,
     String label,
     String selectedSvgPath,
@@ -168,7 +245,7 @@ class BottomNavBar extends StatelessWidget {
 
     // 모든 아이템에 고정된 높이와 너비를 부여하여 움직임 방지
     return GestureDetector(
-      onTap: () => onTap(index),
+      onTap: () => _handleNavTap(context, index),
       child: Container(
         width: 60, // 모든 아이템에 동일한 너비
         height: 50, // 모든 아이템에 동일한 높이

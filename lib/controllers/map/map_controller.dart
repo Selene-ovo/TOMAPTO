@@ -135,6 +135,8 @@ class MapController {
   void dispose() {
     _mapController = null;
   }
+
+  void updateCamera(NCameraUpdate nCameraUpdate) {}
 }
 
 // 거리 스케일 정보를 담는 클래스
