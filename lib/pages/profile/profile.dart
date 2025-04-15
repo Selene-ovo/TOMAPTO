@@ -216,7 +216,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      _controller.userName,
+                                      _controller.userNickname,
                                       style: TextStyle(
                                         fontSize: 18 * (screenWidth / 375),
                                         fontWeight: FontWeight.bold,

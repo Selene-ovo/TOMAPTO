@@ -3,6 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:tomapto/main.dart'; // 메인 페이지 임포트
 import 'package:tomapto/pages/friends/friends_list_screen.dart'; // 친구 페이지 임포트
 import 'package:tomapto/pages/favorites/favorites_screen.dart'; // 즐겨찾기 페이지 임포트
+import 'package:tomapto/pages/map/naver_map.dart';
 import 'package:tomapto/pages/profile/login.dart'; // 로그인 페이지 임포트
 import 'package:tomapto/pages/profile/profile.dart'; // 프로필 페이지 임포트
 import 'package:shared_preferences/shared_preferences.dart'; // 로그인 상태 확인용
@@ -41,7 +42,7 @@ class BottomNavBar extends StatelessWidget {
         // 메인 페이지로 이동
         Navigator.pushAndRemoveUntil(
           context,
-          MaterialPageRoute(builder: (_) => MainScreen()),
+          MaterialPageRoute(builder: (_) => NaverMapPage()),
           (route) => false,
         );
         break;

@@ -237,7 +237,7 @@ class _SignUpPageState extends State<SignUpPage> {
             style: TextStyle(
               fontFamily: 'Pretendard',
               fontWeight: FontWeight.w600,
-              fontSize: 16.0,
+              fontSize: 22.0,
               color: const Color(0xFF363636),
             ),
           ),
