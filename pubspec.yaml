@@ -1,6 +1,6 @@
 name: tomapto
-description: 'A new Flutter project.'
-publish_to: 'none'
+description: "A new Flutter project."
+publish_to: "none"
 version: 1.0.0+1
 environment:
   sdk: ^3.7.2
@@ -16,6 +16,7 @@ dependencies:
   flutter_svg: ^2.0.17
   shared_preferences: ^2.5.3
   lib: ^0.0.3
+  flutter_compass: ^0.8.1
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -24,8 +25,8 @@ dev_dependencies:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: 'assets/icons/tomapto.png'
-  adaptive_icon_background: '#FFFFFF'
+  image_path: "assets/icons/tomapto.png"
+  adaptive_icon_background: "#FFFFFF"
   remove_alpha_ios: true
 flutter:
   uses-material-design: true
