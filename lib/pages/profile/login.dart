@@ -5,6 +5,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:tomapto/controllers/account/login_controller.dart';
 import 'package:tomapto/widgets/bottom_nav_bar.dart';
 import 'package:tomapto/pages/profile/profile.dart';
+import 'package:tomapto/pages/profile/signup.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized(); // Flutter 바인딩 초기화 (비동기 작업 전 필요)
@@ -189,13 +190,9 @@ class _LoginPageState extends State<LoginPage> {
 
   // 회원가입 네비게이션
   void _navigateToSignUp() {
-    ScaffoldMessenger.of(
+    Navigator.of(
       context,
-    ).showSnackBar(const SnackBar(content: Text('회원가입 페이지로 이동합니다')));
-    // 실제 회원가입 페이지로 이동 (구현 필요)
-    // Navigator.of(context).push(
-    //   MaterialPageRoute(builder: (context) => SignUpPage()),
-    // );
+    ).push(MaterialPageRoute(builder: (context) => SignUpPage()));
   }
 
   // 로그인 처리
