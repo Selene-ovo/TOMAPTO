@@ -64,11 +64,6 @@ class LoginController {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setBool('remember_me', rememberMe);
 
-          // 성공 메시지 표시
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(response['message'] ?? '로그인 성공!')),
-          );
-
           return true;
         } else {
           // 로그인 실패 처리

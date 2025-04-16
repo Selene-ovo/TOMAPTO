@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:tomapto/controllers/account/signup_controller.dart';
+import 'package:tomapto/pages/profile/login.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized(); // Flutter 바인딩 초기화 (비동기 작업 전 필요)
@@ -16,7 +17,6 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: '회원가입',
       theme: ThemeData(
         fontFamily: 'Pretendard',
         scaffoldBackgroundColor: Colors.white,
@@ -229,9 +229,11 @@ class _SignUpPageState extends State<SignUpPage> {
         FocusScope.of(context).unfocus();
       },
       child: Scaffold(
+        backgroundColor: Colors.white, // 전체적인 배경 색상
         appBar: AppBar(
-          backgroundColor: Colors.white,
-          scrolledUnderElevation: 0,
+          backgroundColor: Colors.white, // 앱바 배경 색상
+          scrolledUnderElevation:
+              0, // 스크롤할 때 앱 바에 고도가 표시되지 않으므로 시각적 변화나 그림자 효과가 발생하는 것을 방지
           title: Text(
             '회원가입',
             style: TextStyle(
@@ -247,7 +249,7 @@ class _SignUpPageState extends State<SignUpPage> {
               width: 24,
               height: 24,
             ),
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.pop(context),
           ),
         ),
         body: SingleChildScrollView(

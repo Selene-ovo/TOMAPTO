@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:tomapto/main.dart'; // 메인 페이지 임포트
 import 'package:tomapto/pages/friends/friends_list_screen.dart'; // 친구 페이지 임포트
 import 'package:tomapto/pages/favorites/favorites_screen.dart'; // 즐겨찾기 페이지 임포트
 import 'package:tomapto/pages/map/naver_map.dart';
@@ -42,7 +41,12 @@ class BottomNavBar extends StatelessWidget {
         // 메인 페이지로 이동
         Navigator.pushAndRemoveUntil(
           context,
-          MaterialPageRoute(builder: (_) => NaverMapPage()),
+          PageRouteBuilder(
+            pageBuilder:
+                (context, animation, secondaryAnimation) => NaverMapPage(),
+            transitionDuration: Duration.zero, // 애니메이션 시간을 0으로 설정
+            reverseTransitionDuration: Duration.zero, // 뒤로가기 애니메이션도 0으로 설정
+          ),
           (route) => false,
         );
         break;
@@ -50,7 +54,12 @@ class BottomNavBar extends StatelessWidget {
         // 친구 페이지로 이동
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => FriendScreen()),
+          PageRouteBuilder(
+            pageBuilder:
+                (context, animation, secondaryAnimation) => FriendScreen(),
+            transitionDuration: Duration.zero,
+            reverseTransitionDuration: Duration.zero,
+          ),
         );
         break;
       case 2:
@@ -61,7 +70,13 @@ class BottomNavBar extends StatelessWidget {
         // 즐겨찾기 페이지로 이동
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => FavoritesScreen()),
+          PageRouteBuilder(
+            pageBuilder:
+                (context, animation, secondaryAnimation) =>
+                    FriendScreen(), //FavoritesScreen(),
+            transitionDuration: Duration.zero,
+            reverseTransitionDuration: Duration.zero,
+          ),
         );
         break;
       case 4:
@@ -70,12 +85,22 @@ class BottomNavBar extends StatelessWidget {
         if (isLoggedIn) {
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (_) => ProfilePage()),
+            PageRouteBuilder(
+              pageBuilder:
+                  (context, animation, secondaryAnimation) => ProfilePage(),
+              transitionDuration: Duration.zero,
+              reverseTransitionDuration: Duration.zero,
+            ),
           );
         } else {
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (_) => LoginPage()),
+            PageRouteBuilder(
+              pageBuilder:
+                  (context, animation, secondaryAnimation) => LoginPage(),
+              transitionDuration: Duration.zero,
+              reverseTransitionDuration: Duration.zero,
+            ),
           );
         }
         break;
