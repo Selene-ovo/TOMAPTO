@@ -53,22 +53,20 @@ class LoginController {
         print('로그인 시도: ${idController.text}');
 
         // API 호출
-        final response = await ApiService.login(
+        final responseData = await ApiService.login(
           idController.text,
           passwordController.text,
+          rememberMe, // rememberMe 값 전달
         );
 
         // 로그인 성공 처리
-        if (response['success'] == true) {
-          // 로그인 유지 설정 저장
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setBool('remember_me', rememberMe);
-
+        if (responseData['success'] == true) {
+          // 로그인 유지 설정은 ApiService.login에서 이미 처리됨
           return true;
         } else {
           // 로그인 실패 처리
           setState(() {
-            errorMessage = response['message'] ?? '로그인에 실패했습니다.';
+            errorMessage = responseData['message'] ?? '로그인에 실패했습니다.';
           });
           return false;
         }
@@ -125,18 +123,22 @@ class ApiService {
   static Future<Map<String, dynamic>> login(
     String userId,
     String password,
+    bool rememberMe,
   ) async {
     try {
       // API 기본 URL 가져오기
       final apiBaseUrl = getApiBaseUrl();
 
-      // 회원가입 경로와 일치하도록 로그인 경로 수정
       print('API URL: $apiBaseUrl/account/login');
 
       final response = await http.post(
         Uri.parse('$apiBaseUrl/account/login'),
         headers: {'Content-Type': 'application/json'},
-        body: json.encode({'user_id': userId, 'user_password': password}),
+        body: json.encode({
+          'user_id': userId,
+          'user_password': password,
+          'remember_me': rememberMe,
+        }),
       );
 
       // 응답 로깅 (디버깅용)
@@ -152,16 +154,14 @@ class ApiService {
         await prefs.setString('token', responseData['token']);
         await prefs.setString('user_id', responseData['user']['user_id']);
 
-        // 로그인 유지 체크 시 추가 설정
-        if (responseData['remember_me'] ?? false) {
-          await prefs.setBool('remember_me', true);
-        }
+        // 로그인 유지 설정 저장
+        await prefs.setBool('remember_me', rememberMe);
       }
 
       return responseData;
     } catch (e) {
       print('API 호출 오류 상세: $e');
-      rethrow; // 오류를 다시 던져서 상위 레벨에서 처리하도록 함
+      rethrow;
     }
   }
 
@@ -176,5 +176,6 @@ class ApiService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('token');
     await prefs.remove('user_id');
+    await prefs.remove('remember_me'); // remember_me 설정도 제거
   }
 }
