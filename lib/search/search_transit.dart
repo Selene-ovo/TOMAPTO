@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:tomapto/styles/app_styles.dart';
 
 // 검색 모드를 정의하는 enum
 enum SearchMode {
@@ -83,7 +82,7 @@ class _SearchPageState extends State<SearchPage> {
 
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: AppStyles.primaryColor,
+        backgroundColor: Color(0xFFFB233B),
         title: Text(title, style: const TextStyle(color: Colors.white)),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
@@ -107,7 +106,7 @@ class _SearchPageState extends State<SearchPage> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: AppStyles.primaryColor),
+                  borderSide: BorderSide(color: Color(0xFFFB233B)),
                 ),
               ),
             ),

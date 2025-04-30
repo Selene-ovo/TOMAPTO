@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:tomapto/controllers/map/map_controller.dart';
-import 'package:tomapto/styles/app_styles.dart';
 
 enum TransitMode { car, walk }
 
@@ -96,7 +95,7 @@ class TransitMapController {
       );
 
       // 모든 모드에서 동일한 색상(빨간색) 사용
-      marker.setIconTintColor(AppStyles.primaryColor);
+      marker.setIconTintColor(Color(0xFFFB233B));
 
       // 마커 추가
       try {

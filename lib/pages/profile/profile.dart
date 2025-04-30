@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:tomapto/widgets/bottom_nav_bar.dart';
+import 'package:tomapto/widgets/navbar.dart';
 import 'package:tomapto/controllers/account/profile_controller.dart';
 import 'package:tomapto/pages/profile/login.dart';
-import 'package:tomapto/services/token_service.dart'; // 토큰 서비스 추가
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -390,7 +389,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
       // 하단 네비게이션 바
       bottomNavigationBar: BottomNavBar(
-        currentIndex: 4, // 마이페이지
+        currentIndex: 3, // 마이페이지
         onTap: (index) {
           // 네비게이션 처리
           // 실제 앱에서는 다른 페이지로 이동하는 코드 필요

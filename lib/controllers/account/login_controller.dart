@@ -107,15 +107,28 @@ class LoginController {
 
 // API 서비스 클래스
 class ApiService {
+  // API 기본 URL 가져오기
   static String getApiBaseUrl() {
     String baseUrl = dotenv.env['API_BASE_URL'] ?? 'http://localhost:8080/api';
-    // Android 플랫폼이면서 URL이 localhost를 포함하는 경우
-    if (Platform.isAndroid && baseUrl.contains('localhost')) {
-      // 에뮬레이터에서는 10.0.2.2로 localhost 대체
-      return baseUrl.replaceAll('localhost', '10.0.2.2');
+    String? localIp = dotenv.env['LOCAL_IP'];
+
+    // 안드로이드 에뮬레이터에서 실행 중인 경우
+    if (Platform.isAndroid) {
+      // localhost를 사용 중이고 LOCAL_IP가 설정되어 있다면
+      if (baseUrl.contains('localhost') &&
+          localIp != null &&
+          localIp.isNotEmpty) {
+        // localhost를 LOCAL_IP로 대체
+        return baseUrl.replaceAll('localhost', localIp);
+      }
+
+      // 에뮬레이터 특정 주소 처리
+      if (baseUrl.contains('localhost')) {
+        return baseUrl.replaceAll('localhost', '10.0.2.2');
+      }
     }
 
-    // 다른 플랫폼이거나 이미 localhost가 아닌 경우 원래 URL 반환
+    // 그 외의 경우 원래 URL 반환
     return baseUrl;
   }
 

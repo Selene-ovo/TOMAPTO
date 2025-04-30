@@ -3,7 +3,7 @@ import 'dart:ui';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:tomapto/controllers/account/login_controller.dart';
-import 'package:tomapto/widgets/bottom_nav_bar.dart';
+import 'package:tomapto/widgets/navbar.dart';
 import 'package:tomapto/pages/profile/profile.dart';
 import 'package:tomapto/pages/profile/signup.dart';
 
@@ -64,14 +64,14 @@ class CustomTextField extends StatelessWidget {
             fontFamily: 'Pretendard',
           ),
         ),
-        const SizedBox(height: 2),
+        const SizedBox(height: 0.1),
         TextFormField(
           controller: controller,
           focusNode: focusNode,
           obscureText: obscureText,
           validator: validator,
           style: TextStyle(
-            fontSize: 16.0 * MediaQuery.of(context).textScaleFactor,
+            fontSize: 18.0 * MediaQuery.of(context).textScaleFactor,
           ),
           decoration: InputDecoration(
             border: UnderlineInputBorder(
@@ -128,8 +128,8 @@ class PrimaryButton extends StatelessWidget {
         text,
         style: TextStyle(
           color: Colors.white,
-          fontSize: 16.0 * MediaQuery.of(context).textScaleFactor,
-          fontWeight: FontWeight.bold,
+          fontSize: 17.0 * MediaQuery.of(context).textScaleFactor,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );
@@ -219,9 +219,9 @@ class _LoginPageState extends State<LoginPage> {
 
   // 로고 위젯 생성 메서드
   Widget _buildLogo(BuildContext context) {
-    final double height = 40.0 * (MediaQuery.of(context).size.height / 812);
+    final double height = 45.0 * (MediaQuery.of(context).size.height / 812);
     final double verticalPadding =
-        10.0 * (MediaQuery.of(context).size.height / 812);
+        20.0 * (MediaQuery.of(context).size.height / 812);
 
     return Padding(
       padding: EdgeInsets.symmetric(vertical: verticalPadding),
@@ -252,7 +252,7 @@ class _LoginPageState extends State<LoginPage> {
       suffixIcon: IconButton(
         icon: Icon(
           _controller.obscureText ? Icons.visibility_off : Icons.visibility,
-          color: const Color(0xFF757575),
+          color: const Color(0xFF363636),
           size: 20.0 * (MediaQuery.of(context).size.width / 375),
         ),
         onPressed: () {
@@ -269,8 +269,8 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Widget _buildRememberMeAndPasswordReset(BuildContext context) {
-    final double circleSize = 20.0 * (MediaQuery.of(context).size.width / 375);
-    final double spaceBetween = 5.0 * (MediaQuery.of(context).size.width / 375);
+    final double circleSize = 18.0 * (MediaQuery.of(context).size.width / 390);
+    final double spaceBetween = 8.0 * (MediaQuery.of(context).size.width / 375);
     final double underlineWidth =
         65.0 * (MediaQuery.of(context).size.width / 375);
 
@@ -289,11 +289,10 @@ class _LoginPageState extends State<LoginPage> {
                 height: circleSize,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(color: Colors.grey[300]!),
                   color:
                       _controller.rememberMe
                           ? const Color(0xFFFB233B)
-                          : Colors.transparent,
+                          : Color.fromARGB(255, 203, 211, 221),
                 ),
               ),
               SizedBox(width: spaceBetween),
@@ -303,7 +302,7 @@ class _LoginPageState extends State<LoginPage> {
                   color: Color(0xFF9DB2CE),
                   fontSize: 14.0 * MediaQuery.of(context).textScaleFactor,
                   fontFamily: 'Pretendard',
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],
@@ -325,7 +324,7 @@ class _LoginPageState extends State<LoginPage> {
                 ),
               ),
               Container(
-                height: 0.6,
+                height: 1,
                 width: underlineWidth,
                 color: const Color(0xFF9DB2CE),
               ),
@@ -442,9 +441,9 @@ class _LoginPageState extends State<LoginPage> {
               right: 0,
               bottom: 0, // 화면 최하단에 배치
               child: BottomNavBar(
-                currentIndex: 4,
+                currentIndex: 3,
                 onTap: (index) {
-                  // 탭 클릭 시 실행할 함수
+                  FocusScope.of(context).unfocus();
                 },
               ),
             ),

@@ -1,5 +1,9 @@
+import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class RealTimeLocationSharingPage extends StatefulWidget {
   final Map<String, dynamic> selectedFriend;
@@ -19,31 +23,135 @@ class _RealTimeLocationSharingPageState
   NLatLng? _friendPosition;
   final Set<NMarker> _markers = {};
   bool _isInitialCameraSet = false;
+  bool _isLoading = true;
+  String _errorMessage = '';
+
+  // 위치 정보 자동 갱신을 위한 타이머
+  Timer? _locationUpdateTimer;
 
   @override
   void initState() {
     super.initState();
-    _initialize();
+    _loadLocations();
+
+    // 10초마다 위치 정보 갱신
+    _locationUpdateTimer = Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => _loadLocations(),
+    );
   }
 
-  Future<void> _initialize() async {
+  @override
+  void dispose() {
+    // 타이머 정리
+    _locationUpdateTimer?.cancel();
+    super.dispose();
+  }
+
+  // API 서버 기본 URL 가져오기
+  String getApiBaseUrl() {
+    String baseUrl = dotenv.env['API_BASE_URL'] ?? 'http://localhost:8080/api';
+    String? localIp = dotenv.env['LOCAL_IP'];
+
+    // 안드로이드 에뮬레이터에서 실행 중인 경우
+    if (Platform.isAndroid) {
+      // localhost를 사용 중이고 LOCAL_IP가 설정되어 있다면
+      if (baseUrl.contains('localhost') &&
+          localIp != null &&
+          localIp.isNotEmpty) {
+        // localhost를 LOCAL_IP로 대체
+        return baseUrl.replaceAll('localhost', localIp);
+      }
+
+      // 에뮬레이터 특정 주소 처리
+      if (baseUrl.contains('localhost')) {
+        return baseUrl.replaceAll('localhost', '10.0.2.2');
+      }
+    }
+
+    // 그 외의 경우 원래 URL 반환
+    return baseUrl;
+  }
+
+  // DB에서 내 위치와 친구 위치 정보 로드
+  Future<void> _loadLocations() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = '';
+    });
+
     try {
-      // 기본 위치 설정 (서울시청)
-      _myPosition = NLatLng(37.5666805, 126.9760);
-      _friendPosition = NLatLng(37.5665, 126.9783); // 친구 기본 위치
+      // 토큰 가져오기
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+      final userId = prefs.getString('user_id'); // 현재 사용자 ID
+
+      if (token == null) {
+        setState(() {
+          _errorMessage = '로그인이 필요합니다';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      final apiBaseUrl = getApiBaseUrl();
+      final friendId = widget.selectedFriend['id'];
+
+      // 서버에서 직접 위치 데이터 가져오는 대신, 데이터베이스에서 직접 가져오기
+      // 이 부분은 개발용 임시 코드입니다
+      setState(() {
+        // 데이터베이스에서 찾은 위치 정보로 설정
+        // 내 위치 (예: tomapto1의 위치)
+        _myPosition = NLatLng(37.7418735, 128.8923122);
+
+        // 선택한 친구 ID에 해당하는 위치 찾기
+        if (friendId == '1' || friendId.contains('tomapto1')) {
+          _friendPosition = NLatLng(37.7418735, 128.8923122); // tomapto1 위치
+        } else if (friendId == '2' || friendId.contains('tomapto2')) {
+          _friendPosition = NLatLng(37.7418693, 128.8923195); // tomapto2 위치
+        } else if (friendId == '3' || friendId.contains('tomapto3')) {
+          _friendPosition = NLatLng(37.7418649, 128.8923197); // tomapto3 위치
+        } else if (friendId == '4' || friendId.contains('tomapto4')) {
+          _friendPosition = NLatLng(37.7418725, 128.8923159); // tomapto4 위치
+        } else if (friendId == '5' || friendId.contains('tomapto5')) {
+          _friendPosition = NLatLng(37.7418295, 128.8923304); // tomapto5 위치
+        } else {
+          // 기본값 또는 다른 ID의 경우
+          _friendPosition = NLatLng(37.7418693, 128.8923195); // 기본값
+        }
+
+        _isLoading = false;
+      });
+
+      // 위치 데이터를 얻은 후 마커 업데이트
+      if (_mapController != null) {
+        _updateMapMarkers();
+      }
     } catch (e) {
-      print('초기화 오류: $e');
+      print('위치 정보 로드 오류: $e');
+      setState(() {
+        _errorMessage = '위치 정보를 불러오는데 실패했습니다. 나중에 다시 시도해주세요.';
+        _isLoading = false;
+      });
+
+      // 오류 발생 시 기본 위치 설정
+      if (_myPosition == null) {
+        _myPosition = NLatLng(37.7418735, 128.8923122); // 기본값
+      }
+      if (_friendPosition == null) {
+        _friendPosition = NLatLng(37.7418693, 128.8923195); // 기본값
+      }
     }
   }
 
-  // 내 위치 마커 생성 함수 (빨간색) - 비동기로 변경
+  // 내 위치 마커 생성 함수 (빨간색)
   Future<NMarker> _createMyLocationMarker() async {
     final marker = NMarker(id: 'my_location', position: _myPosition!);
 
-    // 마커 이미지 비트맵 생성 대신 프로그래매틱하게 설정 (await 추가)
+    // 마커 이미지 설정
     marker.setIcon(await _createLocationMarkerIcon(Colors.red));
 
-    // 앵커 포인트 조정 (마커 이미지의 중앙 하단이 위치 좌표를 가리키도록)
+    // 앵커 포인트 조정
     marker.setAnchor(NPoint(0.5, 1.0));
 
     // 캡션 설정
@@ -59,11 +167,11 @@ class _RealTimeLocationSharingPageState
     return marker;
   }
 
-  // 친구 위치 마커 생성 함수 (초록색) - 비동기로 변경
+  // 친구 위치 마커 생성 함수 (초록색)
   Future<NMarker> _createFriendLocationMarker() async {
     final marker = NMarker(id: 'friend_location', position: _friendPosition!);
 
-    // 마커 이미지 프로그래매틱하게 설정 (await 추가)
+    // 마커 이미지 설정
     marker.setIcon(await _createLocationMarkerIcon(Colors.green));
 
     // 앵커 포인트 조정
@@ -82,17 +190,17 @@ class _RealTimeLocationSharingPageState
     return marker;
   }
 
-  // 마커 아이콘 생성 함수 (색상을 파라미터로 받음) - context 추가
+  // 마커 아이콘 생성 함수 (색상을 파라미터로 받음)
   Future<NOverlayImage> _createLocationMarkerIcon(Color primaryColor) async {
-    // 네이버 맵의 NOverlayImage.fromWidget 사용 (context 필수)
+    // 네이버 맵의 NOverlayImage.fromWidget 사용
     return await NOverlayImage.fromWidget(
       widget: _LocationMarkerWidget(color: primaryColor),
-      size: Size(40, 60), // 마커 크기 통일
-      context: context, // BuildContext 추가
+      size: Size(20, 30), // 마커 크기
+      context: context,
     );
   }
 
-  // 지도 마커 업데이트 - 비동기로 변경
+  // 지도 마커 업데이트
   Future<void> _updateMapMarkers() async {
     if (_mapController == null) return;
 
@@ -141,6 +249,11 @@ class _RealTimeLocationSharingPageState
     } else if (!_isInitialCameraSet && _myPosition != null) {
       _mapController!.updateCamera(
         NCameraUpdate.withParams(target: _myPosition!, zoom: 15),
+      );
+      _isInitialCameraSet = true;
+    } else if (!_isInitialCameraSet && _friendPosition != null) {
+      _mapController!.updateCamera(
+        NCameraUpdate.withParams(target: _friendPosition!, zoom: 15),
       );
       _isInitialCameraSet = true;
     }
@@ -254,13 +367,55 @@ class _RealTimeLocationSharingPageState
               },
             ),
           ),
+
+          // 로딩 표시
+          if (_isLoading)
+            Container(
+              color: Colors.white.withOpacity(0.7),
+              child: Center(
+                child: CircularProgressIndicator(
+                  color: const Color(0xFFFB233B),
+                ),
+              ),
+            ),
+
+          // 오류 메시지
+          if (_errorMessage.isNotEmpty)
+            Container(
+              color: Colors.white.withOpacity(0.7),
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.error_outline, color: Colors.red, size: 48),
+                      SizedBox(height: 12),
+                      Text(
+                        _errorMessage,
+                        style: TextStyle(fontSize: 16),
+                        textAlign: TextAlign.center,
+                      ),
+                      SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: _loadLocations,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFFB233B),
+                        ),
+                        child: Text('다시 시도'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
   }
 }
 
-// 커스텀 마커 위젯 (원+삼각형 디자인)
+// 커스텀 마커 위젯
 class _LocationMarkerWidget extends StatelessWidget {
   final Color color;
 
@@ -272,59 +427,18 @@ class _LocationMarkerWidget extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // 원형 마커
+        // 핀 머리 부분 (원형)
         Container(
-          width: 32,
-          height: 32,
+          width: 24,
+          height: 24,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: Colors.white,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.2),
-                blurRadius: 4,
-                spreadRadius: 1,
-              ),
-            ],
-          ),
-          child: Center(
-            child: Container(
-              width: 20,
-              height: 20,
-              decoration: BoxDecoration(shape: BoxShape.circle, color: color),
-            ),
+            color: color,
+            border: Border.all(color: Colors.white, width: 2),
+            boxShadow: [],
           ),
         ),
-        // 삼각형
-        CustomPaint(size: Size(16, 14), painter: TrianglePainter(color: color)),
       ],
     );
   }
-}
-
-// 삼각형 그리기 위한 CustomPainter
-class TrianglePainter extends CustomPainter {
-  final Color color;
-
-  TrianglePainter({required this.color});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint =
-        Paint()
-          ..color = color
-          ..style = PaintingStyle.fill;
-
-    final path =
-        Path()
-          ..moveTo(0, 0)
-          ..lineTo(size.width, 0)
-          ..lineTo(size.width / 2, size.height)
-          ..close();
-
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(TrianglePainter oldDelegate) => color != oldDelegate.color;
 }
