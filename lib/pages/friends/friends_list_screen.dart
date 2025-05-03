@@ -306,12 +306,24 @@ class _FriendScreenState extends State<FriendScreen> {
     }
   }
 
-  // 특정 친구의 상태 업데이트
   void _refreshFriendsStatus(Map<String, dynamic> statusData) {
     setState(() {
       for (var i = 0; i < friends.length; i++) {
         if (friends[i]['id'] == statusData['user_id']) {
-          friends[i]['isOnline'] = statusData['isOnline'];
+          // isOnline 값의 타입에 따라 적절히 변환
+          var isOnlineValue = statusData['isOnline'];
+          bool isOnline = false;
+
+          if (isOnlineValue is bool) {
+            isOnline = isOnlineValue;
+          } else if (isOnlineValue is int) {
+            isOnline = (isOnlineValue == 1);
+          } else if (isOnlineValue is String) {
+            isOnline =
+                (isOnlineValue.toLowerCase() == 'true' || isOnlineValue == '1');
+          }
+
+          friends[i]['isOnline'] = isOnline;
           break;
         }
       }
@@ -557,6 +569,21 @@ class _FriendScreenState extends State<FriendScreen> {
     // isOnline 필드가 없는 경우 기본값 false 부여
     if (!friend.containsKey('isOnline')) {
       friend['isOnline'] = false;
+    } else {
+      // isOnline 값의 타입에 따라 적절히 변환
+      var isOnlineValue = friend['isOnline'];
+      bool isOnline = false;
+
+      if (isOnlineValue is bool) {
+        isOnline = isOnlineValue;
+      } else if (isOnlineValue is int) {
+        isOnline = (isOnlineValue == 1);
+      } else if (isOnlineValue is String) {
+        isOnline =
+            (isOnlineValue.toLowerCase() == 'true' || isOnlineValue == '1');
+      }
+
+      friend['isOnline'] = isOnline;
     }
 
     // isSharing 필드가 없는 경우 기본값 false 부여
@@ -662,6 +689,8 @@ class _FriendScreenState extends State<FriendScreen> {
               : null,
     );
   }
+
+  // 친구 목록 컨텐츠 위젯 (로그인 시)
 
   // 친구 목록 컨텐츠 위젯 (로그인 시)
   Widget _buildFriendsListContent() {
@@ -809,7 +838,7 @@ class _FriendScreenState extends State<FriendScreen> {
                                         size: 30,
                                       ),
                                     ),
-                                    // 상태 표시 아이콘을 오른쪽 위로 이동 (온라인 상태 표시)
+                                    // 상태 표시 아이콘을 오른쪽 위로 이동 (온라인 상태 표시) - 여기가 수정된 부분
                                     Positioned(
                                       top: 2,
                                       right: 2,
@@ -818,7 +847,9 @@ class _FriendScreenState extends State<FriendScreen> {
                                         height: 10,
                                         decoration: BoxDecoration(
                                           color:
-                                              validFriend['isOnline']
+                                              _getBoolValue(
+                                                    validFriend['isOnline'],
+                                                  )
                                                   ? Colors.green
                                                   : Colors.red,
                                           shape: BoxShape.circle,
@@ -868,6 +899,18 @@ class _FriendScreenState extends State<FriendScreen> {
         ),
       ],
     );
+  }
+
+  // 다양한 타입의 값을 불리언으로 변환하는 헬퍼 메서드
+  bool _getBoolValue(dynamic value) {
+    if (value is bool) {
+      return value;
+    } else if (value is int) {
+      return value == 1;
+    } else if (value is String) {
+      return value.toLowerCase() == 'true' || value == '1';
+    }
+    return false;
   }
 
   // 로그인 필요 화면 위젯 (로그인 전)
