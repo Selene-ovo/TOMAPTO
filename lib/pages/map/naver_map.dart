@@ -4,6 +4,8 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:tomapto/widgets/navbar.dart';
 import 'package:tomapto/controllers/map/map_controller.dart';
+import 'package:tomapto/search/search_main.dart';
+import 'package:tomapto/pages/map/transit.dart';
 
 class NaverMapPage extends StatefulWidget {
   const NaverMapPage({super.key});
@@ -257,8 +259,6 @@ class _NaverMapPageState extends State<NaverMapPage> {
               ),
             ),
           ),
-
-          // 하단 네비게이션 바
           Align(
             alignment: Alignment.bottomCenter,
             child: BottomNavBar(
@@ -272,7 +272,6 @@ class _NaverMapPageState extends State<NaverMapPage> {
   }
 }
 
-// ResponsiveValue 클래스는 그대로 유지
 class ResponsiveValue {
   static double width(BuildContext context, {required double base}) {
     final screenWidth = MediaQuery.of(context).size.width;
