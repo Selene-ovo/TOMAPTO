@@ -7,9 +7,17 @@ import 'package:provider/provider.dart';
 
 class SearchMainPage extends StatefulWidget {
   final String initialSearchTerm;
+  final String currentOriginPlace; // 현재 출발지
+  final String currentDestinationPlace; // 현재 도착지
+  final bool isSearchingOrigin; // 출발지 검색인지 도착지 검색인지 구분
 
-  const SearchMainPage({Key? key, this.initialSearchTerm = ''})
-    : super(key: key);
+  const SearchMainPage({
+    super.key,
+    this.initialSearchTerm = '',
+    this.currentOriginPlace = '위치 확인 중...',
+    this.currentDestinationPlace = '도착지 입력',
+    this.isSearchingOrigin = true,
+  });
 
   @override
   _SearchMainPageState createState() => _SearchMainPageState();
@@ -68,11 +76,17 @@ class _SearchMainPageState extends State<SearchMainPage>
       // 최근 검색어에 추가
       _controller.addToRecentSearches(query);
 
-      // 검색 결과 페이지로 이동
+      // 검색 결과 페이지로 이동 (현재 출발지/도착지 정보도 함께 전달)
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => SearchResultPage(searchTerm: query),
+          builder:
+              (context) => SearchResultPage(
+                searchTerm: query,
+                currentOriginPlace: widget.currentOriginPlace,
+                currentDestinationPlace: widget.currentDestinationPlace,
+                isSearchingOrigin: widget.isSearchingOrigin,
+              ),
         ),
       );
     }
@@ -94,7 +108,7 @@ class _SearchMainPageState extends State<SearchMainPage>
         body: Column(
           children: [
             _buildAppBar(),
-            Container(
+            SizedBox(
               width: double.infinity,
               height: 71,
               child: Stack(
@@ -265,13 +279,13 @@ class _SearchMainPageState extends State<SearchMainPage>
         // 가로 여백을 조절하여 인디케이터 길이 조절
         insets: EdgeInsets.symmetric(horizontal: 138.0), // 값이 클수록 인디케이터가 짧아짐
       ),
-      overlayColor: MaterialStateProperty.resolveWith<Color?>((
-        Set<MaterialState> states,
+      overlayColor: WidgetStateProperty.resolveWith<Color?>((
+        Set<WidgetState> states,
       ) {
-        if (states.contains(MaterialState.hovered))
+        if (states.contains(WidgetState.hovered))
           return Color(0xFFE2E2E2).withOpacity(0.5);
-        if (states.contains(MaterialState.focused) ||
-            states.contains(MaterialState.pressed))
+        if (states.contains(WidgetState.focused) ||
+            states.contains(WidgetState.pressed))
           return Color(0xFFE2E2E2).withOpacity(0.5);
         return null;
       }),
@@ -358,163 +372,174 @@ class _SearchMainPageState extends State<SearchMainPage>
       ],
     );
   }
-}
 
-Widget _buildSearchResults() {
-  return Consumer<SearchMainController>(
-    builder: (context, controller, child) {
-      if (controller.isLoading) {
-        return const Center(child: CircularProgressIndicator());
-      }
+  // 검색 결과 표시 - 오류 수정
+  Widget _buildSearchResults() {
+    return Consumer<SearchMainController>(
+      builder: (context, controller, child) {
+        if (controller.isLoading) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
-      if (controller.errorMessage != null) {
-        return Center(
-          child: Text(
-            controller.errorMessage!,
-            style: const TextStyle(color: Colors.red),
-          ),
-        );
-      }
-
-      if (controller.searchResults.isEmpty) {
-        return const Center(child: Text('검색 결과가 없습니다'));
-      }
-
-      final searchTerm = controller.searchController.text.toLowerCase();
-
-      // 텍스트 강조 표시 helper 함수를 Consumer 내부에 정의
-      Widget buildHighlightedText(String text, String searchTerm) {
-        if (searchTerm.isEmpty) {
-          return Text(
-            text,
-            style: const TextStyle(
-              color: Color(0xFF363636),
-              fontFamily: "Pretendard",
-              fontWeight: FontWeight.w500,
-              fontSize: 18,
+        if (controller.errorMessage != null) {
+          return Center(
+            child: Text(
+              controller.errorMessage!,
+              style: const TextStyle(color: Colors.red),
             ),
           );
         }
 
-        final lowerText = text.toLowerCase();
-
-        if (!lowerText.contains(searchTerm)) {
-          // 검색어가 텍스트에 없는 경우 일반 텍스트로 반환
-          return Text(
-            text,
-            style: const TextStyle(
-              color: Color(0xFF363636),
-              fontFamily: "Pretendard",
-              fontWeight: FontWeight.w500,
-              fontSize: 18,
-            ),
-          );
+        if (controller.searchResults.isEmpty) {
+          return const Center(child: Text('검색 결과가 없습니다'));
         }
 
-        // 검색어의 시작 및 끝 위치 찾기
-        final start = lowerText.indexOf(searchTerm);
-        final end = start + searchTerm.length;
+        final searchTerm = controller.searchController.text.toLowerCase();
 
-        return RichText(
-          text: TextSpan(
-            children: [
-              // 검색어 앞 부분
-              if (start > 0)
-                TextSpan(
-                  text: text.substring(0, start),
-                  style: const TextStyle(
-                    color: Color(0xFF363636),
-                    fontFamily: "Pretendard",
-                    fontWeight: FontWeight.w500,
-                    fontSize: 18,
-                  ),
-                ),
-              // 검색어 부분
-              TextSpan(
-                text: text.substring(start, end),
-                style: const TextStyle(
-                  color: Color(0xFF4C9EFC), // 파란색으로 강조
-                  fontFamily: "Pretendard",
-                  fontWeight: FontWeight.w500,
-                  fontSize: 18,
-                ),
-              ),
-              // 검색어 뒷 부분
-              if (end < text.length)
-                TextSpan(
-                  text: text.substring(end),
-                  style: const TextStyle(
-                    color: Color(0xFF363636),
-                    fontFamily: "Pretendard",
-                    fontWeight: FontWeight.w500,
-                    fontSize: 18,
-                  ),
-                ),
-            ],
-          ),
-        );
-      }
-
-      return ListView.separated(
-        padding: EdgeInsets.zero,
-        itemCount: controller.searchResults.length,
-        separatorBuilder:
-            (context, index) =>
-                const Divider(height: 0, color: Color(0xFFE2E2E2)),
-        itemBuilder: (context, index) {
-          final result = controller.searchResults[index];
-          return ListTile(
-            leading: const Icon(
-              Icons.location_on_rounded,
-              color: Color(0xFF727272),
-            ),
-            title: buildHighlightedText(result.name, searchTerm),
-            subtitle: Text(
-              result.address,
-              style: TextStyle(
-                color: Color(0xFF727272),
+        // 텍스트 강조 표시 helper 함수를 Consumer 내부에 정의
+        Widget buildHighlightedText(String text, String searchTerm) {
+          if (searchTerm.isEmpty) {
+            return Text(
+              text,
+              style: const TextStyle(
+                color: Color(0xFF363636),
                 fontFamily: "Pretendard",
                 fontWeight: FontWeight.w500,
-                fontSize: 14,
+                fontSize: 18,
               ),
-            ),
-            trailing: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.end,
+            );
+          }
+
+          final lowerText = text.toLowerCase();
+
+          if (!lowerText.contains(searchTerm)) {
+            // 검색어가 텍스트에 없는 경우 일반 텍스트로 반환
+            return Text(
+              text,
+              style: const TextStyle(
+                color: Color(0xFF363636),
+                fontFamily: "Pretendard",
+                fontWeight: FontWeight.w500,
+                fontSize: 18,
+              ),
+            );
+          }
+
+          // 검색어의 시작 및 끝 위치 찾기
+          final start = lowerText.indexOf(searchTerm);
+          final end = start + searchTerm.length;
+
+          return RichText(
+            text: TextSpan(
               children: [
-                Text(
-                  result.category.isNotEmpty ? result.category : '기타',
-                  style: TextStyle(
-                    color: Color(0xFF727272),
-                    fontFamily: "Pretendard",
-                    fontWeight: FontWeight.w500,
-                    fontSize: 12,
+                // 검색어 앞 부분
+                if (start > 0)
+                  TextSpan(
+                    text: text.substring(0, start),
+                    style: const TextStyle(
+                      color: Color(0xFF363636),
+                      fontFamily: "Pretendard",
+                      fontWeight: FontWeight.w500,
+                      fontSize: 18,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${result.distance.toStringAsFixed(1)}km',
+                // 검색어 부분
+                TextSpan(
+                  text: text.substring(start, end),
                   style: const TextStyle(
-                    color: Color(0xFF727272),
+                    color: Color(0xFF4C9EFC), // 파란색으로 강조
                     fontFamily: "Pretendard",
                     fontWeight: FontWeight.w500,
-                    fontSize: 12,
+                    fontSize: 18,
                   ),
                 ),
+                // 검색어 뒷 부분
+                if (end < text.length)
+                  TextSpan(
+                    text: text.substring(end),
+                    style: const TextStyle(
+                      color: Color(0xFF363636),
+                      fontFamily: "Pretendard",
+                      fontWeight: FontWeight.w500,
+                      fontSize: 18,
+                    ),
+                  ),
               ],
             ),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder:
-                      (context) => SearchResultPage(searchTerm: result.name),
-                ),
-              );
-            },
           );
-        },
-      );
-    },
-  );
+        }
+
+        return ListView.separated(
+          padding: EdgeInsets.zero,
+          itemCount: controller.searchResults.length,
+          separatorBuilder:
+              (context, index) =>
+                  const Divider(height: 0, color: Color(0xFFE2E2E2)),
+          itemBuilder: (context, index) {
+            final result = controller.searchResults[index];
+            return ListTile(
+              leading: const Icon(
+                Icons.location_on_rounded,
+                color: Color(0xFF727272),
+              ),
+              title: buildHighlightedText(result.name, searchTerm),
+              subtitle: Text(
+                result.address,
+                style: TextStyle(
+                  color: Color(0xFF727272),
+                  fontFamily: "Pretendard",
+                  fontWeight: FontWeight.w500,
+                  fontSize: 14,
+                ),
+              ),
+              trailing: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    result.category.isNotEmpty ? result.category : '기타',
+                    style: TextStyle(
+                      color: Color(0xFF727272),
+                      fontFamily: "Pretendard",
+                      fontWeight: FontWeight.w500,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${result.distance.toStringAsFixed(1)}km',
+                    style: const TextStyle(
+                      color: Color(0xFF727272),
+                      fontFamily: "Pretendard",
+                      fontWeight: FontWeight.w500,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+              onTap: () {
+                // 검색어를 선택하면 최근 검색어에 추가
+                controller.addToRecentSearches(result.name);
+
+                // 검색 결과 페이지로 이동 (현재 출발지/도착지 정보 전달)
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder:
+                        (context) => SearchResultPage(
+                          searchTerm: result.name,
+                          currentOriginPlace: widget.currentOriginPlace,
+                          currentDestinationPlace:
+                              widget.currentDestinationPlace,
+                          isSearchingOrigin: widget.isSearchingOrigin,
+                        ),
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
 }
