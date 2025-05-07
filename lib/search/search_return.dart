@@ -5,11 +5,20 @@ import 'package:provider/provider.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:tomapto/pages/map/transit.dart';
 
+// 검색 결과 페이지
 class SearchResultPage extends StatefulWidget {
   final String searchTerm;
+  final String currentOriginPlace; // 현재 출발지
+  final String currentDestinationPlace; // 현재 도착지
+  final bool isSearchingOrigin; // 출발지 검색인지 도착지 검색인지 구분
 
-  const SearchResultPage({Key? key, required this.searchTerm})
-    : super(key: key);
+  const SearchResultPage({
+    super.key,
+    required this.searchTerm,
+    required this.currentOriginPlace,
+    required this.currentDestinationPlace,
+    required this.isSearchingOrigin,
+  });
 
   @override
   _SearchResultPageState createState() => _SearchResultPageState();
@@ -99,6 +108,55 @@ class _SearchResultPageState extends State<SearchResultPage> {
       // 여기서는 임의로 반전시키지만, 실제로는 DB에 저장하는 로직 필요
       // 실제 구현에서는 컨트롤러를 통해 DB 업데이트 필요
     });
+  }
+
+  // 출발지로 설정하고 길찾기 페이지로 바로 이동하는 메서드
+  void _setAsOrigin(SearchResult result) {
+    // 기존 도착지 정보를 유지하면서 새로운 출발지 설정
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(
+        builder:
+            (context) => TransitApp(
+              initialOriginPlace: result.name,
+              initialDestinationPlace:
+                  widget.currentDestinationPlace != '도착지 입력'
+                      ? widget.currentDestinationPlace
+                      : null,
+            ),
+      ),
+      (route) => false, // 모든 이전 라우트 제거
+    );
+  }
+
+  // 도착지로 설정하고 길찾기 페이지로 바로 이동하는 메서드
+  void _setAsDestination(SearchResult result) {
+    // 기존 출발지 정보를 유지하면서 새로운 도착지 설정
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(
+        builder:
+            (context) => TransitApp(
+              initialOriginPlace:
+                  widget.currentOriginPlace != '위치 확인 중...' &&
+                          widget.currentOriginPlace != '위치 권한 없음' &&
+                          widget.currentOriginPlace != '위치 확인 실패'
+                      ? widget.currentOriginPlace
+                      : null,
+              initialDestinationPlace: result.name,
+            ),
+      ),
+      (route) => false, // 모든 이전 라우트 제거
+    );
+  }
+
+  // 항목 선택 시 현재 검색 모드에 따라 출발지 또는 도착지로 설정
+  void _selectSearchResult(SearchResult result) {
+    if (widget.isSearchingOrigin) {
+      _setAsOrigin(result);
+    } else {
+      _setAsDestination(result);
+    }
   }
 
   @override
@@ -257,129 +315,134 @@ class _SearchResultPageState extends State<SearchResultPage> {
               const Divider(height: 1, color: Color(0xFFE2E2E2)),
       itemBuilder: (context, index) {
         final result = searchResults[index];
-        return Container(
-          color: Colors.white,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  result.name,
+        return GestureDetector(
+          onTap: () => _selectSearchResult(result), // 항목 자체를 탭하면 선택 처리
+          child: Container(
+            color: Colors.white,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    result.name,
+                                    style: const TextStyle(
+                                      fontFamily: "Pretendard",
+                                      color: Color(0xFF0771EB),
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 18,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    result.category.isNotEmpty
+                                        ? result.category
+                                        : '기타',
+                                    style: TextStyle(
+                                      fontFamily: "Pretendard",
+                                      color: Colors.grey[600],
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                Text(
+                                  '${result.distance.toStringAsFixed(1)}km',
                                   style: const TextStyle(
                                     fontFamily: "Pretendard",
-                                    color: Color(0xFF0771EB),
-                                    fontWeight: FontWeight.w500,
-                                    fontSize: 18,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  result.category.isNotEmpty
-                                      ? result.category
-                                      : '기타',
-                                  style: TextStyle(
-                                    fontFamily: "Pretendard",
-                                    color: Colors.grey[600],
-                                    fontWeight: FontWeight.w500,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              Text(
-                                '${result.distance.toStringAsFixed(1)}km',
-                                style: const TextStyle(
-                                  fontFamily: "Pretendard",
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 14,
-                                  color: Color(0xFF363636),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  result.address,
-                                  style: TextStyle(
-                                    fontFamily: "Pretendard",
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.grey[600],
+                                    fontWeight: FontWeight.w600,
                                     fontSize: 14,
+                                    color: Color(0xFF363636),
                                   ),
-                                  overflow: TextOverflow.ellipsis,
                                 ),
-                              ),
-                            ],
-                          ),
-                        ],
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    result.address,
+                                    style: TextStyle(
+                                      fontFamily: "Pretendard",
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.grey[600],
+                                      fontSize: 14,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                child: Row(
-                  children: [
-                    _buildActionButton(
-                      '도착',
-                      Color(0xFF0771EB),
-                      Icons.directions,
-                    ),
-                    const SizedBox(width: 8),
-                    _buildActionButton(
-                      '출발',
-                      Colors.white,
-                      Icons.place_rounded,
-                      borderColor: Color(0xFF0771EB),
-                      textColor: Color(0xFF0771EB),
-                    ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: Row(
+                    children: [
+                      _buildActionButton(
+                        '도착',
+                        Color(0xFF0771EB),
+                        Icons.directions,
+                        onPressed: () => _setAsDestination(result),
+                      ),
+                      const SizedBox(width: 8),
+                      _buildActionButton(
+                        '출발',
+                        Colors.white,
+                        Icons.place_rounded,
+                        borderColor: Color(0xFF0771EB),
+                        textColor: Color(0xFF0771EB),
+                        onPressed: () => _setAsOrigin(result),
+                      ),
 
-                    const SizedBox(width: 8),
-                    _buildSaveButton(
-                      '저장',
-                      Colors.white,
-                      _isFavorite(result.name)
-                          ? Icons.star_rounded
-                          : Icons.star_rounded,
-                      borderColor: Color(0xFFA0A0A0),
-                      textColor: Color(0xFF000000),
-                      iconColor:
-                          _isFavorite(result.name)
-                              ? Colors.red
-                              : Colors.grey[600]!,
-                      onPressed: () => _toggleFavorite(index),
-                    ),
-                    const Spacer(), // Spacer 위치 변경
-                  ],
+                      const SizedBox(width: 8),
+                      _buildSaveButton(
+                        '저장',
+                        Colors.white,
+                        _isFavorite(result.name)
+                            ? Icons.star_rounded
+                            : Icons.star_rounded,
+                        borderColor: Color(0xFFA0A0A0),
+                        textColor: Color(0xFF000000),
+                        iconColor:
+                            _isFavorite(result.name)
+                                ? Colors.red
+                                : Colors.grey[600]!,
+                        onPressed: () => _toggleFavorite(index),
+                      ),
+                      const Spacer(), // Spacer 위치 변경
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },
@@ -389,7 +452,7 @@ class _SearchResultPageState extends State<SearchResultPage> {
   // 임시로 즐겨찾기 상태를 확인하는 메서드
   bool _isFavorite(String name) {
     // 실제로는 DB에서 확인하는 로직 필요
-    return name.contains('대학교'); // 임시로 공장이 포함된 경우만 즐겨찾기로 표시
+    return name.contains('대학교'); // 임시로 대학교가 포함된 경우만 즐겨찾기로 표시
   }
 
   Widget _buildActionButton(

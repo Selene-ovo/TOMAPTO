@@ -259,6 +259,38 @@ class _NaverMapPageState extends State<NaverMapPage> {
               ),
             ),
           ),
+
+          // 길찾기 버튼 추가
+          Positioned(
+            bottom: bottomPadding + iconSize + 16, // GPS 버튼 위에 위치
+            right: rightPadding,
+            child: Container(
+              width: iconSize,
+              height: iconSize,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 5,
+                    offset: Offset(0, 2),
+                    spreadRadius: 0,
+                  ),
+                ],
+              ),
+              child: IconButton(
+                icon: Icon(
+                  Icons.directions,
+                  color: Color(0xFFFB233B),
+                  size: iconSize * 0.6,
+                ),
+                onPressed: _navigateToTransitPage,
+                tooltip: '길찾기',
+              ),
+            ),
+          ),
+
           Align(
             alignment: Alignment.bottomCenter,
             child: BottomNavBar(
