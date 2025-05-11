@@ -1,5 +1,3 @@
-// transit_map_controller.dart 수정 내용
-
 import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:tomapto/controllers/map/map_controller.dart';
@@ -72,7 +70,7 @@ class TransitMapController {
 
   // 모드에 따른 기본 줌 레벨 반환
   double getDefaultZoomLevel(TransitMode mode) {
-    return mode == TransitMode.car ? 15.0 : 16.0; // 도보는 더 확대해서 보여줌
+    return mode == TransitMode.car ? 16.5 : 16.5; // 도보는 더 확대해서 보여줌
   }
 
   // 맵 카메라 이동

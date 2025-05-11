@@ -1,5 +1,3 @@
-// walk_modal.dart 수정 내용 - 마커 표시 개선
-
 import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:tomapto/controllers/map/transit_map_controller.dart';
@@ -57,10 +55,15 @@ class _WalkModalState extends State<WalkModal> {
 
     // 좌표나 주소가 변경된 경우 마커 및 경로 업데이트
     if (oldWidget.initialPosition != widget.initialPosition ||
-        oldWidget.destinationPlace != widget.destinationPlace) {
+        oldWidget.destinationPlace != widget.destinationPlace ||
+        oldWidget.originPlace != widget.originPlace) {
       if (widget.transitMapController.isWalkMapInitialized) {
         // 기존 마커와 경로 제거
         _clearRouteAndMarkers();
+
+        // 경로 검색 초기화
+        _routeHasBeenSearched = false;
+        _hasRoute = false;
 
         if (widget.initialPosition != null) {
           // 출발지 마커 추가 (캡션 없이)
@@ -69,9 +72,6 @@ class _WalkModalState extends State<WalkModal> {
 
         // 도착지가 설정된 경우에만 마커 추가 및 경로 검색
         if (widget.destinationPlace != '도착지 입력') {
-          // didUpdateWidget에서는 좌표만 전달받고 경로 계산은 하지 않음
-          // transit.dart에서 이미 좌표 변환이 이루어졌을 것으로 가정
-          _routeHasBeenSearched = false;
           Future.delayed(Duration(milliseconds: 300), () {
             _searchAndDisplayRoute();
           });
@@ -84,18 +84,19 @@ class _WalkModalState extends State<WalkModal> {
   void _addOriginMarker(NLatLng position) {
     final controller = widget.transitMapController.walkMapController.controller;
     if (controller == null) return;
-
-    // 기존 마커 제거
     if (_startMarker != null) {
       controller.deleteOverlay(_startMarker!.info);
     }
-
-    // 새 마커 생성 (캡션 없음)
-    _startMarker = NMarker(id: 'walk_origin_marker', position: position);
-
-    // 마커 색상 설정
-    _startMarker!.setIconTintColor(const Color(0xFFFB233B));
-
+    final markerImage = NOverlayImage.fromAssetImage(
+      'assets/icons/start_marker.png',
+    );
+    _startMarker = NMarker(
+      id: 'walk_origin_marker',
+      position: position,
+      icon: markerImage,
+      size: const Size(40, 50),
+      anchor: const NPoint(0.5, 1.0),
+    );
     controller.addOverlay(_startMarker!);
   }
 
@@ -103,21 +104,19 @@ class _WalkModalState extends State<WalkModal> {
   void _addDestinationMarker(NLatLng position) {
     final controller = widget.transitMapController.walkMapController.controller;
     if (controller == null) return;
-
-    // 기존 마커 제거
     if (_destinationMarker != null) {
       controller.deleteOverlay(_destinationMarker!.info);
     }
-
-    // 새 마커 생성 (캡션 없음)
+    final markerImage = NOverlayImage.fromAssetImage(
+      'assets/icons/end_marker.png',
+    );
     _destinationMarker = NMarker(
       id: 'walk_destination_marker',
       position: position,
+      icon: markerImage,
+      size: const Size(40, 50),
+      anchor: const NPoint(0.5, 1.0),
     );
-
-    // 마커 색상 설정
-    _destinationMarker!.setIconTintColor(const Color.fromARGB(255, 90, 16, 34));
-
     controller.addOverlay(_destinationMarker!);
   }
 
@@ -175,13 +174,22 @@ class _WalkModalState extends State<WalkModal> {
       }
 
       if (pathCoordinates.isNotEmpty) {
-        // 경로 생성 및 추가
-        _routePathOverlay = RouteRenderer.createPathOverlay(
-          'walk_route',
-          pathCoordinates,
-          color: Colors.blue,
-          width: 6.0,
+        _routePathOverlay = NPathOverlay(
+          id: 'walk_route',
+          coords: pathCoordinates,
+          width: 12.0,
+          color: Color(0xFF0771EB),
+          outlineWidth: 5.0,
+          outlineColor: Color(0xFF0353AE),
+          patternImage: NOverlayImage.fromAssetImage(
+            'assets/icons/arrow_icon.png',
+          ),
+          patternInterval: 20,
+          isHideCollidedCaptions: false,
+          isHideCollidedMarkers: false,
+          isHideCollidedSymbols: false,
         );
+
         controller.addOverlay(_routePathOverlay!);
 
         // 출발지 마커 추가 (캡션 없이)
@@ -276,12 +284,13 @@ class _WalkModalState extends State<WalkModal> {
 
   @override
   Widget build(BuildContext context) {
-    final contentPadding = EdgeInsets.fromLTRB(0, 0, 0, 160.0);
+    final contentPadding = EdgeInsets.fromLTRB(0, 0, 0, 250.0);
 
     return Stack(
       children: [
         NaverMap(
           options: NaverMapViewOptions(
+            logoClickEnable: false,
             initialCameraPosition: NCameraPosition(
               target:
                   widget.initialPosition ?? NLatLng(37.5666805, 126.9784147),
@@ -295,6 +304,8 @@ class _WalkModalState extends State<WalkModal> {
           ),
           onMapReady: (controller) {
             print('도보 맵 컨트롤러 준비 완료');
+            print('초기 위치: ${widget.initialPosition}');
+            print('도착지: ${widget.destinationPlace}');
             setState(() {
               _isLoading = false;
               widget.transitMapController.walkMapController.setMapController(
@@ -314,7 +325,7 @@ class _WalkModalState extends State<WalkModal> {
               controller.updateCamera(
                 NCameraUpdate.withParams(
                   target: widget.initialPosition!,
-                  zoom: 15,
+                  zoom: 18,
                 ),
               );
 
@@ -349,7 +360,9 @@ class _WalkModalState extends State<WalkModal> {
         ),
 
         if (_isLoading)
-          const Center(child: CircularProgressIndicator(color: Colors.blue)),
+          const Center(
+            child: CircularProgressIndicator(color: Color(0xFF0771EB)),
+          ),
 
         if (_isRouteLoading)
           Positioned(
@@ -381,7 +394,7 @@ class _WalkModalState extends State<WalkModal> {
                       height: 20,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: Colors.blue,
+                        color: Color(0xFF0771EB),
                       ),
                     ),
                     SizedBox(width: 8),
@@ -398,70 +411,75 @@ class _WalkModalState extends State<WalkModal> {
             left: 0,
             right: 0,
             child: Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(16),
-                  topRight: Radius.circular(16),
+                  topLeft: Radius.circular(32),
+                  topRight: Radius.circular(32),
                 ),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.1),
                     blurRadius: 10,
-                    offset: const Offset(0, -2),
+                    offset: const Offset(0, 0),
                   ),
                 ],
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Row(
+                  /* Row(
                     children: [
                       const Icon(
-                        Icons.circle,
+                        Icons.arrow_circle_right_rounded,
                         color: Color(0xFFFB233B),
-                        size: 12,
+                        size: 24,
                       ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           widget.originPlace,
-                          style: const TextStyle(fontSize: 14),
+                          style: const TextStyle(
+                            fontFamily: "Pretendard",
+                            fontWeight: FontWeight.w500,
+                            fontSize: 14,
+                            color: Color(0xFF363636),
+                          ),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
                   ),
-                  Container(
-                    margin: const EdgeInsets.only(left: 5),
-                    height: 20,
-                    width: 1,
-                    color: Colors.grey[300],
-                  ),
+                  const SizedBox(height: 10),
                   Row(
                     children: [
                       const Icon(
-                        Icons.location_on,
-                        color: Colors.blue,
-                        size: 12,
+                        Icons.arrow_circle_left_rounded,
+                        color: Color(0xFF0771EB),
+                        size: 24,
                       ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           widget.destinationPlace,
-                          style: const TextStyle(fontSize: 14),
+                          style: const TextStyle(
+                            fontFamily: "Pretendard",
+                            fontWeight: FontWeight.w500,
+                            fontSize: 14,
+                            color: Color(0xFF363636),
+                          ),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
-
+                  const SizedBox(height: 2),
+*/
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.grey[100],
+                      color: Colors.white,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Column(
@@ -469,9 +487,10 @@ class _WalkModalState extends State<WalkModal> {
                         Text(
                           RouteRenderer.getArrivalTime(_estimatedTime),
                           style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.blue,
+                            fontFamily: "Pretendard",
+                            fontSize: 22,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF0771EB),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -484,16 +503,19 @@ class _WalkModalState extends State<WalkModal> {
                                 const Text(
                                   '예상 시간',
                                   style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey,
+                                    fontFamily: "Pretendard",
+                                    fontWeight: FontWeight.w400,
+                                    fontSize: 18,
+                                    color: Color(0xFF818181),
                                   ),
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
                                   RouteRenderer.formatDuration(_estimatedTime),
                                   style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
+                                    fontFamily: "Pretendard",
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 22,
                                   ),
                                 ),
                               ],
@@ -508,16 +530,19 @@ class _WalkModalState extends State<WalkModal> {
                                 const Text(
                                   '총 거리',
                                   style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey,
+                                    fontFamily: "Pretendard",
+                                    fontWeight: FontWeight.w400,
+                                    fontSize: 18,
+                                    color: Color(0xFF818181),
                                   ),
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
                                   RouteRenderer.formatDistance(_totalDistance),
                                   style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
+                                    fontFamily: "Pretendard",
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 22,
                                   ),
                                 ),
                               ],
@@ -534,18 +559,20 @@ class _WalkModalState extends State<WalkModal> {
                     child: ElevatedButton(
                       onPressed: _startNavigation,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
+                        backgroundColor: Color(0xFF0771EB),
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(16),
                         ),
                       ),
                       child: const Text(
                         '안내 시작',
                         style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
+                          fontFamily: "Pretendard",
+                          fontWeight: FontWeight.w800,
+                          fontSize: 20,
+                          color: Colors.white,
                         ),
                       ),
                     ),
