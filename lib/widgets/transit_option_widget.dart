@@ -43,7 +43,12 @@ class TransitOptionWidget extends StatelessWidget {
               SizedBox(height: iconSize * 0.14),
               Text(
                 label,
-                style: TextStyle(color: iconColor, fontSize: textSize),
+                style: TextStyle(
+                  color: iconColor,
+                  fontSize: textSize,
+                  fontFamily: "Pretendard",
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ],
           ),

@@ -17,8 +17,9 @@ class SearchMainController extends ChangeNotifier {
 
   // 최근 검색 기록 (실제로는 DB나 SharedPreferences에서 가져옴)
   List<SearchItem> recentSearches = [
-    SearchItem('테라로사 경포호수점', '24.12.31'),
-    SearchItem('장보는강아지와고양이 강릉점', '24.12.31'),
+    SearchItem('강릉의료원', '25.05.10'),
+    SearchItem('강릉시외버스터미널', '25.05.09'),
+    SearchItem('돌탱이pc방 강릉', '25.05.11'),
   ];
 
   // 검색 결과

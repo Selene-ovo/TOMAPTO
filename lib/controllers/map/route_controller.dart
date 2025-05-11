@@ -20,86 +20,336 @@ class RouteData {
 }
 
 class RouteController {
-  // API 키 캐싱
+  // 기존 네이버 API 키 캐싱
   String? _cachedApiKey;
   String? _cachedSecretKey;
   String? _cachedApiUrl;
+
+  // TMAP API 키 캐싱
+  String? _cachedTmapApiKey;
+
+  // 주소 검색용 API 키 캐싱 (address_controller에서 이동)
+  String? _cachedClientId;
+  String? _cachedClientSecret;
 
   // 마지막으로 계산된 경로 캐싱
   List<RouteData>? _cachedPublicTransportRoutes;
   Map<String, dynamic>? _cachedCarRoute;
   Map<String, dynamic>? _cachedWalkRoute;
 
-  Future<void> testApiConnection() async {
-    bool keysInitialized = await _initApiKeys();
-    print('API 키 초기화 결과: $keysInitialized');
-    print('API URL: $_cachedApiUrl');
-    print('API Key (처음 5자): ${_cachedApiKey?.substring(0, 5)}...');
-    print('Secret Key (처음 5자): ${_cachedSecretKey?.substring(0, 5)}...');
-  }
-
-  // API 키 초기화
-  Future<bool> _initApiKeys() async {
-    if (_cachedApiKey != null &&
-        _cachedSecretKey != null &&
-        _cachedApiUrl != null) {
-      return true;
-    }
-
+  // 모든 API 키 초기화
+  Future<bool> _initAllApiKeys() async {
+    // 네이버 API 키
     _cachedApiKey = dotenv.env['NAVER_API_KEY'];
     _cachedSecretKey = dotenv.env['NAVER_SECRET_KEY'];
-    _cachedApiUrl = dotenv.env['NAVER_DIRECTION5_API_URL'];
+    _cachedApiUrl = 'https://maps.apigw.ntruss.com/map-direction/v1';
+
+    // TMAP API 키
+    _cachedTmapApiKey = dotenv.env['TMAP_API_KEY'];
+
+    // 주소 검색용 API 키
+    _cachedClientId = dotenv.env['NAVER_DEV_KEY'];
+    _cachedClientSecret = dotenv.env['NAVER_DEV_SECRET_KEY'];
 
     if (_cachedApiKey == null ||
         _cachedSecretKey == null ||
-        _cachedApiUrl == null) {
-      print('네이버 API 키가 설정되지 않았습니다.');
+        _cachedTmapApiKey == null ||
+        _cachedClientId == null ||
+        _cachedClientSecret == null) {
+      print('필요한 API 키가 설정되지 않았습니다.');
       return false;
     }
     return true;
   }
 
-  // 대중교통 경로 검색
+  // 주소 검색 기능 (address_controller에서 이동)
+  Future<List<Map<String, dynamic>>> searchAddressByKeyword(
+    String keyword,
+  ) async {
+    // API 키 확인
+    bool keysInitialized = await _initAllApiKeys();
+    if (!keysInitialized) {
+      return [];
+    }
+
+    // 한글 인코딩 처리
+    final encodedKeyword = Uri.encodeComponent(keyword);
+    final url = Uri.parse(
+      'https://openapi.naver.com/v1/search/local.json?query=$encodedKeyword&display=5',
+    );
+
+    print('로컬 검색 API 호출: $url');
+
+    try {
+      final response = await http.get(
+        url,
+        headers: {
+          'X-Naver-Client-Id': _cachedClientId!,
+          'X-Naver-Client-Secret': _cachedClientSecret!,
+        },
+      );
+
+      print('로컬 검색 응답 코드: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final responseBody = utf8.decode(response.bodyBytes);
+        final data = json.decode(responseBody);
+
+        if (data['items'] != null && data['items'].isNotEmpty) {
+          print('로컬 검색 결과 수: ${data['items'].length}');
+
+          // 로컬 검색 결과를 간단한 형식으로 변환
+          return data['items'].map<Map<String, dynamic>>((item) {
+            // HTML 태그 제거
+            String title = item['title'].replaceAll(RegExp(r'<[^>]*>'), '');
+
+            return {
+              'name': title,
+              'address': item['roadAddress'] ?? item['address'] ?? '',
+              'x': item['mapx'] ?? '0', // 경도
+              'y': item['mapy'] ?? '0', // 위도
+            };
+          }).toList();
+        }
+      }
+
+      return [];
+    } catch (e) {
+      print('로컬 검색 오류: $e');
+      return [];
+    }
+  }
+
+  // 주소-좌표 변환 (address_controller에서 이동)
+  NLatLng convertAddressToCoords(Map<String, dynamic> searchResult) {
+    try {
+      // 네이버 지도 API의 좌표는 경위도에 10^7을 곱한 값을 사용
+      double x = double.parse(searchResult['x']) / 10000000.0;
+      double y = double.parse(searchResult['y']) / 10000000.0;
+
+      return NLatLng(y, x); // NLatLng는 (위도, 경도) 순서
+    } catch (e) {
+      print('좌표 변환 오류: $e');
+      // 기본값으로 서울시청 좌표 반환
+      return NLatLng(37.5666805, 126.9784147);
+    }
+  }
+
+  // 좌표-주소 변환 (간단 버전)
+  Future<String> getAddressFromCoords(NLatLng position) async {
+    // API 키 확인
+    bool keysInitialized = await _initAllApiKeys();
+    if (!keysInitialized) {
+      return '서울특별시 강남구'; // 기본 주소
+    }
+
+    final url =
+        'https://maps.apigw.ntruss.com/map-reversegeocode/v2/gc?'
+        'coords=${position.longitude},${position.latitude}&output=json';
+
+    try {
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'X-NCP-APIGW-API-KEY-ID': _cachedApiKey!,
+          'X-NCP-APIGW-API-KEY': _cachedSecretKey!,
+          'Accept': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final responseBody = utf8.decode(response.bodyBytes);
+        final data = json.decode(responseBody);
+
+        if (data['results'] != null && data['results'].isNotEmpty) {
+          // 간단한 주소 파싱
+          return _parseSimpleAddress(data);
+        }
+      }
+
+      return '강원특별자치도 강릉시'; // 기본 주소
+    } catch (e) {
+      print('주소 변환 오류: $e');
+      return '강원특별자치도 강릉시';
+    }
+  }
+
+  // 간단한 주소 파싱
+  String _parseSimpleAddress(Map<String, dynamic> response) {
+    try {
+      final results = response['results'];
+
+      for (var result in results) {
+        if (result['name'] == 'roadaddr' && result['region'] != null) {
+          final region = result['region'];
+          String address = '';
+
+          if (region['area1'] != null) address += region['area1']['name'] + ' ';
+          if (region['area2'] != null) address += region['area2']['name'] + ' ';
+          if (region['area3'] != null) address += region['area3']['name'];
+
+          return address.trim();
+        }
+      }
+
+      // 도로명 주소가 없으면 법정동 주소 사용
+      for (var result in results) {
+        if (result['name'] == 'legalcode' && result['region'] != null) {
+          final region = result['region'];
+          String address = '';
+
+          if (region['area1'] != null) address += region['area1']['name'] + ' ';
+          if (region['area2'] != null) address += region['area2']['name'] + ' ';
+          if (region['area3'] != null) address += region['area3']['name'];
+
+          return address.trim();
+        }
+      }
+
+      return '주소 확인 불가';
+    } catch (e) {
+      print('주소 파싱 오류: $e');
+      return '주소 확인 불가';
+    }
+  }
+
+  // TMAP API를 사용한 도보 경로 검색 메서드
+  Future<Map<String, dynamic>> searchWalkRouteWithTmap(
+    NLatLng start,
+    NLatLng end,
+  ) async {
+    // TMAP API 키 확인
+    bool keysInitialized = await _initAllApiKeys();
+    if (!keysInitialized) {
+      return _getMockWalkRouteData(start, end);
+    }
+
+    try {
+      // TMAP 도보 경로 검색 API URL
+      final url = Uri.parse(
+        'https://apis.openapi.sk.com/tmap/routes/pedestrian?version=1',
+      );
+
+      // 요청 바디 구성
+      final requestBody = {
+        'startX': start.longitude.toString(),
+        'startY': start.latitude.toString(),
+        'endX': end.longitude.toString(),
+        'endY': end.latitude.toString(),
+        'reqCoordType': 'WGS84GEO',
+        'resCoordType': 'WGS84GEO',
+        'startName': '출발지',
+        'endName': '도착지',
+      };
+
+      print('TMAP 도보 경로 요청 URL: $url');
+      print('요청 파라미터: $requestBody');
+
+      // API 호출
+      final response = await http.post(
+        url,
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'appKey': _cachedTmapApiKey!,
+        },
+        body: Uri(queryParameters: requestBody).query,
+      );
+
+      print('TMAP 도보 경로 응답 상태 코드: ${response.statusCode}');
+      print('TMAP 도보 경로 응답 내용: ${response.body}');
+
+      if (response.statusCode == 200) {
+        // JSON 응답 처리
+        final data = json.decode(response.body);
+
+        // TMAP 응답 파싱
+        if (data['features'] != null) {
+          final features = data['features'] as List;
+          final List<NLatLng> pathCoordinates = [];
+          int totalTime = 0;
+          int totalDistance = 0;
+
+          // 모든 feature를 순회하며 경로 좌표 추출
+          for (var feature in features) {
+            final geometry = feature['geometry'];
+            final properties = feature['properties'];
+
+            // 시간과 거리 정보 추출
+            if (properties != null) {
+              if (properties['totalTime'] != null) {
+                final totalTimeValue = properties['totalTime'] as num;
+                totalTime = totalTimeValue.round();
+              }
+
+              if (properties['totalDistance'] != null) {
+                totalDistance = (properties['totalDistance'] as num).round();
+              }
+            }
+
+            // LineString 타입일 때 좌표 추출
+            if (geometry['type'] == 'LineString') {
+              final coordinates = geometry['coordinates'] as List;
+              for (var coord in coordinates) {
+                if (coord is List && coord.length >= 2) {
+                  double longitude = (coord[0] as num).toDouble();
+                  double latitude = (coord[1] as num).toDouble();
+                  pathCoordinates.add(NLatLng(latitude, longitude));
+                }
+              }
+            }
+            // Point 타입일 때는 단일 좌표
+            else if (geometry['type'] == 'Point') {
+              final coordinates = geometry['coordinates'] as List;
+              if (coordinates.length >= 2) {
+                double longitude = (coordinates[0] as num).toDouble();
+                double latitude = (coordinates[1] as num).toDouble();
+                pathCoordinates.add(NLatLng(latitude, longitude));
+              }
+            }
+          }
+
+          // 캐시에 저장
+          _cachedWalkRoute = {
+            'routes': [
+              {'path': pathCoordinates},
+            ],
+            'distance': totalDistance,
+            'duration': totalTime,
+          };
+
+          return _cachedWalkRoute!;
+        }
+      }
+
+      return _getMockWalkRouteData(start, end);
+    } catch (e) {
+      print('TMAP 도보 경로 검색 오류: $e');
+      return _getMockWalkRouteData(start, end);
+    }
+  }
+
+  // 기존 메서드들은 그대로 유지
+  Future<Map<String, dynamic>> searchWalkRoute(
+    NLatLng start,
+    NLatLng end,
+  ) async {
+    if (_cachedWalkRoute != null) {
+      return _cachedWalkRoute!;
+    }
+
+    return await searchWalkRouteWithTmap(start, end);
+  }
+
   Future<List<RouteData>> searchPublicTransportRoutes(
     String start,
     String end,
   ) async {
-    // 이미 캐시된 결과가 있으면 반환
     if (_cachedPublicTransportRoutes != null) {
       return _cachedPublicTransportRoutes!;
     }
 
-    // API 키 확인
-    bool keysInitialized = await _initApiKeys();
-    if (!keysInitialized) {
-      // 실제 API 호출 실패 시, 예시 데이터 반환
-      return _getMockPublicTransportData();
-    }
-
     try {
-      // 실제로는 네이버 경로 검색 API 호출 필요
-      // 여기서는 예시 코드만
-      /*
-      final url = Uri.parse(
-        'https://naveropenapi.apigw.ntruss.com/map-direction/v1/transit?'
-        'start=${Uri.encodeComponent(start)}&goal=${Uri.encodeComponent(end)}'
-      );
-      
-      final response = await http.get(
-        url,
-        headers: {
-          'X-NCP-APIGW-API-KEY-ID': _cachedApiKey!,
-          'X-NCP-APIGW-API-KEY': _cachedSecretKey!,
-        },
-      );
-      
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        // 응답 파싱 로직
-      }
-      */
-
-      // 지금은 예시 데이터 반환
       _cachedPublicTransportRoutes = _getMockPublicTransportData();
       return _cachedPublicTransportRoutes!;
     } catch (e) {
@@ -108,18 +358,15 @@ class RouteController {
     }
   }
 
-  // 자동차 경로 검색
   Future<Map<String, dynamic>> searchCarRoute(
     NLatLng start,
     NLatLng end,
   ) async {
-    // 이미 캐시된 결과가 있으면 반환
     if (_cachedCarRoute != null) {
       return _cachedCarRoute!;
     }
 
-    // API 키 확인
-    bool keysInitialized = await _initApiKeys();
+    bool keysInitialized = await _initAllApiKeys();
     if (!keysInitialized) {
       return _getMockCarRouteData(start, end);
     }
@@ -132,9 +379,6 @@ class RouteController {
         'option=trafast',
       );
 
-      print('API URL: $url'); // URL 로깅 추가
-      print('API Key ID: $_cachedApiKey'); // API 키 확인
-
       final response = await http.get(
         url,
         headers: {
@@ -143,27 +387,16 @@ class RouteController {
         },
       );
 
-      print('응답 상태 코드: ${response.statusCode}'); // 상태 코드 로깅
-      print('응답 내용: ${response.body}'); // 응답 내용 로깅
-
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
 
-        // API 응답 파싱
         if (data['route'] != null && data['route']['trafast'] != null) {
           final route = data['route']['trafast'][0];
 
-          // 경로 좌표 추출
           final List<NLatLng> pathCoordinates = [];
           if (route['path'] != null) {
             final path = route['path'] as List;
-            // 응답 구조 디버깅
-            print('path 길이: ${path.length}');
-            print('첫 번째 path 요소: ${path[0]}');
-
-            // path가 1차원 배열인지 2차원 배열인지 확인
             if (path.isNotEmpty && path[0] is! List) {
-              // 1차원 배열인 경우
               for (int i = 0; i < path.length; i += 2) {
                 if (i + 1 < path.length) {
                   double longitude = (path[i] as num).toDouble();
@@ -172,7 +405,6 @@ class RouteController {
                 }
               }
             } else {
-              // 2차원 배열인 경우 [longitude, latitude] 형태
               for (var point in path) {
                 if (point is List && point.length >= 2) {
                   double longitude = (point[0] as num).toDouble();
@@ -183,30 +415,19 @@ class RouteController {
             }
           }
 
-          // 디버깅을 위해 상세 정보 출력
-          print('경로 요약 정보: ${route['summary']}');
-
           _cachedCarRoute = {
             'routes': [
               {'path': pathCoordinates, 'summary': route['summary']},
             ],
             'distance': route['summary']?['distance'] ?? 0,
-            'duration':
-                (route['summary']?['duration'] ?? 0) ~/ 1000, // 밀리초를 초로 변환
+            'duration': (route['summary']?['duration'] ?? 0) ~/ 1000,
             'toll': route['summary']?['tollFare'] ?? 0,
           };
-
-          // 디버깅 로그 추가
-          print('API 응답 - 자동차 경로 데이터: $_cachedCarRoute');
-          print('예상 시간(초): ${_cachedCarRoute!['duration']}');
-          print('총 거리(미터): ${_cachedCarRoute!['distance']}');
-          print('통행료(원): ${_cachedCarRoute!['toll']}');
 
           return _cachedCarRoute!;
         }
       }
 
-      print('경로 검색 실패: ${response.statusCode} - ${response.body}');
       return _getMockCarRouteData(start, end);
     } catch (e) {
       print('경로 검색 오류: $e');
@@ -214,118 +435,14 @@ class RouteController {
     }
   }
 
-  // 도보 경로 검색
-  Future<Map<String, dynamic>> searchWalkRoute(
-    NLatLng start,
-    NLatLng end,
-  ) async {
-    // 이미 캐시된 결과가 있으면 반환
-    if (_cachedWalkRoute != null) {
-      return _cachedWalkRoute!;
-    }
-
-    // API 키 확인
-    bool keysInitialized = await _initApiKeys();
-    if (!keysInitialized) {
-      return _getMockWalkRouteData(start, end);
-    }
-
-    try {
-      // driving 대신 pedestrian API 사용
-      final url = Uri.parse(
-        '$_cachedApiUrl/pedestrian?'
-        'start=${start.longitude},${start.latitude}&'
-        'goal=${end.longitude},${end.latitude}',
-      );
-
-      final response = await http.get(
-        url,
-        headers: {
-          'X-NCP-APIGW-API-KEY-ID': _cachedApiKey!,
-          'X-NCP-APIGW-API-KEY': _cachedSecretKey!,
-        },
-      );
-
-      print('도보 경로 응답 상태 코드: ${response.statusCode}');
-      print('도보 경로 응답 내용: ${response.body}');
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-
-        // 보행자 API는 응답 구조가 다름
-        if (data['route'] != null && data['route']['pedestrian'] != null) {
-          final route = data['route']['pedestrian'][0];
-
-          // 경로 좌표 추출
-          final List<NLatLng> pathCoordinates = [];
-          if (route['path'] != null) {
-            final path = route['path'] as List;
-            print('path 길이: ${path.length}');
-
-            if (path.isNotEmpty) {
-              // 네이버 보행자 API path 구조 확인
-              if (path[0] is List) {
-                // 2차원 배열인 경우 [longitude, latitude] 형태
-                for (var point in path) {
-                  if (point is List && point.length >= 2) {
-                    double longitude = (point[0] as num).toDouble();
-                    double latitude = (point[1] as num).toDouble();
-                    pathCoordinates.add(NLatLng(latitude, longitude));
-                  }
-                }
-              } else {
-                // 1차원 배열인 경우 (경도, 위도가 번갈아 나오는 형태)
-                for (int i = 0; i < path.length; i += 2) {
-                  if (i + 1 < path.length) {
-                    double longitude = (path[i] as num).toDouble();
-                    double latitude = (path[i + 1] as num).toDouble();
-                    pathCoordinates.add(NLatLng(latitude, longitude));
-                  }
-                }
-              }
-            }
-          }
-
-          // 도보 경로 요약 정보 확인
-          print('도보 경로 요약 정보: ${route['summary']}');
-
-          // 도보 경로 결과 저장
-          _cachedWalkRoute = {
-            'routes': [
-              {'path': pathCoordinates, 'summary': route['summary']},
-            ],
-            'distance': route['summary']?['distance'] ?? 0,
-            'duration': route['summary']?['duration'] ?? 0,
-          };
-
-          // 디버깅 로그 추가
-          print('API 응답 - 도보 경로 데이터: $_cachedWalkRoute');
-          print('예상 시간(초): ${_cachedWalkRoute!['duration']}');
-          print('총 거리(미터): ${_cachedWalkRoute!['distance']}');
-
-          return _cachedWalkRoute!;
-        }
-
-        print('보행자 경로를 찾을 수 없음');
-        return _getMockWalkRouteData(start, end);
-      }
-
-      print('도보 경로 검색 실패: ${response.statusCode} - ${response.body}');
-      return _getMockWalkRouteData(start, end);
-    } catch (e) {
-      print('도보 경로 검색 오류: $e');
-      return _getMockWalkRouteData(start, end);
-    }
-  }
-
-  // 캐시 무효화 (출발지/도착지 변경 시 호출)
+  // 캐시 무효화
   void invalidateCache() {
     _cachedPublicTransportRoutes = null;
     _cachedCarRoute = null;
     _cachedWalkRoute = null;
   }
 
-  // 예시 대중교통 데이터
+  // 예시 데이터 생성 메서드들
   List<RouteData> _getMockPublicTransportData() {
     return [
       RouteData(
@@ -352,12 +469,11 @@ class RouteController {
     ];
   }
 
-  // 예시 자동차 경로 데이터
   Map<String, dynamic> _getMockCarRouteData(NLatLng start, NLatLng end) {
     return {
-      'distance': 5000, // 미터 단위
-      'duration': 900, // 초 단위 (15분)
-      'toll': 0, // 통행료
+      'distance': 5000,
+      'duration': 900,
+      'toll': 0,
       'routes': [
         {
           'path': [
@@ -376,11 +492,10 @@ class RouteController {
     };
   }
 
-  // 예시 도보 경로 데이터
   Map<String, dynamic> _getMockWalkRouteData(NLatLng start, NLatLng end) {
     return {
-      'distance': 1200, // 미터 단위
-      'duration': 840, // 초 단위 (14분)
+      'distance': 1200,
+      'duration': 840,
       'routes': [
         {
           'path': [

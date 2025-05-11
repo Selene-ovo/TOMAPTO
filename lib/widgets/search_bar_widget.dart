@@ -11,6 +11,7 @@ class SearchBarWidget extends StatelessWidget {
   final Function(String) onDestinationChanged;
   final VoidCallback onSwapLocations;
   final VoidCallback onClosePressed; // 이 콜백을 그대로 유지
+  final Function(Map<String, dynamic>?)? onSearchResultSelected;
 
   const SearchBarWidget({
     super.key,
@@ -19,7 +20,8 @@ class SearchBarWidget extends StatelessWidget {
     required this.onOriginChanged,
     required this.onDestinationChanged,
     required this.onSwapLocations,
-    required this.onClosePressed, // 이 매개변수를 그대로 사용
+    required this.onClosePressed,
+    this.onSearchResultSelected, // 이 매개변수를 그대로 사용
   });
 
   @override
@@ -57,7 +59,11 @@ class SearchBarWidget extends StatelessWidget {
                   Container(
                     margin: EdgeInsets.only(left: maxWidth * 0.000001),
                     child: IconButton(
-                      icon: const Icon(Icons.swap_vert, color: Colors.white),
+                      icon: const Icon(
+                        Icons.swap_vert_rounded,
+                        color: Colors.white,
+                        size: 32,
+                      ),
                       onPressed: onSwapLocations,
                       iconSize: iconSize,
                     ),
@@ -136,7 +142,9 @@ class SearchBarWidget extends StatelessWidget {
                                       originPlace,
                                       style: TextStyle(
                                         fontFamily: "Pretendard",
-                                        fontSize: 14,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w500,
+                                        color: Color(0xFFFFFFFF),
                                       ),
                                       overflow: TextOverflow.ellipsis,
                                     ),
@@ -211,7 +219,9 @@ class SearchBarWidget extends StatelessWidget {
                                       destinationPlace,
                                       style: TextStyle(
                                         fontFamily: "Pretendard",
-                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                        fontSize: 18,
+                                        color: Color(0xFFFFFFFF),
                                       ),
                                       overflow: TextOverflow.ellipsis,
                                     ),
@@ -235,7 +245,11 @@ class SearchBarWidget extends StatelessWidget {
                 top: maxWidth * 0.0000009,
                 right: -5,
                 child: IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white),
+                  icon: const Icon(
+                    Icons.close_rounded,
+                    color: Colors.white,
+                    size: 28,
+                  ),
                   // onClosePressed 콜백 그대로 사용
                   // 이제 transit.dart에서 이 콜백은 NaverMapPage로 이동하는 로직을 가지고 있음
                   onPressed: onClosePressed,
