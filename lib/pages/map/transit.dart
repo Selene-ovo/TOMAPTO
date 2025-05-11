@@ -119,6 +119,16 @@ class _TransitAppState extends State<TransitApp> {
 
           print('출발지 좌표 설정 완료: $_originCoords');
           _transitMapController.setCurrentPosition(_originCoords!);
+
+          // 도착지가 설정되어 있지 않은 경우 출발지로 카메라 이동
+          if (_destinationPlace == '도착지 입력' || _destinationCoords == null) {
+            print('도착지가 없으므로 출발지로 카메라 이동');
+            _transitMapController.moveCamera(
+              _selectedIndex == 0 ? TransitMode.car : TransitMode.walk,
+              coords,
+              17,
+            );
+          }
         } else {
           print('좌표값이 null입니다. x: ${firstResult['x']}, y: ${firstResult['y']}');
         }
@@ -392,7 +402,12 @@ class _TransitAppState extends State<TransitApp> {
   }
 
   void _handleSwapLocations() async {
+    print('출발지/도착지 스왑 시작');
+
+    // 기존 마커와 경로 제거
     _transitMapController.clearAllMarkersAndRoutes();
+
+    // 출발지와 도착지 정보 교환
     final tempPlace = _originPlace;
     final tempCoords = _originCoords;
 
@@ -404,7 +419,9 @@ class _TransitAppState extends State<TransitApp> {
       _destinationCoords = tempCoords;
     });
 
+    // 중요: 반드시 캐시를 무효화하여 새 경로를 강제로 계산하도록 함
     _routeController.invalidateCache();
+    print('경로 캐시 무효화됨');
 
     // TransitMapController에 새 위치 설정
     if (_originCoords != null) {
@@ -412,7 +429,29 @@ class _TransitAppState extends State<TransitApp> {
     }
     _transitMapController.setDestinationPosition(_destinationCoords);
 
-    setState(() {});
+    print('스왑 후 좌표 - 출발지: $_originCoords, 도착지: $_destinationCoords');
+
+    // 이제 해당 모달의 업데이트를 강제
+    if (_originCoords != null &&
+        _destinationCoords != null &&
+        _destinationPlace != '도착지 입력') {
+      // 약간의 지연 후 setState를 호출하여 해당 모달의 didUpdateWidget을 트리거
+      await Future.delayed(Duration(milliseconds: 200));
+
+      // 명시적으로 currentIndex를 변경했다가 다시 원래 값으로 돌려서 재구축 강제
+      int originalIndex = _selectedIndex;
+      setState(() {
+        _selectedIndex = (_selectedIndex == 0) ? 1 : 0; // 다른 값으로 변경
+      });
+
+      await Future.delayed(Duration(milliseconds: 100));
+
+      setState(() {
+        _selectedIndex = originalIndex; // 원래 값으로 복구
+      });
+
+      print('모달 강제 갱신 완료');
+    }
   }
 
   // 지도 터치 핸들러 - 이제 아무 작업도 수행하지 않음

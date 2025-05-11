@@ -4,6 +4,7 @@ import 'package:tomapto/controllers/map/transit_map_controller.dart';
 import 'package:tomapto/controllers/map/route_controller.dart';
 import 'package:tomapto/utils/route_renderer.dart';
 import 'package:tomapto/pages/map/navigation_page.dart';
+import 'dart:math';
 
 class CarModal extends StatefulWidget {
   final NLatLng? initialPosition;
@@ -44,26 +45,54 @@ class _CarModalState extends State<CarModal> {
 
   final RouteController _routeController = RouteController();
 
+  // car_modal.dart의 initState 수정
   @override
   void initState() {
     super.initState();
     _isLoading = !widget.transitMapController.isCarMapInitialized;
+
+    // 시작할 때 SwapLocations 호출 여부 확인을 위한 키 저장
+    _lastOriginPlace = widget.originPlace;
+    _lastDestinationPlace = widget.destinationPlace;
   }
 
+  // 클래스 상단에 변수 추가
+  String _lastOriginPlace = '';
+  String _lastDestinationPlace = '';
+
+  // didUpdateWidget 메서드 수정
   @override
   void didUpdateWidget(CarModal oldWidget) {
     super.didUpdateWidget(oldWidget);
 
+    print("car_modal didUpdateWidget 호출됨");
+    print("이전 출발지: ${oldWidget.originPlace}, 현재 출발지: ${widget.originPlace}");
+    print(
+      "이전 도착지: ${oldWidget.destinationPlace}, 현재 도착지: ${widget.destinationPlace}",
+    );
+
+    // 출발지와 도착지가 서로 바뀌었는지 확인
+    bool swapped =
+        (widget.originPlace == _lastDestinationPlace &&
+            widget.destinationPlace == _lastOriginPlace);
+
+    if (swapped) {
+      print("출발지와 도착지가 서로 바뀌었습니다. 경로 재검색 필요");
+    }
+
     // 좌표나 주소가 변경된 경우 마커 및 경로 업데이트
     if (oldWidget.initialPosition != widget.initialPosition ||
         oldWidget.destinationPlace != widget.destinationPlace ||
-        oldWidget.originPlace != widget.originPlace) {
+        oldWidget.originPlace != widget.originPlace ||
+        swapped) {
+      // 스왑 여부도 조건에 포함
+
       if (widget.transitMapController.isCarMapInitialized) {
         _clearRouteAndMarkers();
 
-        // 경로 검색 초기화
-        //_routeHasBeenSearched = false;
-        //_hasRoute = false;
+        // 경로 검색 상태 초기화
+        _routeHasBeenSearched = false;
+        _hasRoute = false;
 
         if (widget.initialPosition != null) {
           _addOriginMarker(widget.initialPosition!);
@@ -72,11 +101,16 @@ class _CarModalState extends State<CarModal> {
         // 도착지가 설정된 경우에만 마커 추가 및 경로 검색
         if (widget.destinationPlace != '도착지 입력') {
           Future.delayed(Duration(milliseconds: 300), () {
+            print("car_modal 경로 검색 시작");
             _searchAndDisplayRoute();
           });
         }
       }
     }
+
+    // 현재 값 저장
+    _lastOriginPlace = widget.originPlace;
+    _lastDestinationPlace = widget.destinationPlace;
   }
 
   // 출발지 마커 추가 - 캡션 없이
@@ -144,6 +178,10 @@ class _CarModalState extends State<CarModal> {
     });
 
     try {
+      print(
+        '자동차 경로 검색 시작: 출발지=${widget.initialPosition}, 도착지=$_destinationCoords',
+      );
+
       final routeData = await _routeController.searchCarRoute(
         widget.initialPosition!,
         _destinationCoords!,
@@ -163,6 +201,46 @@ class _CarModalState extends State<CarModal> {
         final route = routeData['routes'][0];
         if (route['path'] != null) {
           pathCoordinates.addAll(List<NLatLng>.from(route['path']));
+          print('경로 좌표 개수: ${pathCoordinates.length}');
+
+          // 첫 번째와 마지막 좌표 출력
+          if (pathCoordinates.isNotEmpty) {
+            print('첫 번째 좌표: ${pathCoordinates.first}');
+            print('마지막 좌표: ${pathCoordinates.last}');
+
+            // 첫 번째/마지막 좌표와 출발지/도착지 거리 계산
+            double startToOrigin = _calculateDistance(
+              pathCoordinates.first,
+              widget.initialPosition!,
+            );
+            double endToDestination = _calculateDistance(
+              pathCoordinates.last,
+              _destinationCoords!,
+            );
+            double startToDestination = _calculateDistance(
+              pathCoordinates.first,
+              _destinationCoords!,
+            );
+            double endToOrigin = _calculateDistance(
+              pathCoordinates.last,
+              widget.initialPosition!,
+            );
+
+            print('첫 좌표->출발지 거리: $startToOrigin km');
+            print('마지막 좌표->도착지 거리: $endToDestination km');
+            print('첫 좌표->도착지 거리: $startToDestination km');
+            print('마지막 좌표->출발지 거리: $endToOrigin km');
+
+            // 경로 방향이 반대인지 확인
+            if ((startToDestination < startToOrigin) &&
+                (endToOrigin < endToDestination)) {
+              print('경로 방향이 반대입니다. 경로 좌표를 역순으로 변경합니다.');
+              pathCoordinates.clear();
+              pathCoordinates.addAll(
+                List<NLatLng>.from(route['path']).reversed,
+              );
+            }
+          }
         }
       }
 
@@ -174,6 +252,7 @@ class _CarModalState extends State<CarModal> {
       }
 
       if (pathCoordinates.isNotEmpty) {
+        // 경로 오버레이 생성
         _routePathOverlay = NPathOverlay(
           id: 'car_route',
           coords: pathCoordinates,
@@ -214,6 +293,22 @@ class _CarModalState extends State<CarModal> {
         _isRouteLoading = false;
       });
     }
+  }
+
+  // 두 좌표 간 거리 계산 함수 추가
+  double _calculateDistance(NLatLng point1, NLatLng point2) {
+    const double earthRadius = 6371; // 지구 반지름 (km)
+    final double lat1 = point1.latitude * (pi / 180);
+    final double lat2 = point2.latitude * (pi / 180);
+    final double dLat = (point2.latitude - point1.latitude) * (pi / 180);
+    final double dLon = (point2.longitude - point1.longitude) * (pi / 180);
+
+    final double a =
+        sin(dLat / 2) * sin(dLat / 2) +
+        cos(lat1) * cos(lat2) * sin(dLon / 2) * sin(dLon / 2);
+
+    final double c = 2 * atan2(sqrt(a), sqrt(1 - a));
+    return earthRadius * c;
   }
 
   // 좌표 목록의 경계 계산
