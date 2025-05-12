@@ -108,6 +108,7 @@ class SocketService {
             .enableReconnection() // 재연결 활성화
             .setReconnectionAttempts(5) // 최대 5번 재시도
             .setReconnectionDelay(3000) // 3초마다 재연결 시도
+            .setTimeout(30000) // 타임아웃 시간을 30초로 증가
             .build(),
       );
 
@@ -241,13 +242,14 @@ class SocketService {
       return;
     }
 
-    // 소켓으로 위치 공유 시작 이벤트 전송
+    // 소켓으로 위치 공유 시작 이벤트 전송 - 일방향 공유로 설정
     _socket!.emit('start_location_sharing', {
       'friend_id': friendId,
       'duration_minutes': durationMinutes, // null일 경우 무제한
+      'unidirectional': true, // 일방향 공유 플래그 추가
     });
 
-    print('위치 공유 시작: $friendId, 기간: ${durationMinutes ?? "무제한"}');
+    print('위치 공유 시작: $friendId, 기간: ${durationMinutes ?? "무제한"}, 일방향: true');
   }
 
   // 위치 공유 종료
