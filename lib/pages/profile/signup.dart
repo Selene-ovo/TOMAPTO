@@ -426,10 +426,25 @@ class _SignUpPageState extends State<SignUpPage> {
     if (value == null || value.isEmpty) {
       return '';
     }
+
+    // 길이 검사 (8자 이상)
     if (value.length < 8) {
       _signupController.showTooltip(_focusNodes['password']!, 'password');
       return '';
     }
+
+    // 문자 포함 검사 (영문자)
+    bool hasLetter = RegExp(r'[a-zA-Z]').hasMatch(value);
+
+    // 숫자 포함 검사
+    bool hasDigit = RegExp(r'[0-9]').hasMatch(value);
+
+    // 문자와 숫자 모두 포함되어 있는지 확인
+    if (!hasLetter || !hasDigit) {
+      _signupController.showTooltip(_focusNodes['password']!, 'password');
+      return '';
+    }
+
     return null;
   }
 
@@ -542,13 +557,25 @@ class _SignUpPageState extends State<SignUpPage> {
         // 비밀번호 입력 필드
         TextFormField(
           controller: _controllers['password'],
-          obscureText: true,
+          obscureText: _signupController.obscurePasswordText, // 동적 변수 사용
           focusNode: _focusNodes['password'],
           style: const TextStyle(fontFamily: 'Pretendard', fontSize: 16.0),
           decoration: InputDecoration(
             hintText: '비밀번호를 적어주세요.',
             hintStyle: SignupStyles.hintStyle,
-            suffixIcon: const Icon(Icons.visibility_off, color: Colors.grey),
+            // 아이콘 버튼 추가
+            suffixIcon: IconButton(
+              icon: Icon(
+                _signupController.obscurePasswordText
+                    ? Icons.visibility_off
+                    : Icons.visibility,
+                color: const Color(0xFF363636),
+                size: 20.0 * (MediaQuery.of(context).size.width / 375),
+              ),
+              onPressed: () {
+                _signupController.togglePasswordVisibility(setState);
+              },
+            ),
             contentPadding: SignupStyles.fieldPadding,
             border: SignupStyles.defaultBorder,
             enabledBorder: SignupStyles.defaultBorder,
@@ -603,13 +630,25 @@ class _SignUpPageState extends State<SignUpPage> {
         // 비밀번호 확인 입력 필드
         TextFormField(
           controller: _controllers['confirmPassword'],
-          obscureText: true,
+          obscureText: _signupController.obscureConfirmPasswordText, // 동적 변수 사용
           focusNode: _focusNodes['confirmPassword'],
           style: const TextStyle(fontFamily: 'Pretendard', fontSize: 16.0),
           decoration: InputDecoration(
             hintText: '비밀번호를 적어주세요.',
             hintStyle: SignupStyles.hintStyle,
-            suffixIcon: const Icon(Icons.visibility_off, color: Colors.grey),
+            // 아이콘 버튼 추가
+            suffixIcon: IconButton(
+              icon: Icon(
+                _signupController.obscureConfirmPasswordText
+                    ? Icons.visibility_off
+                    : Icons.visibility,
+                color: const Color(0xFF363636),
+                size: 20.0 * (MediaQuery.of(context).size.width / 375),
+              ),
+              onPressed: () {
+                _signupController.toggleConfirmPasswordVisibility(setState);
+              },
+            ),
             contentPadding: SignupStyles.fieldPadding,
             border: SignupStyles.defaultBorder,
             enabledBorder: SignupStyles.defaultBorder,

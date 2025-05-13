@@ -712,4 +712,21 @@ class SignupController {
     _verificationTimer?.cancel();
     _tooltipManager.dispose();
   }
+
+  bool obscurePasswordText = true; // 비밀번호 가리기 (기본값 true)
+  bool obscureConfirmPasswordText = true; // 비밀번호 확인 가리기 (기본값 true)
+
+  // 비밀번호 표시/숨김 토글 메서드
+  void togglePasswordVisibility(Function setState) {
+    setState(() {
+      obscurePasswordText = !obscurePasswordText;
+    });
+  }
+
+  // 비밀번호 확인 표시/숨김 토글 메서드
+  void toggleConfirmPasswordVisibility(Function setState) {
+    setState(() {
+      obscureConfirmPasswordText = !obscureConfirmPasswordText;
+    });
+  }
 }
