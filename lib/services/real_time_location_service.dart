@@ -19,7 +19,7 @@ class RealTimeLocationService {
   bool _isRunning = false;
 
   // 위치 업데이트 간격 (초)
-  final int _updateIntervalSeconds = 20; // 30초 -> 20초로 변경 (더 자주 업데이트)
+  final int _updateIntervalSeconds = 3;
 
   // 백그라운드 작업 타이머
   Timer? _backgroundTimer;
@@ -157,6 +157,7 @@ class RealTimeLocationService {
       }
 
       // REST API를 통한 위치 업데이트 (서버 DB 저장용)
+      // 중요: 위치 공유 자동 활성화는 제거
       bool success = await LocationService.updateMyLocation(
         position.latitude,
         position.longitude,

@@ -33,8 +33,12 @@ class _RealTimeLocationSharingPageState
   Timer? _locationUpdateTimer;
   // 소켓 이벤트 구독자
   StreamSubscription? _locationUpdateSubscription;
-  // 위치 공유 상태 (현재 활성화 여부)
-  bool _isLocationSharingActive = false;
+
+  // 위치 공유 상태 추적 변수들
+  bool _isLocationSharingActive = false; // 전체적인 공유 상태 (주로 내가 공유 중인지)
+  bool _iAmSharingLocation = false; // 내가 상대방에게 위치 공유 중인지
+  bool _friendIsSharingLocation = false; // 상대방이 나에게 위치 공유 중인지
+
   // 마지막 업데이트 시간
   DateTime? _lastUpdateTime;
 
@@ -76,26 +80,45 @@ class _RealTimeLocationSharingPageState
       _locationUpdateSubscription = _socketService.onLocationUpdate.listen((
         data,
       ) {
-        // 친구 ID가 선택한 친구의 ID와 일치하는지 확인
-        if (data['user_id'] == widget.selectedFriend['id']) {
+        // 친구 ID가 선택한 친구의 ID와 일치하고 친구가 위치 공유 중인 경우에만 업데이트
+        if (data['user_id'] == widget.selectedFriend['id'] &&
+            _friendIsSharingLocation) {
           setState(() {
             _friendPosition = NLatLng(data['latitude'], data['longitude']);
             _lastUpdateTime = DateTime.now();
-            _updateMapMarkers();
           });
+          _updateMapMarkers(); // 마커 업데이트
           print('소켓으로 친구 위치 업데이트: ${data['latitude']}, ${data['longitude']}');
         }
       });
 
-      // 위치 공유 종료 이벤트 리스너 추가
+      // 위치 공유 종료 이벤트 리스너
       _socketService.onLocationSharingStopped.listen((data) {
         if (data['user_id'] == widget.selectedFriend['id']) {
           setState(() {
-            _isLocationSharingActive = false;
+            _friendIsSharingLocation = false; // 친구의 위치 공유 비활성화
+            _friendPosition = null; // 중요: 친구 위치 정보 제거
           });
+          _updateMapMarkers(); // 마커 업데이트
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('${widget.selectedFriend['name']}님이 위치 공유를 종료했습니다'),
+            ),
+          );
+        }
+      });
+
+      // 위치 공유 시작 이벤트 리스너
+      _socketService.onLocationSharingStarted.listen((data) {
+        if (data['user_id'] == widget.selectedFriend['id']) {
+          setState(() {
+            _friendIsSharingLocation = true; // 친구의 위치 공유 활성화
+          });
+          // 위치 정보 새로고침
+          _loadLocations();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${widget.selectedFriend['name']}님이 위치 공유를 시작했습니다'),
             ),
           );
         }
@@ -136,33 +159,66 @@ class _RealTimeLocationSharingPageState
             myLocationData.longitude,
           );
         });
+
+        // 내 위치를 가져온 후 바로 카메라 이동 (초기화 후)
+        if (_mapController != null && !_isInitialCameraSet) {
+          _mapController!.updateCamera(
+            NCameraUpdate.withParams(target: _myPosition!, zoom: 15),
+          );
+          _isInitialCameraSet = true;
+        }
       } else {
         print('내 위치 정보를 가져오는데 실패했습니다.');
       }
 
-      // 2. 친구 위치 정보 가져오기
+      // 2. 중요: 두 가지 위치 공유 상태를 별도로 확인
       final friendId = widget.selectedFriend['id'];
-      final friendLocationData = await LocationService.getFriendLocation(
+
+      // 2-1. 내가 위치 공유 중인지 확인 (내가 공유자)
+      final iAmSharing = await LocationService.checkIAmSharingWith(friendId);
+
+      // 2-2. 친구가 위치 공유 중인지 확인 (친구가 공유자)
+      final friendIsSharing = await LocationService.checkFriendIsSharingWith(
         friendId,
       );
 
-      if (friendLocationData != null) {
-        setState(() {
-          _friendPosition = NLatLng(
-            friendLocationData['latitude'],
-            friendLocationData['longitude'],
-          );
-          _isLocationSharingActive = true;
-          _lastUpdateTime = DateTime.now();
-        });
-        print(
-          '친구 위치 정보 로드 성공: 위도=${friendLocationData['latitude']}, 경도=${friendLocationData['longitude']}',
+      // 3. 위치 공유 상태 업데이트
+      setState(() {
+        // 내가 위치 공유 중인지 여부 (나 -> 친구)
+        _iAmSharingLocation = iAmSharing;
+
+        // 친구가 위치 공유 중인지 여부 (친구 -> 나)
+        _friendIsSharingLocation = friendIsSharing;
+
+        // 중요: 친구가 공유하지 않는 경우 친구 위치 정보 제거
+        if (!friendIsSharing) {
+          _friendPosition = null;
+        }
+      });
+
+      print('위치 공유 상태: 내가 공유 중: $iAmSharing, 친구가 공유 중: $friendIsSharing');
+
+      // 4. 친구 위치 정보 가져오기 - 친구가 공유 중인 경우에만
+      if (friendIsSharing) {
+        final friendLocationData = await LocationService.getFriendLocation(
+          friendId,
         );
-      } else {
-        print('친구 위치 정보를 가져오는데 실패했습니다.');
-        setState(() {
-          _isLocationSharingActive = false;
-        });
+
+        if (friendLocationData != null) {
+          // 문자열을 double로 변환하여 저장
+          setState(() {
+            _friendPosition = NLatLng(
+              double.parse(friendLocationData['latitude'].toString()),
+              double.parse(friendLocationData['longitude'].toString()),
+            );
+            _lastUpdateTime = DateTime.now();
+          });
+          print(
+            '친구 위치 정보 로드 성공: ${friendLocationData['latitude']}, ${friendLocationData['longitude']}',
+          );
+        } else {
+          print('친구 위치 정보를 가져오는데 실패했습니다.');
+        }
       }
 
       // 위치 데이터를 얻은 후 마커 업데이트
@@ -179,26 +235,24 @@ class _RealTimeLocationSharingPageState
         _errorMessage = '위치 정보를 불러오는데 실패했습니다. 나중에 다시 시도해주세요.';
         _isLoading = false;
       });
-
-      // 에러 발생 시 기본 위치 설정
-      if (_myPosition == null && _mapController != null) {
-        // 서울 시청 좌표 (기본값)
-        _myPosition = NLatLng(37.5666805, 126.9784147);
-      }
     }
   }
 
-  // 내 위치 마커 생성 함수 (빨간색)
+  // 내 위치 마커 생성 함수
   NMarker _createMyLocationMarker() {
     final marker = NMarker(id: 'my_location', position: _myPosition!);
 
-    // 마커 이미지 설정
-    marker.setIconTintColor(Colors.red);
+    // 에셋 이미지를 마커 아이콘으로 설정 - 경로 수정
+    final overlayImage = NOverlayImage.fromAssetImage('assets/icons/me.png');
+    marker.setIcon(overlayImage);
 
-    // 앵커 포인트 조정
+    // 마커 크기 설정 (이미지 크기에 맞게 조정)
+    marker.setSize(NSize(48, 48));
+
+    // 마커 앵커 포인트 설정 - 이미지의 하단 중앙이 좌표에 위치하도록
     marker.setAnchor(NPoint(0.5, 1.0));
 
-    // 캡션 설정
+    // 캡션 설정 (선택적)
     marker.setCaption(
       NOverlayCaption(
         text: '내 위치',
@@ -211,17 +265,23 @@ class _RealTimeLocationSharingPageState
     return marker;
   }
 
-  // 친구 위치 마커 생성 함수 (초록색)
+  // 친구 위치 마커 생성 함수
   NMarker _createFriendLocationMarker() {
     final marker = NMarker(id: 'friend_location', position: _friendPosition!);
 
-    // 마커 이미지 설정
-    marker.setIconTintColor(Colors.green);
+    // 에셋 이미지를 마커 아이콘으로 설정 - 경로 수정
+    final overlayImage = NOverlayImage.fromAssetImage(
+      'assets/icons/friends.png',
+    );
+    marker.setIcon(overlayImage);
 
-    // 앵커 포인트 조정
+    // 마커 크기 설정 (이미지 크기에 맞게 조정)
+    marker.setSize(NSize(48, 48));
+
+    // 마커 앵커 포인트 설정
     marker.setAnchor(NPoint(0.5, 1.0));
 
-    // 캡션 설정
+    // 캡션 설정 (친구 이름 표시)
     marker.setCaption(
       NOverlayCaption(
         text: widget.selectedFriend['name'],
@@ -246,7 +306,7 @@ class _RealTimeLocationSharingPageState
       _markers.clear();
     }
 
-    // 내 위치 마커 추가
+    // 내 위치 마커 추가 - 항상 내 위치 마커는 표시
     if (_myPosition != null) {
       final myMarker = _createMyLocationMarker();
 
@@ -260,35 +320,36 @@ class _RealTimeLocationSharingPageState
       _markers.add(myMarker);
     }
 
-    // 친구 위치 마커 추가
-    if (_friendPosition != null) {
-      final friendMarker = _createFriendLocationMarker();
+    // 친구 위치 마커 추가 - 위치 공유가 활성화되고 친구 위치가 있는 경우에만
+    if (_friendPosition != null && _friendIsSharingLocation) {
+      // 추가 검증: 친구 위치 좌표가 유효한지 확인
+      if (_friendPosition!.latitude != 0 && _friendPosition!.longitude != 0) {
+        final friendMarker = _createFriendLocationMarker();
 
-      friendMarker.setOnTapListener((NMarker marker) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${widget.selectedFriend['name']}님의 위치')),
-        );
-      });
+        friendMarker.setOnTapListener((NMarker marker) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('${widget.selectedFriend['name']}님의 위치')),
+          );
+        });
 
-      _mapController!.addOverlay(friendMarker);
-      _markers.add(friendMarker);
+        _mapController!.addOverlay(friendMarker);
+        _markers.add(friendMarker);
+      }
     }
 
     // 카메라 위치 조정
-    if (!_isInitialCameraSet &&
-        _myPosition != null &&
-        _friendPosition != null) {
-      _fitBoundsToShowBothMarkers();
-      _isInitialCameraSet = true;
-    } else if (!_isInitialCameraSet && _myPosition != null) {
-      _mapController!.updateCamera(
-        NCameraUpdate.withParams(target: _myPosition!, zoom: 15),
-      );
-      _isInitialCameraSet = true;
-    } else if (!_isInitialCameraSet && _friendPosition != null) {
-      _mapController!.updateCamera(
-        NCameraUpdate.withParams(target: _friendPosition!, zoom: 15),
-      );
+    if (!_isInitialCameraSet) {
+      if (_myPosition != null &&
+          _friendPosition != null &&
+          _friendIsSharingLocation) {
+        // 내 위치와 친구 위치 모두 있고 공유 활성화된 경우: 두 마커가 모두 보이도록
+        _fitBoundsToShowBothMarkers();
+      } else if (_myPosition != null) {
+        // 내 위치만 있는 경우: 내 위치로 카메라 조정
+        _mapController!.updateCamera(
+          NCameraUpdate.withParams(target: _myPosition!, zoom: 15),
+        );
+      }
       _isInitialCameraSet = true;
     }
   }
@@ -330,87 +391,13 @@ class _RealTimeLocationSharingPageState
       northEast: NLatLng(maxLat, maxLng),
     );
 
-    // 경계에 맞게 카메라 조정 - 패딩을 double 값으로 전달
+    // 경계에 맞게 카메라 조정 - 패딩을 EdgeInsets 객체로 전달
     _mapController!.updateCamera(
-      NCameraUpdate.fitBounds(
-        bounds,
-        padding: EdgeInsets.all(50.0), // EdgeInsets 객체로 변경
-      ),
+      NCameraUpdate.fitBounds(bounds, padding: EdgeInsets.all(50.0)),
     );
   }
 
-  // 위치 공유 종료 요청
-  Future<void> _endLocationSharing() async {
-    try {
-      setState(() {
-        _isLoading = true;
-      });
-
-      // 종료 확인 다이얼로그
-      final result = await showDialog<bool>(
-        context: context,
-        builder:
-            (context) => AlertDialog(
-              title: Text('위치 공유 종료'),
-              content: Text(
-                '${widget.selectedFriend['name']}님과의 위치 공유를 종료하시겠습니까?',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(false),
-                  child: Text('취소'),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(true),
-                  style: TextButton.styleFrom(foregroundColor: Colors.red),
-                  child: Text('종료'),
-                ),
-              ],
-            ),
-      );
-
-      if (result != true) {
-        setState(() {
-          _isLoading = false;
-        });
-        return;
-      }
-
-      // 소켓을 통한 위치 공유 종료 요청
-      _socketService.stopLocationSharing(widget.selectedFriend['id']);
-
-      // API를 통한 위치 공유 종료 요청
-      final success = await LocationService.endLocationSharing(
-        widget.selectedFriend['id'],
-      );
-
-      setState(() {
-        _isLoading = false;
-        if (success) {
-          _isLocationSharingActive = false;
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('위치 공유가 종료되었습니다')));
-          // 공유 종료 후 페이지 닫기
-          Navigator.pop(context);
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('위치 공유 종료 요청 실패. 나중에 다시 시도하세요.')),
-          );
-        }
-      });
-    } catch (e) {
-      print('위치 공유 종료 오류: $e');
-      setState(() {
-        _isLoading = false;
-      });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('위치 공유 종료 중 오류가 발생했습니다.')));
-    }
-  }
-
-  // 위치 공유 시작 요청
+  // 위치 공유 시작 요청 - 내 위치만 공유 (상대방에게 보내는 것)
   Future<void> _startLocationSharing() async {
     try {
       setState(() {
@@ -418,29 +405,33 @@ class _RealTimeLocationSharingPageState
       });
 
       // 시작 확인 다이얼로그
-      final result = await showDialog<bool>(
-        context: context,
-        builder:
-            (context) => AlertDialog(
-              title: Text('위치 공유 시작'),
-              content: Text(
-                '${widget.selectedFriend['name']}님과 위치 공유를 시작하시겠습니까?',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(false),
-                  child: Text('취소'),
+      final result =
+          await showDialog<bool>(
+            context: context,
+            builder:
+                (context) => AlertDialog(
+                  title: Text('위치 공유 시작'),
+                  content: Text(
+                    '${widget.selectedFriend['name']}님에게 내 위치를 공유하시겠습니까?\n\n상대방은 위치 공유를 시작해야 상대방의 위치를 볼 수 있습니다.',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(false),
+                      child: Text('취소'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(true),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.green,
+                      ),
+                      child: Text('시작'),
+                    ),
+                  ],
                 ),
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(true),
-                  style: TextButton.styleFrom(foregroundColor: Colors.green),
-                  child: Text('시작'),
-                ),
-              ],
-            ),
-      );
+          ) ??
+          false;
 
-      if (result != true) {
+      if (!result) {
         setState(() {
           _isLoading = false;
         });
@@ -448,6 +439,9 @@ class _RealTimeLocationSharingPageState
       }
 
       // 소켓을 통한 위치 공유 시작 요청
+      if (!_socketService.isConnected) {
+        await _socketService.initSocket();
+      }
       _socketService.startLocationSharing(widget.selectedFriend['id'], null);
 
       // API를 통한 위치 공유 시작 요청
@@ -458,10 +452,11 @@ class _RealTimeLocationSharingPageState
       setState(() {
         _isLoading = false;
         if (success) {
-          _isLocationSharingActive = true;
+          _iAmSharingLocation = true; // 내 위치 공유 활성화 (중요: 내가 공유하는 것만 활성화)
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(SnackBar(content: Text('위치 공유가 시작되었습니다')));
+          ).showSnackBar(SnackBar(content: Text('내 위치 공유가 활성화되었습니다')));
+
           // 위치 정보 새로고침
           _loadLocations();
         } else {
@@ -478,89 +473,6 @@ class _RealTimeLocationSharingPageState
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('위치 공유 시작 중 오류가 발생했습니다.')));
-    }
-  }
-
-  // 친구 위치 히스토리 불러오기
-  Future<void> _loadFriendLocationHistory() async {
-    try {
-      setState(() {
-        _isLoading = true;
-      });
-
-      // API를 통한 위치 히스토리 조회
-      final historyData = await LocationService.getLocationHistory(
-        widget.selectedFriend['id'],
-      );
-
-      setState(() {
-        _isLoading = false;
-      });
-
-      if (historyData != null && historyData.isNotEmpty) {
-        // 히스토리 데이터를 표시하는 다이얼로그
-        showDialog(
-          context: context,
-          builder:
-              (context) => AlertDialog(
-                title: Text('${widget.selectedFriend['name']}님의 위치 기록'),
-                content: Container(
-                  width: double.maxFinite,
-                  height: 300,
-                  child: ListView.builder(
-                    itemCount: historyData.length,
-                    itemBuilder: (context, index) {
-                      final item = historyData[index];
-                      final date = DateTime.parse(item['created_at']);
-                      return ListTile(
-                        title: Text(
-                          '${date.year}-${date.month}-${date.day} ${date.hour}:${date.minute}:${date.second}',
-                          style: TextStyle(fontSize: 14),
-                        ),
-                        subtitle: Text(
-                          '위도: ${item['latitude'].toStringAsFixed(6)}, 경도: ${item['longitude'].toStringAsFixed(6)}',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                        // 클릭 시 해당 위치로 이동
-                        onTap: () {
-                          Navigator.pop(context);
-                          if (_mapController != null) {
-                            _mapController!.updateCamera(
-                              NCameraUpdate.withParams(
-                                target: NLatLng(
-                                  item['latitude'],
-                                  item['longitude'],
-                                ),
-                                zoom: 16,
-                              ),
-                            );
-                          }
-                        },
-                      );
-                    },
-                  ),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: Text('닫기'),
-                  ),
-                ],
-              ),
-        );
-      } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('위치 기록이 없습니다')));
-      }
-    } catch (e) {
-      print('위치 히스토리 로드 오류: $e');
-      setState(() {
-        _isLoading = false;
-      });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('위치 기록을 불러오는 중 오류가 발생했습니다.')));
     }
   }
 
@@ -595,29 +507,37 @@ class _RealTimeLocationSharingPageState
       ),
       body: Stack(
         children: [
-          // 네이버 맵
+          // 네이버 맵 - 초기 카메라 위치를 내 위치로 설정
           NaverMap(
             options: NaverMapViewOptions(
               initialCameraPosition: NCameraPosition(
                 target:
-                    _myPosition ??
-                    NLatLng(37.5666805, 126.9784147), // 기본값: 서울시청
+                    _myPosition ?? NLatLng(37.5666805, 126.9784147), // 내 위치 우선
                 zoom: 15,
               ),
               mapType: NMapType.basic,
               contentPadding: EdgeInsets.zero,
+              locationButtonEnable: true, // 위치 버튼 활성화
             ),
             onMapReady: (controller) {
               setState(() {
                 _mapController = controller;
               });
-              _updateMapMarkers(); // 비동기 함수지만 여기서는 await 없이 호출
+              _updateMapMarkers();
+
+              // 맵이 준비되면 내 위치로 이동 (이미 위치가 있는 경우)
+              if (_myPosition != null && !_isInitialCameraSet) {
+                controller.updateCamera(
+                  NCameraUpdate.withParams(target: _myPosition!, zoom: 15),
+                );
+                _isInitialCameraSet = true;
+              }
             },
           ),
 
           // 현재 위치 버튼
           Positioned(
-            bottom: 100,
+            bottom: 16,
             right: 16,
             child: FloatingActionButton(
               backgroundColor: Colors.white,
@@ -679,8 +599,11 @@ class _RealTimeLocationSharingPageState
               ),
             ),
 
-          // 위치 공유 상태 메시지
-          if (!_isLocationSharingActive && !_isLoading && _errorMessage.isEmpty)
+          // 위치 공유 상태 메시지 - 친구가 공유 중이 아니고, 로딩/에러 상태가 아니고, 내가 공유 중이 아닐 때만 표시
+          if (!_friendIsSharingLocation &&
+              !_isLoading &&
+              _errorMessage.isEmpty &&
+              !_iAmSharingLocation)
             Container(
               color: Colors.white.withOpacity(0.7),
               child: Center(
@@ -711,7 +634,7 @@ class _RealTimeLocationSharingPageState
             ),
 
           // 위치 공유 시간 정보
-          if (_isLocationSharingActive && _lastUpdateTime != null)
+          if (_friendIsSharingLocation && _lastUpdateTime != null)
             Positioned(
               top: 8,
               left: 0,
@@ -737,30 +660,36 @@ class _RealTimeLocationSharingPageState
                 ),
               ),
             ),
-        ],
-      ),
-      // 위치 공유 종료 버튼 (하단에 고정)
-      bottomNavigationBar:
-          _isLocationSharingActive
-              ? Container(
-                color: Colors.white,
-                padding: EdgeInsets.all(16),
-                child: ElevatedButton(
-                  onPressed: _endLocationSharing,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
-                    padding: EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+
+          // 친구 위치 공유 상태 표시 - 내가 공유 중이지만 친구는 아닐 때
+          if (!_friendIsSharingLocation && _iAmSharingLocation)
+            Positioned(
+              top: 8,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 4,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
                   ),
                   child: Text(
-                    '위치 공유 종료',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    '${widget.selectedFriend['name']}님은 아직 위치를 공유하고 있지 않습니다',
+                    style: TextStyle(fontSize: 12, color: Colors.orange[700]),
                   ),
                 ),
-              )
-              : null,
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

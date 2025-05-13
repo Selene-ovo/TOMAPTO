@@ -1,4 +1,4 @@
-// Updated login_controller.dart
+// login_controller.dart
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -43,7 +43,7 @@ class LoginController {
     });
   }
 
-  // 위치 업데이트를 위한 메서드
+  // 위치 업데이트를 위한 메서드 - 위치 공유는 하지 않음
   Future<void> _updateUserLocation() async {
     try {
       // 위치 권한 확인
@@ -71,7 +71,7 @@ class LoginController {
         desiredAccuracy: LocationAccuracy.high,
       );
 
-      // 위치 정보를 서버에 업데이트
+      // 위치 정보를 서버에 업데이트 - 위치 공유는 하지 않음
       await LocationService.updateMyLocation(
         position.latitude,
         position.longitude,
@@ -81,7 +81,8 @@ class LoginController {
 
       print('로그인 후 위치 업데이트 성공: ${position.latitude}, ${position.longitude}');
 
-      // 실시간 위치 업데이트 서비스 시작
+      // 실시간 위치 업데이트 서비스 시작 - 이것은 내 위치 표시를 위해 필요함
+      // 중요: 친구와의 위치 공유 요청은 포함하지 않음
       final realTimeLocationService = RealTimeLocationService();
       await realTimeLocationService.startLocationUpdates();
     } catch (e) {
@@ -122,8 +123,7 @@ class LoginController {
 
           print('로그인 성공: 토큰 저장됨. remember_me=$rememberMe, is_logged_in=true');
 
-          // 로그인 성공 후 위치 정보 업데이트
-          await _updateUserLocation();
+          // 자동 위치 서비스 시작 코드 제거 (이 부분을 삭제하면 로그인 시 위치 활성화가 자동으로 되지 않음)
 
           return true;
         } else {

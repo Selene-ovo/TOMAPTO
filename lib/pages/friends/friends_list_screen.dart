@@ -14,6 +14,8 @@ import 'package:tomapto/services/socket_service.dart';
 import 'package:tomapto/services/token_service.dart';
 import 'package:tomapto/pages/profile/login.dart';
 import 'package:tomapto/services/real_time_location_service.dart';
+import 'package:tomapto/pages/map/naver_map.dart';
+import 'package:tomapto/pages/profile/profile.dart';
 
 class FriendScreen extends StatefulWidget {
   @override
@@ -37,9 +39,6 @@ class _FriendScreenState extends State<FriendScreen> {
   bool _isLoggedIn = false;
   bool _isLoading = true;
 
-  // 모달 표시 플래그
-  bool _hasShownLoginModal = false;
-
   @override
   void initState() {
     super.initState();
@@ -60,23 +59,9 @@ class _FriendScreenState extends State<FriendScreen> {
 
         // 실시간 위치 업데이트 서비스 확인 및 필요시 시작
         _checkAndStartLocationService();
-      } else {
-        // 로그인되지 않은 경우에만 화면이 로드된 후 실행되도록 WidgetsBinding 사용
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _showLoginModalIfNeeded();
-        });
       }
+      // 로그인되지 않은 경우는 별도 처리 없음 - 화면에 로그인 메시지 표시
     });
-  }
-
-  // 필요한 경우 로그인 모달 표시
-  void _showLoginModalIfNeeded() {
-    if (!_isLoggedIn && !_hasShownLoginModal && mounted) {
-      setState(() {
-        _hasShownLoginModal = true;
-      });
-      showLoginServicesModal(context, message: '친구 목록을 보려면 로그인이 필요합니다');
-    }
   }
 
   // 로그인 상태 확인 (토큰 유효성 검사 포함)
@@ -129,7 +114,8 @@ class _FriendScreenState extends State<FriendScreen> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('token');
       await prefs.remove('user_id');
-      await prefs.remove('remember_me');
+      await prefs.remove('is_logged_in');
+      // remember_me 설정은 사용자 편의를 위해 유지
     } catch (e) {
       print('로그아웃 처리 오류: $e');
     }
@@ -147,25 +133,104 @@ class _FriendScreenState extends State<FriendScreen> {
 
   // 바텀 네비게이션 바 탭 변경 처리
   void _handleNavIndexChanged(int index) {
-    // 페이지 이동 전 토큰 유효성 다시 확인
-    _checkLoginStatus().then((isLoggedIn) {
-      if (!isLoggedIn && index != 0) {
-        // 홈 화면이 아닌 경우 로그인 필요
-        setState(() {
-          _isLoggedIn = false;
-          _hasShownLoginModal = false; // 다시 모달 표시 가능하도록 설정
-        });
-        _showLoginModalIfNeeded();
-        return;
-      }
-
-      setState(() {
-        _currentNavIndex = index;
-      });
-
-      // 여기서 실제 탭 전환 로직 구현
-      // ...
+    // 현재 선택된 탭 업데이트
+    setState(() {
+      _currentNavIndex = index;
     });
+
+    print('_handleNavIndexChanged: index=$index, _isLoggedIn=$_isLoggedIn');
+
+    // 로그인이 필요한 탭(인덱스 1,2,3)이고 로그인되지 않은 경우
+    if (!_isLoggedIn && index != 0) {
+      print('로그인 필요 모달 표시');
+
+      // 직접 AlertDialog를 사용하여 로그인 필요 메시지 표시
+      showDialog(
+        context: context,
+        barrierDismissible: true,
+        builder:
+            (BuildContext dialogContext) => AlertDialog(
+              title: Text('로그인 필요'),
+              content: Text('로그인이 필요한 서비스입니다.'), // 메시지 통일
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: Text('취소'),
+                ),
+                TextButton(
+                  style: TextButton.styleFrom(
+                    backgroundColor: Color(0xFFFB233B),
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () {
+                    Navigator.pop(dialogContext); // 다이얼로그 닫기
+
+                    // 로그인 페이지로 이동
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => LoginPage()),
+                    );
+                  },
+                  child: Text('로그인하기'),
+                ),
+              ],
+            ),
+      );
+
+      // 다이얼로그 표시 후 여기서 반환
+      return;
+    }
+
+    // 여기서 페이지 이동 로직 처리
+    // 로그인된 경우 또는 홈 탭(인덱스 0)인 경우에만 여기에 도달
+    switch (index) {
+      case 0:
+        Navigator.pushAndRemoveUntil(
+          context,
+          PageRouteBuilder(
+            pageBuilder:
+                (context, animation, secondaryAnimation) => NaverMapPage(),
+            transitionDuration: Duration.zero,
+            reverseTransitionDuration: Duration.zero,
+          ),
+          (route) => false,
+        );
+        break;
+      case 1:
+        // 이미 친구 페이지에 있으므로 아무 작업도 하지 않음
+        break;
+      case 2:
+        // 메뉴 페이지 구현 (향후 구현)
+        break;
+      case 3:
+        Navigator.pushReplacement(
+          context,
+          PageRouteBuilder(
+            pageBuilder:
+                (context, animation, secondaryAnimation) => ProfilePage(),
+            transitionDuration: Duration.zero,
+            reverseTransitionDuration: Duration.zero,
+          ),
+        );
+        break;
+    }
+  }
+
+  // 위치 서비스 초기화
+  Future<void> _checkAndStartLocationService() async {
+    try {
+      // 위치 권한 확인
+      final hasPermission =
+          await RealTimeLocationService().startLocationUpdates();
+
+      if (hasPermission) {
+        print('실시간 위치 업데이트 서비스 시작됨');
+      } else {
+        print('실시간 위치 업데이트 서비스 시작 실패');
+      }
+    } catch (e) {
+      print('위치 업데이트 서비스 초기화 중 오류 발생: $e');
+    }
   }
 
   // 사이드 메뉴 표시
@@ -256,22 +321,6 @@ class _FriendScreenState extends State<FriendScreen> {
 
     // 다른 플랫폼이거나 이미 localhost가 아닌 경우 원래 URL 반환
     return baseUrl;
-  }
-
-  Future<void> _checkAndStartLocationService() async {
-    try {
-      // 위치 권한 확인
-      final hasPermission =
-          await RealTimeLocationService().startLocationUpdates();
-
-      if (hasPermission) {
-        print('실시간 위치 업데이트 서비스 시작됨');
-      } else {
-        print('실시간 위치 업데이트 서비스 시작 실패');
-      }
-    } catch (e) {
-      print('위치 업데이트 서비스 초기화 중 오류 발생: $e');
-    }
   }
 
   // 소켓 초기화 함수
@@ -600,8 +649,35 @@ class _FriendScreenState extends State<FriendScreen> {
   // 친구 검색 함수
   void _searchFriends(String query) {
     if (!_isLoggedIn) {
-      // 로그인되지 않은 경우 로그인 모달 표시
-      showLoginServicesModal(context);
+      // 로그인되지 않은 경우 로그인 다이얼로그 표시
+      showDialog(
+        context: context,
+        builder:
+            (context) => AlertDialog(
+              title: Text('로그인 필요'),
+              content: Text('로그인이 필요한 서비스입니다.'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('취소'),
+                ),
+                TextButton(
+                  style: TextButton.styleFrom(
+                    backgroundColor: Color(0xFFFB233B),
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => LoginPage()),
+                    );
+                  },
+                  child: Text('로그인하기'),
+                ),
+              ],
+            ),
+      );
       return;
     }
 
@@ -666,6 +742,18 @@ class _FriendScreenState extends State<FriendScreen> {
     _fetchLocationSharingStatus();
   }
 
+  // 다양한 타입의 값을 불리언으로 변환하는 헬퍼 메서드
+  bool _getBoolValue(dynamic value) {
+    if (value is bool) {
+      return value;
+    } else if (value is int) {
+      return value == 1;
+    } else if (value is String) {
+      return value.toLowerCase() == 'true' || value == '1';
+    }
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -673,6 +761,73 @@ class _FriendScreenState extends State<FriendScreen> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
+        leading: Stack(
+          children: [
+            IconButton(
+              icon: Icon(Icons.menu, color: Colors.black),
+              onPressed: () {
+                if (!_isLoggedIn) {
+                  // 로그인 안된 경우 로그인 다이얼로그 표시
+                  showDialog(
+                    context: context,
+                    builder:
+                        (context) => AlertDialog(
+                          title: Text('로그인 필요'),
+                          content: Text('로그인이 필요한 서비스입니다'),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: Text('취소'),
+                            ),
+                            TextButton(
+                              style: TextButton.styleFrom(
+                                backgroundColor: Color(0xFFFB233B),
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: () {
+                                Navigator.pop(context);
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => LoginPage(),
+                                  ),
+                                );
+                              },
+                              child: Text('로그인하기'),
+                            ),
+                          ],
+                        ),
+                  );
+                  return;
+                }
+                // 사이드 메뉴 표시
+                _showSideMenu(context);
+              },
+            ),
+            if (_newRequestsCount > 0)
+              Positioned(
+                right: 8,
+                top: 8,
+                child: Container(
+                  padding: EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    color: Colors.red,
+                    shape: BoxShape.circle,
+                  ),
+                  constraints: BoxConstraints(minWidth: 14, minHeight: 14),
+                  child: Text(
+                    '$_newRequestsCount',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 8,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+          ],
+        ),
         title: const Text(
           '친구',
           style: TextStyle(
@@ -682,42 +837,7 @@ class _FriendScreenState extends State<FriendScreen> {
           ),
         ),
         centerTitle: true,
-        actions: [
-          // 알림 아이콘 추가
-          Stack(
-            children: [
-              IconButton(
-                icon: Icon(Icons.menu, color: Colors.black),
-                onPressed: () {
-                  // 사이드 메뉴 표시
-                  _showSideMenu(context);
-                },
-              ),
-              if (_newRequestsCount > 0)
-                Positioned(
-                  right: 8,
-                  top: 8,
-                  child: Container(
-                    padding: EdgeInsets.all(2),
-                    decoration: BoxDecoration(
-                      color: Colors.red,
-                      shape: BoxShape.circle,
-                    ),
-                    constraints: BoxConstraints(minWidth: 14, minHeight: 14),
-                    child: Text(
-                      '$_newRequestsCount',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 8,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ],
+        actions: [], // 메뉴 버튼이 leading으로 이동했으므로 actions는 비워둠
       ),
       body:
           _isLoading
@@ -734,60 +854,6 @@ class _FriendScreenState extends State<FriendScreen> {
         currentIndex: _currentNavIndex,
         onTap: _handleNavIndexChanged,
       ),
-      // 위치 공유 요청이 있을 때 표시할 FAB - 새 요청이 있을 때만 표시
-      floatingActionButton:
-          _isLoggedIn && _newRequestsCount > 0
-              ? FloatingActionButton(
-                backgroundColor: Colors.red,
-                mini: true,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Icon(Icons.person_add, color: Colors.white),
-                    Positioned(
-                      right: 0,
-                      top: 0,
-                      child: Container(
-                        padding: EdgeInsets.all(2),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                        ),
-                        constraints: BoxConstraints(
-                          minWidth: 14,
-                          minHeight: 14,
-                        ),
-                        child: Text(
-                          '$_newRequestsCount',
-                          style: TextStyle(
-                            color: Colors.red,
-                            fontSize: 8,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                onPressed: () {
-                  // 친구 추가 페이지로 이동하고 요청 탭으로 전환
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder:
-                          (context) => FriendsAddPage(initialSearchTerm: ''),
-                    ),
-                  ).then((_) {
-                    // 돌아왔을 때 친구 목록 및 위치 공유 상태 새로고침
-                    _fetchFriendsFromServer();
-                    _fetchLocationSharingStatus();
-                    _fetchFriendRequestsCount();
-                  });
-                },
-                tooltip: '새 친구 요청',
-              )
-              : null,
     );
   }
 
@@ -1000,18 +1066,6 @@ class _FriendScreenState extends State<FriendScreen> {
     );
   }
 
-  // 다양한 타입의 값을 불리언으로 변환하는 헬퍼 메서드
-  bool _getBoolValue(dynamic value) {
-    if (value is bool) {
-      return value;
-    } else if (value is int) {
-      return value == 1;
-    } else if (value is String) {
-      return value.toLowerCase() == 'true' || value == '1';
-    }
-    return false;
-  }
-
   // 로그인 필요 화면 위젯 (로그인 전)
   Widget _buildLoginRequiredContent() {
     return Center(
@@ -1040,7 +1094,10 @@ class _FriendScreenState extends State<FriendScreen> {
           SizedBox(height: 36),
           ElevatedButton(
             onPressed: () {
-              showLoginServicesModal(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const LoginPage()),
+              );
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFFB233B),

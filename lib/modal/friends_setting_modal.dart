@@ -291,7 +291,8 @@ class _FriendsSettingModalState extends State<FriendsSettingModal> {
       );
 
       if (response.statusCode == 200) {
-        // 친구 차단 성공
+        //
+        // 차단 성공
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('${widget.friend['name']}님을 차단했습니다')),
         );

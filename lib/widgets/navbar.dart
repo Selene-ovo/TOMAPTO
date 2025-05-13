@@ -1,4 +1,4 @@
-// Enhanced navbar.dart
+// navbar.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:tomapto/pages/friends/friends_list_screen.dart';
@@ -8,6 +8,7 @@ import 'package:tomapto/pages/profile/profile.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tomapto/services/token_service.dart';
 import 'package:tomapto/services/real_time_location_service.dart';
+import 'package:tomapto/modal/login_services.dart';
 
 class BottomNavBar extends StatelessWidget {
   final int currentIndex;
@@ -117,20 +118,15 @@ class BottomNavBar extends StatelessWidget {
             ),
           );
         } else {
-          // 로그인되지 않은 경우 로그인 페이지로 이동
-          Navigator.pushReplacement(
-            context,
-            PageRouteBuilder(
-              pageBuilder:
-                  (context, animation, secondaryAnimation) => LoginPage(),
-              transitionDuration: Duration.zero,
-              reverseTransitionDuration: Duration.zero,
-            ),
-          );
+          // 로그인되지 않은 경우 로그인 모달 표시
+          showLoginServicesModal(context, message: '로그인이 필요한 서비스입니다');
         }
         break;
       case 2:
         // 메뉴 탭 - 로그인 확인 필요시 여기에 추가
+        if (!isLoggedIn) {
+          showLoginServicesModal(context);
+        }
         break;
       case 3:
         if (isLoggedIn) {
@@ -144,6 +140,7 @@ class BottomNavBar extends StatelessWidget {
             ),
           );
         } else {
+          // 프로필 탭은 모달 없이 바로 로그인 페이지로 이동
           Navigator.pushReplacement(
             context,
             PageRouteBuilder(
