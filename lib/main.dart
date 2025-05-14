@@ -64,7 +64,6 @@ class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
-  @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
@@ -94,6 +93,12 @@ class MyApp extends StatelessWidget {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
+        ),
+
+        textSelectionTheme: TextSelectionThemeData(
+          cursorColor: Color(0xFF4C9EFC), // 커서 색상을 primaryRed로 설정
+          selectionColor: Color(0xFF4C9EFC).withOpacity(0.2), // 선택 영역 색상 (반투명)
+          selectionHandleColor: Color(0xFF4C9EFC), // 선택 핸들 색상
         ),
 
         elevatedButtonTheme: ElevatedButtonThemeData(
