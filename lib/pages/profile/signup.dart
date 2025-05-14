@@ -53,41 +53,28 @@ class SignupStyles {
     fontWeight: FontWeight.bold,
   );
 
-  // 입력 필드 테두리 스타일
-  static OutlineInputBorder defaultBorder = OutlineInputBorder(
-    borderRadius: BorderRadius.circular(borderRadius),
-    borderSide: const BorderSide(color: borderColor, width: 1.0),
-  );
+  // 입력 필드 테두리 스타일은 메서드로 변경 (context가 필요하기 때문)
+  static OutlineInputBorder getDefaultBorder() {
+    return OutlineInputBorder(
+      borderRadius: BorderRadius.circular(borderRadius),
+      borderSide: const BorderSide(color: borderColor, width: 1.0),
+    );
+  }
 
-  static OutlineInputBorder focusedBorder = OutlineInputBorder(
-    borderRadius: BorderRadius.circular(borderRadius),
-    borderSide: const BorderSide(color: Colors.blue, width: 1.0),
-  );
-
-  static OutlineInputBorder errorBorder = OutlineInputBorder(
-    borderRadius: BorderRadius.circular(borderRadius),
-    borderSide: const BorderSide(color: primaryRed, width: 1.0),
-  );
-}
-
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: ".env");
-  runApp(const MyApp());
-}
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        fontFamily: 'Pretendard',
-        scaffoldBackgroundColor: Colors.white,
+  static OutlineInputBorder getFocusedBorder(BuildContext context) {
+    return OutlineInputBorder(
+      borderRadius: BorderRadius.circular(borderRadius),
+      borderSide: BorderSide(
+        color: Theme.of(context).colorScheme.secondary,
+        width: 1.0,
       ),
-      home: const SignUpPage(),
+    );
+  }
+
+  static OutlineInputBorder getErrorBorder() {
+    return OutlineInputBorder(
+      borderRadius: BorderRadius.circular(borderRadius),
+      borderSide: const BorderSide(color: primaryRed, width: 1.0),
     );
   }
 }
@@ -148,6 +135,33 @@ class _SignUpPageState extends State<SignUpPage> {
       scrollController: _scrollController,
       updateUI: setState,
     );
+
+    // 비밀번호 필드와 비밀번호 확인 필드의 포커스 이벤트 리스너 설정
+    _focusNodes['password']?.addListener(() {
+      if (!_focusNodes['password']!.hasFocus &&
+          _controllers['password']!.text.isNotEmpty) {
+        if (_validatePasswordStatus()) {
+          _signupController.showTooltip(_focusNodes['password']!, 'password');
+        }
+      }
+    });
+
+    _focusNodes['confirmPassword']?.addListener(() {
+      if (!_focusNodes['confirmPassword']!.hasFocus &&
+          _controllers['confirmPassword']!.text.isNotEmpty) {
+        if (_validateConfirmPasswordStatus()) {
+          _signupController.showTooltip(
+            _focusNodes['confirmPassword']!,
+            'password_confirm',
+          );
+        }
+      }
+    });
+
+    _focusNodes['email']?.addListener(() {
+      // 포커스 변경 시 UI 강제 업데이트
+      setState(() {});
+    });
   }
 
   @override
@@ -239,9 +253,9 @@ class _SignUpPageState extends State<SignUpPage> {
                     child: Text(
                       domain,
                       style: const TextStyle(
-                        color: SignupStyles.primaryText,
+                        color: Color(0xFF363636),
                         fontSize: 13,
-                        fontFamily: 'Pretendard Variable',
+                        fontFamily: 'Pretendard',
                         fontWeight: FontWeight.w400,
                         height: 1.83,
                       ),
@@ -395,20 +409,22 @@ class _SignUpPageState extends State<SignUpPage> {
   // 앱바 구성
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       scrolledUnderElevation: 0,
-      title: const Text(
+      title: Text(
         '회원가입',
         style: TextStyle(
           fontFamily: 'Pretendard',
           fontWeight: FontWeight.w600,
           fontSize: 22.0,
-          color: SignupStyles.primaryText,
+          color: Color(0xFF363636),
         ),
       ),
       leading: IconButton(
         icon: SvgPicture.asset('assets/icons/back.svg', width: 24, height: 24),
         onPressed: () => Navigator.pop(context),
+        splashColor: Colors.transparent,
+        highlightColor: Colors.transparent,
       ),
     );
   }
@@ -446,6 +462,23 @@ class _SignUpPageState extends State<SignUpPage> {
     }
 
     return null;
+  }
+
+  // 비밀번호 유효성 상태 확인
+  bool _validatePasswordStatus() {
+    String password = _controllers['password']!.text;
+    if (password.isEmpty) return false;
+
+    bool hasLetter = RegExp(r'[a-zA-Z]').hasMatch(password);
+    bool hasDigit = RegExp(r'[0-9]').hasMatch(password);
+    return password.length < 8 || !hasLetter || !hasDigit;
+  }
+
+  // 비밀번호 확인 유효성 상태 확인
+  bool _validateConfirmPasswordStatus() {
+    String password = _controllers['password']!.text;
+    String confirmPassword = _controllers['confirmPassword']!.text;
+    return confirmPassword.isNotEmpty && password != confirmPassword;
   }
 
   // 비밀번호 확인 검증
@@ -511,17 +544,17 @@ class _SignUpPageState extends State<SignUpPage> {
             hintStyle: SignupStyles.hintStyle,
             suffixIcon: suffixIcon,
             contentPadding: SignupStyles.fieldPadding,
-            border: SignupStyles.defaultBorder,
+            border: SignupStyles.getDefaultBorder(),
             enabledBorder:
                 hasError
-                    ? SignupStyles.errorBorder
-                    : SignupStyles.defaultBorder,
+                    ? SignupStyles.getErrorBorder()
+                    : SignupStyles.getDefaultBorder(),
             focusedBorder:
                 hasError
-                    ? SignupStyles.errorBorder
-                    : SignupStyles.focusedBorder,
-            errorBorder: SignupStyles.errorBorder,
-            focusedErrorBorder: SignupStyles.errorBorder,
+                    ? SignupStyles.getErrorBorder()
+                    : SignupStyles.getFocusedBorder(context),
+            errorBorder: SignupStyles.getErrorBorder(),
+            focusedErrorBorder: SignupStyles.getErrorBorder(),
             errorStyle: SignupStyles.errorStyle,
           ),
           validator: validator,
@@ -537,7 +570,7 @@ class _SignUpPageState extends State<SignUpPage> {
       children: [
         // 비밀번호 라벨
         RichText(
-          text: TextSpan(
+          text: const TextSpan(
             text: '비밀번호',
             style: SignupStyles.labelStyle,
             children: [
@@ -557,34 +590,50 @@ class _SignUpPageState extends State<SignUpPage> {
         // 비밀번호 입력 필드
         TextFormField(
           controller: _controllers['password'],
-          obscureText: _signupController.obscurePasswordText, // 동적 변수 사용
+          obscureText: _signupController.obscurePasswordText,
           focusNode: _focusNodes['password'],
           style: const TextStyle(fontFamily: 'Pretendard', fontSize: 16.0),
           decoration: InputDecoration(
             hintText: '비밀번호를 적어주세요.',
             hintStyle: SignupStyles.hintStyle,
             // 아이콘 버튼 추가
-            suffixIcon: IconButton(
-              icon: Icon(
-                _signupController.obscurePasswordText
-                    ? Icons.visibility_off
-                    : Icons.visibility,
-                color: const Color(0xFF363636),
-                size: 20.0 * (MediaQuery.of(context).size.width / 375),
-              ),
-              onPressed: () {
-                _signupController.togglePasswordVisibility(setState);
-              },
+            suffixIcon: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_controllers['password']!.text.isNotEmpty)
+                  _buildStatusIcon(_validatePasswordStatus()),
+                IconButton(
+                  icon: Icon(
+                    _signupController.obscurePasswordText
+                        ? Icons.visibility_off
+                        : Icons.visibility,
+                    color: const Color(0xFF363636),
+                    size: 20.0 * (MediaQuery.of(context).size.width / 375),
+                  ),
+                  onPressed: () {
+                    _signupController.togglePasswordVisibility(setState);
+                  },
+                ),
+              ],
             ),
             contentPadding: SignupStyles.fieldPadding,
-            border: SignupStyles.defaultBorder,
-            enabledBorder: SignupStyles.defaultBorder,
-            focusedBorder: SignupStyles.focusedBorder,
-            errorBorder: SignupStyles.errorBorder,
-            focusedErrorBorder: SignupStyles.errorBorder,
+            border: SignupStyles.getDefaultBorder(),
+            enabledBorder:
+                _validatePasswordStatus()
+                    ? SignupStyles.getErrorBorder()
+                    : SignupStyles.getDefaultBorder(),
+            focusedBorder:
+                _validatePasswordStatus()
+                    ? SignupStyles.getErrorBorder()
+                    : SignupStyles.getFocusedBorder(context),
+            errorBorder: SignupStyles.getErrorBorder(),
+            focusedErrorBorder: SignupStyles.getErrorBorder(),
             errorStyle: SignupStyles.errorStyle,
           ),
           validator: _validatePassword,
+          onChanged: (_) {
+            setState(() {});
+          },
         ),
 
         // 도움말 텍스트
@@ -610,7 +659,7 @@ class _SignUpPageState extends State<SignUpPage> {
       children: [
         // 비밀번호 확인 라벨
         RichText(
-          text: TextSpan(
+          text: const TextSpan(
             text: '비밀번호 확인',
             style: SignupStyles.labelStyle,
             children: [
@@ -630,49 +679,63 @@ class _SignUpPageState extends State<SignUpPage> {
         // 비밀번호 확인 입력 필드
         TextFormField(
           controller: _controllers['confirmPassword'],
-          obscureText: _signupController.obscureConfirmPasswordText, // 동적 변수 사용
+          obscureText: _signupController.obscureConfirmPasswordText,
           focusNode: _focusNodes['confirmPassword'],
           style: const TextStyle(fontFamily: 'Pretendard', fontSize: 16.0),
           decoration: InputDecoration(
             hintText: '비밀번호를 적어주세요.',
             hintStyle: SignupStyles.hintStyle,
             // 아이콘 버튼 추가
-            suffixIcon: IconButton(
-              icon: Icon(
-                _signupController.obscureConfirmPasswordText
-                    ? Icons.visibility_off
-                    : Icons.visibility,
-                color: const Color(0xFF363636),
-                size: 20.0 * (MediaQuery.of(context).size.width / 375),
-              ),
-              onPressed: () {
-                _signupController.toggleConfirmPasswordVisibility(setState);
-              },
+            suffixIcon: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_controllers['confirmPassword']!.text.isNotEmpty)
+                  _buildStatusIcon(_validateConfirmPasswordStatus()),
+                IconButton(
+                  icon: Icon(
+                    _signupController.obscureConfirmPasswordText
+                        ? Icons.visibility_off
+                        : Icons.visibility,
+                    color: const Color(0xFF363636),
+                    size: 20.0 * (MediaQuery.of(context).size.width / 375),
+                  ),
+                  onPressed: () {
+                    _signupController.toggleConfirmPasswordVisibility(setState);
+                  },
+                ),
+              ],
             ),
             contentPadding: SignupStyles.fieldPadding,
-            border: SignupStyles.defaultBorder,
-            enabledBorder: SignupStyles.defaultBorder,
-            focusedBorder: SignupStyles.focusedBorder,
-            errorBorder: SignupStyles.errorBorder,
-            focusedErrorBorder: SignupStyles.errorBorder,
+            border: SignupStyles.getDefaultBorder(),
+            enabledBorder:
+                _validateConfirmPasswordStatus()
+                    ? SignupStyles.getErrorBorder()
+                    : SignupStyles.getDefaultBorder(),
+            focusedBorder:
+                _validateConfirmPasswordStatus()
+                    ? SignupStyles.getErrorBorder()
+                    : SignupStyles.getFocusedBorder(context),
+            errorBorder: SignupStyles.getErrorBorder(),
+            focusedErrorBorder: SignupStyles.getErrorBorder(),
             errorStyle: SignupStyles.errorStyle,
           ),
           validator: _validateConfirmPassword,
+          onChanged: (_) {
+            setState(() {});
+          },
         ),
       ],
     );
   }
 
-  // 이메일 필드와 인증 필드 부분만 변경
-  // signup.dart 파일 내 _buildEmailField() 메서드를 대체합니다.
-
   Widget _buildEmailField() {
+    final bool hasEmailFocus = _focusNodes['email']?.hasFocus ?? false;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // 이메일 라벨
         RichText(
-          text: TextSpan(
+          text: const TextSpan(
             text: '이메일',
             style: SignupStyles.labelStyle,
             children: [
@@ -690,189 +753,226 @@ class _SignUpPageState extends State<SignUpPage> {
         const SizedBox(height: SignupStyles.smallSpacing),
 
         // 통합된 입력 필드와 드롭다운
-        Stack(
+        Container(
           key: _emailFieldKey,
-          alignment: Alignment.centerRight,
-          children: [
-            Container(
-              height: SignupStyles.inputHeight,
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color:
-                      (!_signupController.isEmailValid ||
-                              _signupController.isEmailDuplicate)
-                          ? SignupStyles.primaryRed
-                          : SignupStyles.borderColor,
-                  width: 1.0,
-                ),
-                borderRadius: BorderRadius.circular(SignupStyles.borderRadius),
-              ),
-              child: Row(
-                children: [
-                  // 이메일 입력 부분
-                  Expanded(
-                    child: TextFormField(
-                      controller: _controllers['email'],
-                      focusNode: _focusNodes['email'],
-                      style: const TextStyle(fontFamily: 'Pretendard'),
-                      decoration: const InputDecoration(
-                        hintText: '이메일을 적어주세요.',
-                        hintStyle: SignupStyles.hintStyle,
-                        contentPadding: SignupStyles.fieldPadding,
-                        border: InputBorder.none,
-                        errorStyle: TextStyle(height: -5),
-                      ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          _signupController.setEmailValid(false);
-                          return '';
-                        }
-                        _signupController.setEmailValid(true);
-                        return null;
-                      },
-                    ),
-                  ),
-
-                  // 구분선
-                  Container(
-                    width: 0.4,
-                    height: 30,
-                    color: SignupStyles.borderColor,
-                  ),
-
-                  // 커스텀 도메인 드롭다운
-                  InkWell(
-                    onTap: () {
-                      if (_isDropdownOpen) {
-                        _removeDropdownOverlay();
-                      } else {
-                        _showDropdownOverlay(context, _emailFieldKey);
-                      }
-                    },
-                    child: Container(
-                      width: 140,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            _signupController.selectedDomain,
-                            style: const TextStyle(
-                              color: SignupStyles.primaryText,
-                              fontSize: 13,
-                              fontFamily: 'Pretendard',
-                              fontWeight: FontWeight.w400,
-                            ),
-                          ),
-                          Icon(
-                            _isDropdownOpen
-                                ? Icons.arrow_drop_up
-                                : Icons.arrow_drop_down,
-                            color: Colors.grey,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  // 상태 아이콘을 위한 공간
-                  const SizedBox(width: 20),
-                ],
-              ),
+          height: SignupStyles.inputHeight,
+          decoration: BoxDecoration(
+            border: Border.all(
+              color:
+                  (!_signupController.isEmailValid ||
+                          _signupController.isEmailDuplicate)
+                      ? SignupStyles.primaryRed
+                      : _focusNodes['email']!.hasFocus
+                      ? Theme.of(context).colorScheme.secondary
+                      : SignupStyles.borderColor,
+              width: 1.0,
             ),
-
-            // 상태 아이콘 (이메일이 비어 있지 않을 때만 표시)
-            if (_controllers['email']!.text.isNotEmpty)
-              Positioned(
-                right: 16,
-                child: _buildStatusIcon(_signupController.isEmailDuplicate),
-              ),
-          ],
-        ),
-
-        // 이메일 인증번호 요청 버튼
-        Padding(
-          padding: const EdgeInsets.only(top: 8.0),
+            borderRadius: BorderRadius.circular(SignupStyles.borderRadius),
+          ),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              if (!_signupController.isEmailVerified &&
-                  !_signupController.isVerificationSent)
-                ElevatedButton(
-                  onPressed: () {
-                    // 이메일이 유효한지 확인
-                    final email =
-                        _controllers['email']!.text +
-                        _signupController.selectedDomain;
-                    if (email.isNotEmpty) {
-                      _signupController.sendVerificationEmail(email);
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('이메일을 입력해주세요.')),
-                      );
+              // 이메일 입력 부분
+              Expanded(
+                child: TextFormField(
+                  controller: _controllers['email'],
+                  focusNode: _focusNodes['email'],
+                  style: const TextStyle(fontFamily: 'Pretendard'),
+                  decoration: const InputDecoration(
+                    hintText: '이메일을 적어주세요.',
+                    hintStyle: SignupStyles.hintStyle,
+                    contentPadding: SignupStyles.fieldPadding,
+                    border: InputBorder.none,
+                    errorStyle: TextStyle(height: -5),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      _signupController.setEmailValid(false);
+                      return '';
                     }
+                    _signupController.setEmailValid(true);
+                    return null;
                   },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.grey[200],
-                    foregroundColor: SignupStyles.primaryText,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    minimumSize: const Size(100, 36),
-                  ),
-                  child: const Text('인증번호 받기', style: TextStyle(fontSize: 12)),
-                ),
-
-              if (!_signupController.isEmailVerified &&
-                  _signupController.isVerificationSent)
-                ElevatedButton(
-                  onPressed: () {
-                    final email =
-                        _controllers['email']!.text +
-                        _signupController.selectedDomain;
-                    _signupController.sendVerificationEmail(email);
+                  onChanged: (_) {
+                    // 입력값 변경 시 상태 업데이트
+                    setState(() {});
                   },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.grey[200],
-                    foregroundColor: SignupStyles.primaryText,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    minimumSize: const Size(100, 36),
-                  ),
-                  child: const Text('인증번호 재발급', style: TextStyle(fontSize: 12)),
                 ),
+              ),
 
-              if (_signupController.isEmailVerified)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.green[50],
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.green),
-                  ),
+              // 구분선
+              Container(
+                width: 0.4,
+                height: 30,
+                color: SignupStyles.borderColor,
+              ),
+
+              // 커스텀 도메인 드롭다운
+              InkWell(
+                onTap: () {
+                  if (_isDropdownOpen) {
+                    _removeDropdownOverlay();
+                  } else {
+                    _showDropdownOverlay(context, _emailFieldKey);
+                  }
+                },
+                child: Container(
+                  width: 140,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Row(
-                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Icon(Icons.check_circle, color: Colors.green, size: 14),
-                      SizedBox(width: 4),
                       Text(
-                        '인증 완료',
-                        style: TextStyle(
-                          color: Colors.green,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
+                        _signupController.selectedDomain,
+                        style: const TextStyle(
+                          color: SignupStyles.primaryText,
+                          fontSize: 13,
+                          fontFamily: 'Pretendard',
+                          fontWeight: FontWeight.w400,
                         ),
+                      ),
+                      Icon(
+                        _isDropdownOpen
+                            ? Icons.arrow_drop_up
+                            : Icons.arrow_drop_down,
+                        color: Colors.grey,
                       ),
                     ],
                   ),
                 ),
+              ),
+
+              // 상태 아이콘 (이메일이 비어 있지 않을 때만 표시)
+              if (_controllers['email']!.text.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(right: 16),
+                  child: _buildStatusIcon(_signupController.isEmailDuplicate),
+                ),
             ],
           ),
         ),
+
+        // 툴팁 추가 (필요 시 표시됨) - isEmailDuplicate일 때만 표시
+        if (_signupController.isEmailDuplicate &&
+            !_focusNodes['email']!.hasFocus)
+          // 이메일 인증번호 요청 버튼
+          Padding(
+            padding: const EdgeInsets.only(top: 8.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                if (!_signupController.isEmailVerified &&
+                    !_signupController.isVerificationSent)
+                  ElevatedButton(
+                    onPressed: () {
+                      // 이메일이 유효한지 확인
+                      final email =
+                          _controllers['email']!.text +
+                          _signupController.selectedDomain;
+                      if (email.isNotEmpty) {
+                        // 중복 확인 후 인증 절차 진행
+                        if (_signupController.isEmailDuplicate) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('이미 사용 중인 이메일입니다.')),
+                          );
+                          // 툴팁 표시
+                          _signupController.showTooltip(
+                            _focusNodes['email']!,
+                            'email',
+                          );
+                        } else {
+                          _signupController.sendVerificationEmail(email);
+                        }
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('이메일을 입력해주세요.')),
+                        );
+                      }
+                    },
+                    style: ButtonStyle(
+                      backgroundColor: MaterialStateProperty.all(
+                        Colors.grey[200],
+                      ),
+                      foregroundColor: MaterialStateProperty.all(
+                        SignupStyles.primaryText,
+                      ),
+                      shape: MaterialStateProperty.all(
+                        RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      minimumSize: MaterialStateProperty.all(
+                        const Size(100, 36),
+                      ),
+                      splashFactory: NoSplash.splashFactory,
+                    ),
+                    child: const Text(
+                      '인증번호 받기',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ),
+
+                if (!_signupController.isEmailVerified &&
+                    _signupController.isVerificationSent)
+                  ElevatedButton(
+                    onPressed: () {
+                      final email =
+                          _controllers['email']!.text +
+                          _signupController.selectedDomain;
+                      _signupController.sendVerificationEmail(email);
+                    },
+                    style: ButtonStyle(
+                      backgroundColor: MaterialStateProperty.all(
+                        Colors.grey[200],
+                      ),
+                      foregroundColor: MaterialStateProperty.all(
+                        SignupStyles.primaryText,
+                      ),
+                      shape: MaterialStateProperty.all(
+                        RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      minimumSize: MaterialStateProperty.all(
+                        const Size(100, 36),
+                      ),
+                      splashFactory: NoSplash.splashFactory,
+                    ),
+                    child: const Text(
+                      '인증번호 재발급',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ),
+
+                if (_signupController.isEmailVerified)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.green[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.green),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.check_circle, color: Colors.green, size: 14),
+                        SizedBox(width: 4),
+                        Text(
+                          '인증 완료',
+                          style: TextStyle(
+                            color: Colors.green,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
 
         // 인증번호 입력 필드
         if (_signupController.isVerificationSent &&
@@ -890,7 +990,7 @@ class _SignUpPageState extends State<SignUpPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         RichText(
-                          text: TextSpan(
+                          text: const TextSpan(
                             text: '인증번호',
                             style: SignupStyles.labelStyle,
                             children: [
@@ -913,11 +1013,13 @@ class _SignUpPageState extends State<SignUpPage> {
                             hintText: '인증번호를 입력하세요',
                             hintStyle: SignupStyles.hintStyle,
                             contentPadding: SignupStyles.fieldPadding,
-                            border: SignupStyles.defaultBorder,
-                            enabledBorder: SignupStyles.defaultBorder,
-                            focusedBorder: SignupStyles.focusedBorder,
-                            errorBorder: SignupStyles.errorBorder,
-                            focusedErrorBorder: SignupStyles.errorBorder,
+                            border: SignupStyles.getDefaultBorder(),
+                            enabledBorder: SignupStyles.getDefaultBorder(),
+                            focusedBorder: SignupStyles.getFocusedBorder(
+                              context,
+                            ),
+                            errorBorder: SignupStyles.getErrorBorder(),
+                            focusedErrorBorder: SignupStyles.getErrorBorder(),
                             errorStyle: SignupStyles.errorStyle,
                             // 남은 시간 표시 (선택 사항)
                             suffixIcon:
@@ -972,14 +1074,26 @@ class _SignUpPageState extends State<SignUpPage> {
                                 }
                               }
                               : null,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: SignupStyles.primaryRed,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                      style: ButtonStyle(
+                        backgroundColor:
+                            MaterialStateProperty.resolveWith<Color>((states) {
+                              if (states.contains(MaterialState.disabled)) {
+                                return Colors.grey[300]!;
+                              }
+                              return SignupStyles.primaryRed;
+                            }),
+                        foregroundColor: MaterialStateProperty.all(
+                          Colors.white,
                         ),
-                        minimumSize: const Size(80, 56),
-                        disabledBackgroundColor: Colors.grey[300],
+                        shape: MaterialStateProperty.all(
+                          RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        minimumSize: MaterialStateProperty.all(
+                          const Size(80, 56),
+                        ),
+                        splashFactory: NoSplash.splashFactory,
                       ),
                       child: const Text('확인', style: TextStyle(fontSize: 14)),
                     ),
@@ -993,7 +1107,7 @@ class _SignUpPageState extends State<SignUpPage> {
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(
                     _signupController.verificationError,
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: Colors.red,
                       fontSize: 12,
                       fontFamily: 'Pretendard',
@@ -1007,7 +1121,7 @@ class _SignUpPageState extends State<SignUpPage> {
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(
                     '인증번호가 만료되었습니다. 재발급 받으세요.',
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: Colors.red,
                       fontSize: 12,
                       fontFamily: 'Pretendard',
@@ -1044,7 +1158,7 @@ class _SignUpPageState extends State<SignUpPage> {
           onChanged: (value) => _handleAgreementChange('all', value),
           isAll: true,
         ),
-        const Divider(),
+        //const Divider(), //구분선
 
         // 필수 약관 1
         _buildAgreementCheckbox(
@@ -1062,14 +1176,6 @@ class _SignUpPageState extends State<SignUpPage> {
           onChanged: (value) => _handleAgreementChange('privacy', value),
           isRequired: true,
           hasArrow: true,
-        ),
-
-        // 선택 약관
-        _buildAgreementCheckbox(
-          text: '[선택] 홍보성 정보 수신 동의',
-          value: _marketingAgreement,
-          onChanged: (value) => _handleAgreementChange('marketing', value),
-          hasArrow: false,
         ),
       ],
     );
@@ -1091,21 +1197,24 @@ class _SignUpPageState extends State<SignUpPage> {
           onChanged: onChanged,
           shape: const CircleBorder(),
           activeColor:
-              isAll ? SignupStyles.secondaryText : SignupStyles.primaryRed,
+              isAll ? SignupStyles.primaryRed : SignupStyles.primaryRed,
         ),
         Expanded(
           child: Text(
             text,
             style: TextStyle(
               fontFamily: 'Pretendard',
-              fontWeight: isAll ? FontWeight.w600 : FontWeight.w500,
+              fontWeight: isAll ? FontWeight.w600 : FontWeight.w400,
               fontSize: 15.0,
-              color: SignupStyles.primaryText,
+              color: Color(0xFF363636),
             ),
           ),
         ),
         if (hasArrow)
-          const Icon(Icons.chevron_right, color: SignupStyles.secondaryText),
+          const Icon(
+            Icons.chevron_right_rounded,
+            color: SignupStyles.secondaryText,
+          ),
       ],
     );
   }
@@ -1117,13 +1226,27 @@ class _SignUpPageState extends State<SignUpPage> {
       height: SignupStyles.inputHeight,
       child: ElevatedButton(
         onPressed: () => _signupController.signup(_formKey),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: SignupStyles.primaryRed,
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(SignupStyles.borderRadius),
+        style: ButtonStyle(
+          backgroundColor: MaterialStateProperty.all(SignupStyles.primaryRed),
+          foregroundColor: MaterialStateProperty.all(Colors.white),
+          padding: MaterialStateProperty.all(
+            const EdgeInsets.symmetric(vertical: 16),
           ),
+          shape: MaterialStateProperty.all(
+            RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(SignupStyles.borderRadius),
+            ),
+          ),
+          // 스플래시 효과 제거
+          splashFactory: NoSplash.splashFactory,
+          overlayColor: MaterialStateProperty.resolveWith<Color>((
+            Set<MaterialState> states,
+          ) {
+            if (states.contains(MaterialState.pressed)) {
+              return SignupStyles.primaryRed.withOpacity(0.1);
+            }
+            return Colors.transparent;
+          }),
         ),
         child: const Text('가입하기', style: SignupStyles.buttonStyle),
       ),

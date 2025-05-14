@@ -364,6 +364,9 @@ class SignupController {
           break;
         case 'email':
           _checkDuplicate('user_email', controller.text + _selectedDomain);
+          if (_isEmailDuplicate && focusNodes['email'] != null) {
+            showTooltip(focusNodes['email']!, 'email');
+          }
           break;
       }
     } else if (focusNode != null && !focusNode.hasFocus) {

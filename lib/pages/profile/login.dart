@@ -7,30 +7,6 @@ import 'package:tomapto/widgets/navbar.dart';
 import 'package:tomapto/pages/profile/profile.dart';
 import 'package:tomapto/pages/profile/signup.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized(); // Flutter 바인딩 초기화 (비동기 작업 전 필요)
-  await dotenv.load(fileName: ".env");
-  runApp(const MyApp());
-}
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'TOMAPTO 로그인',
-      theme: ThemeData(
-        primarySwatch: Colors.red,
-        visualDensity: VisualDensity.adaptivePlatformDensity,
-        fontFamily: 'Pretendard',
-      ),
-      home: const LoginPage(), // 로그인 페이지를 홈 화면으로 설정
-    );
-  }
-}
-
 // 커스텀 텍스트 필드 위젯
 class CustomTextField extends StatelessWidget {
   final TextEditingController? controller;
