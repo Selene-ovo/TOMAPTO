@@ -729,7 +729,9 @@ class _SignUpPageState extends State<SignUpPage> {
   }
 
   Widget _buildEmailField() {
+    // 포커스 상태를 처음에 명시적으로 읽어서 UI에 반영되게 함
     final bool hasEmailFocus = _focusNodes['email']?.hasFocus ?? false;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -762,7 +764,7 @@ class _SignUpPageState extends State<SignUpPage> {
                   (!_signupController.isEmailValid ||
                           _signupController.isEmailDuplicate)
                       ? SignupStyles.primaryRed
-                      : _focusNodes['email']!.hasFocus
+                      : hasEmailFocus
                       ? Theme.of(context).colorScheme.secondary
                       : SignupStyles.borderColor,
               width: 1.0,
@@ -852,127 +854,153 @@ class _SignUpPageState extends State<SignUpPage> {
         ),
 
         // 툴팁 추가 (필요 시 표시됨) - isEmailDuplicate일 때만 표시
-        if (_signupController.isEmailDuplicate &&
-            !_focusNodes['email']!.hasFocus)
-          // 이메일 인증번호 요청 버튼
+        if (_signupController.isEmailDuplicate && !hasEmailFocus)
           Padding(
-            padding: const EdgeInsets.only(top: 8.0),
+            padding: const EdgeInsets.only(top: 4),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                if (!_signupController.isEmailVerified &&
-                    !_signupController.isVerificationSent)
-                  ElevatedButton(
-                    onPressed: () {
-                      // 이메일이 유효한지 확인
-                      final email =
-                          _controllers['email']!.text +
-                          _signupController.selectedDomain;
-                      if (email.isNotEmpty) {
-                        // 중복 확인 후 인증 절차 진행
-                        if (_signupController.isEmailDuplicate) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('이미 사용 중인 이메일입니다.')),
-                          );
-                          // 툴팁 표시
-                          _signupController.showTooltip(
-                            _focusNodes['email']!,
-                            'email',
-                          );
-                        } else {
-                          _signupController.sendVerificationEmail(email);
-                        }
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('이메일을 입력해주세요.')),
-                        );
-                      }
-                    },
-                    style: ButtonStyle(
-                      backgroundColor: MaterialStateProperty.all(
-                        Colors.grey[200],
-                      ),
-                      foregroundColor: MaterialStateProperty.all(
-                        SignupStyles.primaryText,
-                      ),
-                      shape: MaterialStateProperty.all(
-                        RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      minimumSize: MaterialStateProperty.all(
-                        const Size(100, 36),
-                      ),
-                      splashFactory: NoSplash.splashFactory,
-                    ),
-                    child: const Text(
-                      '인증번호 받기',
-                      style: TextStyle(fontSize: 12),
-                    ),
+                Icon(
+                  Icons.error_outline,
+                  size: 14,
+                  color: SignupStyles.primaryRed,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '이미 사용 중인 이메일입니다.',
+                  style: TextStyle(
+                    color: SignupStyles.primaryRed,
+                    fontSize: 12,
+                    fontFamily: 'Pretendard',
                   ),
-
-                if (!_signupController.isEmailVerified &&
-                    _signupController.isVerificationSent)
-                  ElevatedButton(
-                    onPressed: () {
-                      final email =
-                          _controllers['email']!.text +
-                          _signupController.selectedDomain;
-                      _signupController.sendVerificationEmail(email);
-                    },
-                    style: ButtonStyle(
-                      backgroundColor: MaterialStateProperty.all(
-                        Colors.grey[200],
-                      ),
-                      foregroundColor: MaterialStateProperty.all(
-                        SignupStyles.primaryText,
-                      ),
-                      shape: MaterialStateProperty.all(
-                        RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      minimumSize: MaterialStateProperty.all(
-                        const Size(100, 36),
-                      ),
-                      splashFactory: NoSplash.splashFactory,
-                    ),
-                    child: const Text(
-                      '인증번호 재발급',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                  ),
-
-                if (_signupController.isEmailVerified)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.green[50],
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.green),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.check_circle, color: Colors.green, size: 14),
-                        SizedBox(width: 4),
-                        Text(
-                          '인증 완료',
-                          style: TextStyle(
-                            color: Colors.green,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                ),
               ],
             ),
           ),
+
+        // 이메일 인증번호 요청 버튼
+        Padding(
+          padding: const EdgeInsets.only(top: 8.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              if (!_signupController.isEmailVerified &&
+                  !_signupController.isVerificationSent)
+                ElevatedButton(
+                  onPressed: () {
+                    // 이메일이 유효한지 확인
+                    final email =
+                        _controllers['email']!.text +
+                        _signupController.selectedDomain;
+                    if (email.isNotEmpty) {
+                      // 중복 확인 후 인증 절차 진행
+                      if (_signupController.isEmailDuplicate) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('이미 사용 중인 이메일입니다.')),
+                        );
+                        // 툴팁 표시
+                        _signupController.showTooltip(
+                          _focusNodes['email']!,
+                          'email',
+                        );
+                      } else {
+                        _signupController.sendVerificationEmail(email);
+                      }
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('이메일을 입력해주세요.')),
+                      );
+                    }
+                  },
+                  style: ButtonStyle(
+                    backgroundColor: MaterialStateProperty.all(
+                      Color(0xFF000000),
+                    ),
+                    foregroundColor: MaterialStateProperty.all(
+                      Color(0xFFFFFFFF),
+                    ),
+                    shape: MaterialStateProperty.all(
+                      RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    minimumSize: MaterialStateProperty.all(const Size(100, 36)),
+                    splashFactory: NoSplash.splashFactory,
+                  ),
+                  child: const Text(
+                    '인증번호 받기',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontFamily: 'Pretendard',
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+
+              if (!_signupController.isEmailVerified &&
+                  _signupController.isVerificationSent)
+                ElevatedButton(
+                  onPressed: () {
+                    final email =
+                        _controllers['email']!.text +
+                        _signupController.selectedDomain;
+                    _signupController.sendVerificationEmail(email);
+                  },
+                  style: ButtonStyle(
+                    backgroundColor: MaterialStateProperty.all(
+                      Colors.grey[200],
+                    ),
+                    foregroundColor: MaterialStateProperty.all(
+                      SignupStyles.primaryText,
+                    ),
+                    shape: MaterialStateProperty.all(
+                      RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    minimumSize: MaterialStateProperty.all(const Size(100, 36)),
+                    splashFactory: NoSplash.splashFactory,
+                  ),
+                  child: const Text(
+                    '인증번호 재발급',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontFamily: 'Pretendard',
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+
+              if (_signupController.isEmailVerified)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.green[50],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.check_circle, color: Colors.green, size: 14),
+                      SizedBox(width: 4),
+                      Text(
+                        '인증 완료',
+                        style: TextStyle(
+                          fontFamily: 'Pretendard',
+                          color: Colors.green,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
 
         // 인증번호 입력 필드
         if (_signupController.isVerificationSent &&
@@ -1056,7 +1084,7 @@ class _SignUpPageState extends State<SignUpPage> {
 
                   // 인증번호 확인 버튼
                   Padding(
-                    padding: const EdgeInsets.only(left: 12, top: 32),
+                    padding: const EdgeInsets.only(left: 12, top: 28),
                     child: ElevatedButton(
                       onPressed:
                           _signupController.verificationTimeLeft > 0
@@ -1091,11 +1119,18 @@ class _SignUpPageState extends State<SignUpPage> {
                           ),
                         ),
                         minimumSize: MaterialStateProperty.all(
-                          const Size(80, 56),
+                          const Size(60, 52),
                         ),
                         splashFactory: NoSplash.splashFactory,
                       ),
-                      child: const Text('확인', style: TextStyle(fontSize: 14)),
+                      child: const Text(
+                        '확인',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontFamily: 'Pretendard',
+                          fontSize: 16,
+                        ),
+                      ),
                     ),
                   ),
                 ],
