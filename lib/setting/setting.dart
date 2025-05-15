@@ -5,6 +5,7 @@ import 'mapSetting.dart';
 import 'naviSetting.dart';
 import 'moveHistory.dart';
 import 'termsPolicy.dart';
+import 'deleteID.dart';
 // Import ProfilePage
 import 'package:tomapto/pages/profile/profile.dart'; // 프로필 페이지 import 추가
 
@@ -133,6 +134,7 @@ class SettingsScreen extends StatelessWidget {
       ),
     );
   }
+  
 
   Widget _buildMenuItem(
     BuildContext context, {
@@ -201,6 +203,12 @@ class SettingsScreen extends StatelessWidget {
         child: InkWell(
           onTap: () {
             // 회원탈퇴 동작
+              Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const DeleteIDScreen(),
+            ),
+          );
           },
           child: const Padding(
             padding: EdgeInsets.symmetric(vertical: 20),
