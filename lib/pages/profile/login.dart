@@ -6,6 +6,7 @@ import 'package:tomapto/controllers/account/login_controller.dart';
 import 'package:tomapto/widgets/navbar.dart';
 import 'package:tomapto/pages/profile/profile.dart';
 import 'package:tomapto/pages/profile/signup.dart';
+import 'password_reset.dart'; 
 
 // 커스텀 텍스트 필드 위젯
 class CustomTextField extends StatelessWidget {
@@ -159,9 +160,10 @@ class _LoginPageState extends State<LoginPage> {
 
   // 비밀번호 찾기 네비게이션
   void _navigateToPasswordReset() {
-    ScaffoldMessenger.of(
+    Navigator.push(
       context,
-    ).showSnackBar(const SnackBar(content: Text('비밀번호 찾기 페이지로 이동합니다')));
+      MaterialPageRoute(builder: (context) => const PasswordResetPage()),
+    );
   }
 
   // 회원가입 네비게이션
