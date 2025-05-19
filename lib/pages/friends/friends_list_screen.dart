@@ -1,3 +1,4 @@
+// friends_list_screen.dart
 import 'package:flutter/material.dart';
 import 'package:tomapto/widgets/ad_placeholder.dart';
 import 'package:http/http.dart' as http;
@@ -16,6 +17,7 @@ import 'package:tomapto/pages/profile/login.dart';
 import 'package:tomapto/services/real_time_location_service.dart';
 import 'package:tomapto/pages/map/naver_map.dart';
 import 'package:tomapto/pages/profile/profile.dart';
+import 'package:tomapto/widgets/drawer_widget.dart';
 
 class FriendScreen extends StatefulWidget {
   @override
@@ -38,6 +40,9 @@ class _FriendScreenState extends State<FriendScreen> {
   // 로그인 상태
   bool _isLoggedIn = false;
   bool _isLoading = true;
+
+  // 검색창 포커스 관리
+  final FocusNode _searchFocus = FocusNode();
 
   @override
   void initState() {
@@ -124,6 +129,7 @@ class _FriendScreenState extends State<FriendScreen> {
   @override
   void dispose() {
     _searchController.dispose();
+    _searchFocus.dispose();
     // 소켓 서비스 정리
     if (_isLoggedIn) {
       SocketService().dispose();
@@ -138,12 +144,8 @@ class _FriendScreenState extends State<FriendScreen> {
       _currentNavIndex = index;
     });
 
-    print('_handleNavIndexChanged: index=$index, _isLoggedIn=$_isLoggedIn');
-
     // 로그인이 필요한 탭(인덱스 1,2,3)이고 로그인되지 않은 경우
     if (!_isLoggedIn && index != 0) {
-      print('로그인 필요 모달 표시');
-
       // 직접 AlertDialog를 사용하여 로그인 필요 메시지 표시
       showDialog(
         context: context,
@@ -233,71 +235,6 @@ class _FriendScreenState extends State<FriendScreen> {
     }
   }
 
-  // 사이드 메뉴 표시
-  void _showSideMenu(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) {
-        return Container(
-          padding: EdgeInsets.symmetric(vertical: 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: Icon(Icons.person_add),
-                title: Row(
-                  children: [
-                    Text('친구 추가'),
-                    SizedBox(width: 8),
-                    if (_newRequestsCount > 0)
-                      Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.red,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          '$_newRequestsCount',
-                          style: TextStyle(color: Colors.white, fontSize: 12),
-                        ),
-                      ),
-                  ],
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder:
-                          (context) => FriendsAddPage(initialSearchTerm: ''),
-                    ),
-                  ).then((_) {
-                    _fetchFriendsFromServer();
-                    _fetchFriendRequestsCount();
-                  });
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.block),
-                title: Text('차단 목록'),
-                onTap: () {
-                  Navigator.pop(context);
-                  // 차단 목록 페이지로 이동
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text('차단 목록 기능은 준비 중입니다')));
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   // API 서버 기본 URL 가져오기
   String _getApiBaseUrl() {
     String baseUrl = dotenv.env['API_BASE_URL'] ?? 'http://localhost:8080/api';
@@ -340,11 +277,15 @@ class _FriendScreenState extends State<FriendScreen> {
             action: SnackBarAction(
               label: '확인',
               onPressed: () {
-                // 친구 추가 페이지로 이동하고 요청 탭으로 전환
+                // 친구 추가 페이지로 이동하고 요청 탭으로 전환 (initialTabIndex = 1)
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => FriendsAddPage(initialSearchTerm: ''),
+                    builder:
+                        (context) => FriendsAddPage(
+                          initialSearchTerm: '',
+                          initialTabIndex: 1, // 요청 알림 탭으로 설정 (인덱스 1)
+                        ),
                   ),
                 ).then((_) => _fetchFriendsFromServer()); // 돌아왔을 때 친구 목록 새로고침
               },
@@ -754,55 +695,78 @@ class _FriendScreenState extends State<FriendScreen> {
     return false;
   }
 
+  // 요청 및 친구 목록 새로고침을 위한 콜백
+  void _onRequestsUpdated() {
+    _fetchFriendsFromServer();
+    _fetchFriendRequestsCount();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
+      // 드로어 위젯 사용 방식 수정
+      drawer: Drawer(
+        // 65% 너비 설정
+        width: MediaQuery.of(context).size.width * 0.65,
+        // 드로어 위젯을 자식으로 추가
+        child:
+            _isLoggedIn
+                ? DrawerWidget(
+                  newRequestsCount: _newRequestsCount,
+                  onRequestsUpdated: _onRequestsUpdated,
+                )
+                : Container(), // 로그인되지 않은 경우 빈 컨테이너
+      ),
+
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
         leading: Stack(
           children: [
-            IconButton(
-              icon: Icon(Icons.menu, color: Colors.black),
-              onPressed: () {
-                if (!_isLoggedIn) {
-                  // 로그인 안된 경우 로그인 다이얼로그 표시
-                  showDialog(
-                    context: context,
-                    builder:
-                        (context) => AlertDialog(
-                          title: Text('로그인 필요'),
-                          content: Text('로그인이 필요한 서비스입니다'),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: Text('취소'),
-                            ),
-                            TextButton(
-                              style: TextButton.styleFrom(
-                                backgroundColor: Color(0xFFFB233B),
-                                foregroundColor: Colors.white,
-                              ),
-                              onPressed: () {
-                                Navigator.pop(context);
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => LoginPage(),
+            Builder(
+              builder:
+                  (context) => IconButton(
+                    icon: Icon(Icons.menu, color: Colors.black),
+                    onPressed: () {
+                      if (!_isLoggedIn) {
+                        // 로그인 안된 경우 로그인 다이얼로그 표시
+                        showDialog(
+                          context: context,
+                          builder:
+                              (context) => AlertDialog(
+                                title: Text('로그인 필요'),
+                                content: Text('로그인이 필요한 서비스입니다'),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context),
+                                    child: Text('취소'),
                                   ),
-                                );
-                              },
-                              child: Text('로그인하기'),
-                            ),
-                          ],
-                        ),
-                  );
-                  return;
-                }
-                // 사이드 메뉴 표시
-                _showSideMenu(context);
-              },
+                                  TextButton(
+                                    style: TextButton.styleFrom(
+                                      backgroundColor: Color(0xFFFB233B),
+                                      foregroundColor: Colors.white,
+                                    ),
+                                    onPressed: () {
+                                      Navigator.pop(context);
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => LoginPage(),
+                                        ),
+                                      );
+                                    },
+                                    child: Text('로그인하기'),
+                                  ),
+                                ],
+                              ),
+                        );
+                        return;
+                      }
+                      // 드로어 열기
+                      Scaffold.of(context).openDrawer();
+                    },
+                  ),
             ),
             if (_newRequestsCount > 0)
               Positioned(
@@ -866,7 +830,7 @@ class _FriendScreenState extends State<FriendScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 56.0, vertical: 10.0),
           child: Row(
             children: [
-              // 검색창 (돋보기 없이)
+              // 검색창 (검색창 내 텍스트 중앙 정렬)
               Expanded(
                 child: Container(
                   height: 35,
@@ -874,11 +838,13 @@ class _FriendScreenState extends State<FriendScreen> {
                     color: Colors.grey[200],
                     borderRadius: BorderRadius.circular(24),
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 20.0),
+                  child: Center(
+                    // 여기에 Center 위젯 추가
                     child: TextField(
                       controller: _searchController,
+                      focusNode: _searchFocus,
                       style: TextStyle(fontSize: 14),
+                      textAlignVertical: TextAlignVertical.center, // 수직 중앙 정렬
                       decoration: InputDecoration(
                         hintText: '닉네임을 입력해주세요.',
                         hintStyle: TextStyle(
@@ -886,13 +852,16 @@ class _FriendScreenState extends State<FriendScreen> {
                           color: Colors.grey[500],
                         ),
                         border: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(vertical: 11),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 0,
+                        ), // 여기를 수정
+                        isDense: true, // 더 조밀한 레이아웃
                       ),
                       onChanged: (value) {
-                        // 실시간 검색 기능은 유지하되, 추가 기능은 없음
+                        // 실시간 검색 기능은 유지
                       },
-                      onSubmitted:
-                          (text) => _searchFriends(text), // 엔터키 누르면 검색 실행
+                      onSubmitted: (text) => _searchFriends(text),
                     ),
                   ),
                 ),
@@ -917,8 +886,16 @@ class _FriendScreenState extends State<FriendScreen> {
           ),
         ),
 
-        // 광고 플레이스홀더 (기존 스타일 유지)
-        AdPlaceholder(),
+        // 광고 플레이스홀더를 이미지로 대체
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+          child: Image.asset(
+            'assets/icons/adsense_banner.png',
+            width: double.infinity,
+            height: 50,
+            fit: BoxFit.cover,
+          ),
+        ),
         SizedBox(height: 5),
 
         // 빨간색 선 위에 친구 목록 텍스트 위치
@@ -933,10 +910,7 @@ class _FriendScreenState extends State<FriendScreen> {
                 child: Center(
                   child: Text(
                     '친구 목록',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w900, // 더 굵게 수정
-                      fontSize: 15,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.w400, fontSize: 15),
                   ),
                 ),
               ),
@@ -975,8 +949,8 @@ class _FriendScreenState extends State<FriendScreen> {
                               },
                               child: ListTile(
                                 contentPadding: EdgeInsets.symmetric(
-                                  horizontal: 25,
-                                  vertical: 4,
+                                  horizontal: 24,
+                                  vertical: 0,
                                 ),
                                 leading: Stack(
                                   children: [
@@ -1003,7 +977,7 @@ class _FriendScreenState extends State<FriendScreen> {
                                         size: 30,
                                       ),
                                     ),
-                                    // 상태 표시 아이콘을 오른쪽 위로 이동 (온라인 상태 표시) - 여기가 수정된 부분
+                                    // 상태 표시 아이콘 - 오른쪽 위 위치
                                     Positioned(
                                       top: 2,
                                       right: 2,

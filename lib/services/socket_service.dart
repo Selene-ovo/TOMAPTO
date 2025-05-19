@@ -243,13 +243,19 @@ class SocketService {
     }
 
     // 소켓으로 위치 공유 시작 이벤트 전송 - 일방향 공유로 설정
+    // 명확한 매핑으로 방향성 지정
     _socket!.emit('start_location_sharing', {
       'friend_id': friendId,
       'duration_minutes': durationMinutes, // null일 경우 무제한
       'unidirectional': true, // 일방향 공유 플래그 추가
+      'direction': 'me_to_friend', // 명확히 방향 지정 - 내가 친구에게 공유
+      'sender_id': '', // 현재 사용자 ID - 서버에서 socket.user.id로 대체
+      'receiver_id': friendId, // 수신자 ID - 명확하게 전달
     });
 
-    print('위치 공유 시작: $friendId, 기간: ${durationMinutes ?? "무제한"}, 일방향: true');
+    print(
+      '위치 공유 시작 요청: $friendId, 기간: ${durationMinutes ?? "무제한"}, 일방향: true, 방향: me_to_friend',
+    );
   }
 
   // 위치 공유 종료

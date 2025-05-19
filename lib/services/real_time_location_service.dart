@@ -1,4 +1,3 @@
-// Enhanced real_time_location_service.dart
 import 'dart:async';
 import 'package:geolocator/geolocator.dart';
 import 'package:tomapto/services/location_service.dart';
@@ -24,14 +23,17 @@ class RealTimeLocationService {
   // 백그라운드 작업 타이머
   Timer? _backgroundTimer;
 
+  // 위치 공유 활성화 여부 - 추가된 플래그
+  bool _isSharingEnabled = false;
+
   // 현재 위치 스트림 설정
   LocationSettings get _locationSettings => LocationSettings(
     accuracy: LocationAccuracy.high,
-    distanceFilter: 5, // 10m -> 5m로 변경 (더 작은 거리 변화에도 업데이트)
+    distanceFilter: 5,
     timeLimit: Duration(seconds: _updateIntervalSeconds),
   );
 
-  // 위치 업데이트 시작
+  // 위치 업데이트 시작 - 위치 추적만 활성화
   Future<bool> startLocationUpdates() async {
     // 이미 실행 중이면 중복 실행 방지
     if (_isRunning) return true;
@@ -50,12 +52,6 @@ class RealTimeLocationService {
       if (!hasPermission) {
         print('위치 권한이 없거나 위치 서비스가 비활성화되어 있습니다.');
         return false;
-      }
-
-      // 소켓 서비스 초기화 - 위치 업데이트 전에 소켓 연결 확인
-      final socketService = SocketService();
-      if (!socketService.isConnected) {
-        await socketService.initSocket();
       }
 
       // 스트림 구독 시작
@@ -96,26 +92,23 @@ class RealTimeLocationService {
     _backgroundTimer?.cancel();
 
     // 백그라운드에서도 주기적으로 위치를 업데이트하기 위한 타이머
-    _backgroundTimer = Timer.periodic(
-      Duration(minutes: 5), // 5분마다
-      (timer) async {
-        // 로그인 상태인지 확인
-        final prefs = await SharedPreferences.getInstance();
-        final token = prefs.getString('token');
-        if (token == null) {
-          timer.cancel();
-          stopLocationUpdates();
-          return;
-        }
+    _backgroundTimer = Timer.periodic(Duration(minutes: 5), (timer) async {
+      // 로그인 상태인지 확인
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+      if (token == null) {
+        timer.cancel();
+        stopLocationUpdates();
+        return;
+      }
 
-        // 백그라운드에서 위치 업데이트
-        try {
-          await updateLocationOnce();
-        } catch (e) {
-          print('백그라운드 위치 업데이트 오류: $e');
-        }
-      },
-    );
+      // 백그라운드에서 위치 업데이트
+      try {
+        await updateLocationOnce();
+      } catch (e) {
+        print('백그라운드 위치 업데이트 오류: $e');
+      }
+    });
   }
 
   // 위치 업데이트 중지
@@ -130,10 +123,14 @@ class RealTimeLocationService {
     _backgroundTimer = null;
 
     _isRunning = false;
+
+    // 위치 공유도 비활성화
+    _isSharingEnabled = false;
+
     print('실시간 위치 업데이트 서비스 중지됨');
   }
 
-  // 위치 변경 이벤트 핸들러
+  // 위치 변경 이벤트 핸들러 (수정됨)
   void _onPositionUpdate(Position position) async {
     print(
       '새 위치 수신: ${position.latitude}, ${position.longitude}, 정확도: ${position.accuracy}, 방향: ${position.heading}',
@@ -141,23 +138,7 @@ class RealTimeLocationService {
 
     // 서버에 위치 업데이트 전송
     try {
-      // 소켓을 통한 실시간 위치 업데이트
-      final socketService = SocketService();
-      if (!socketService.isConnected) {
-        await socketService.initSocket();
-      }
-
-      if (socketService.isConnected) {
-        socketService.sendLocationUpdate(
-          position.latitude,
-          position.longitude,
-          position.heading,
-          position.accuracy,
-        );
-      }
-
-      // REST API를 통한 위치 업데이트 (서버 DB 저장용)
-      // 중요: 위치 공유 자동 활성화는 제거
+      // DB에 위치 정보 저장 (API 호출) - 항상 실행
       bool success = await LocationService.updateMyLocation(
         position.latitude,
         position.longitude,
@@ -166,19 +147,40 @@ class RealTimeLocationService {
       );
 
       if (success) {
-        print('서버에 위치 업데이트 성공');
+        print('서버 DB에 위치 업데이트 성공');
       } else {
-        print('서버에 위치 업데이트 실패');
+        print('서버 DB에 위치 업데이트 실패');
+      }
+
+      // 위치 공유가 활성화된 경우에만 소켓을 통해 실시간 공유
+      if (_isSharingEnabled) {
+        // 소켓을 통한 실시간 위치 업데이트
+        final socketService = SocketService();
+        if (!socketService.isConnected) {
+          await socketService.initSocket();
+        }
+
+        if (socketService.isConnected) {
+          socketService.sendLocationUpdate(
+            position.latitude,
+            position.longitude,
+            position.heading,
+            position.accuracy,
+          );
+          print('소켓을 통한 실시간 위치 공유 업데이트 전송');
+        }
       }
     } catch (e) {
       print('위치 업데이트 중 오류 발생: $e');
 
-      // 오류 발생 시 소켓 재연결 시도
-      try {
-        final socketService = SocketService();
-        await socketService.reconnect();
-      } catch (reconnectError) {
-        print('소켓 재연결 시도 중 오류: $reconnectError');
+      // 오류 발생 시 소켓 재연결 시도 (위치 공유가 활성화된 경우에만)
+      if (_isSharingEnabled) {
+        try {
+          final socketService = SocketService();
+          await socketService.reconnect();
+        } catch (reconnectError) {
+          print('소켓 재연결 시도 중 오류: $reconnectError');
+        }
       }
     }
   }
@@ -200,6 +202,21 @@ class RealTimeLocationService {
   // 현재 서비스 실행 상태 반환
   bool get isRunning => _isRunning;
 
+  // 위치 공유 상태 반환
+  bool get isSharingEnabled => _isSharingEnabled;
+
+  // 위치 공유 활성화 (추가된 메서드)
+  void enableSharing() {
+    _isSharingEnabled = true;
+    print('위치 공유 기능 활성화됨');
+  }
+
+  // 위치 공유 비활성화 (추가된 메서드)
+  void disableSharing() {
+    _isSharingEnabled = false;
+    print('위치 공유 기능 비활성화됨');
+  }
+
   // 수동으로 위치 업데이트 요청
   Future<bool> updateLocationOnce() async {
     try {
@@ -215,27 +232,31 @@ class RealTimeLocationService {
         desiredAccuracy: LocationAccuracy.high,
       );
 
-      // 소켓을 통한 실시간 위치 업데이트
-      final socketService = SocketService();
-      if (!socketService.isConnected) {
-        await socketService.initSocket();
-      }
-
-      if (socketService.isConnected) {
-        socketService.sendLocationUpdate(
-          position.latitude,
-          position.longitude,
-          position.heading,
-          position.accuracy,
-        );
-      }
-
+      // DB에 위치 정보 저장
       bool success = await LocationService.updateMyLocation(
         position.latitude,
         position.longitude,
         position.heading,
         position.accuracy,
       );
+
+      // 위치 공유가 활성화된 경우에만 소켓으로 전송
+      if (_isSharingEnabled) {
+        // 소켓을 통한 실시간 위치 업데이트
+        final socketService = SocketService();
+        if (!socketService.isConnected) {
+          await socketService.initSocket();
+        }
+
+        if (socketService.isConnected) {
+          socketService.sendLocationUpdate(
+            position.latitude,
+            position.longitude,
+            position.heading,
+            position.accuracy,
+          );
+        }
+      }
 
       return success;
     } catch (e) {

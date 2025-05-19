@@ -22,12 +22,14 @@ Future<void> initLocationServiceIfLoggedIn() async {
     final rememberMe = prefs.getBool('remember_me') ?? false;
     final isLoggedIn = prefs.getBool('is_logged_in') ?? false;
 
-    // 로그인 상태인 경우에만 위치 서비스 시작
+    // 로그인 상태인 경우에만 위치 추적 서비스 시작 (DB 저장용)
     if (token != null && (rememberMe || isLoggedIn)) {
       final locationService = RealTimeLocationService();
       if (!locationService.isRunning) {
         print('앱 시작 시 위치 서비스 초기화 중...');
         await locationService.startLocationUpdates();
+        // 소켓 위치 공유는 활성화하지 않음 - 사용자가 명시적으로 활성화해야 함
+        print('위치 추적 서비스 시작됨 (DB 저장용) - 공유는 활성화되지 않음');
       }
     }
   } catch (e) {
