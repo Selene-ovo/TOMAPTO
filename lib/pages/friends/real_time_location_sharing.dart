@@ -50,12 +50,12 @@ class _RealTimeLocationSharingPageState
     _initSocket();
     _loadLocations();
 
-    // 10초마다 위치 정보 갱신 (API 호출) - 백업 메커니즘
-    _locationUpdateTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+    // 1초마다 위치 정보 갱신 (API 호출) - 백업 메커니즘
+    _locationUpdateTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       // 마지막 업데이트 후 10초 이상 지났으면 API로 다시 로드
       final now = DateTime.now();
       if (_lastUpdateTime == null ||
-          now.difference(_lastUpdateTime!).inSeconds > 10) {
+          now.difference(_lastUpdateTime!).inSeconds > 1) {
         _loadLocations();
       }
     });
@@ -488,92 +488,6 @@ class _RealTimeLocationSharingPageState
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('위치 공유 시작 중 오류가 발생했습니다.')));
-    }
-  }
-
-  // 위치 공유 종료 버튼 추가 - 필요한 경우 구현
-  Future<void> _stopLocationSharing() async {
-    try {
-      setState(() {
-        _isLoading = true;
-      });
-
-      // 종료 확인 다이얼로그
-      final result =
-          await showDialog<bool>(
-            context: context,
-            builder:
-                (context) => AlertDialog(
-                  title: Text('위치 공유 종료'),
-                  content: Text(
-                    '${widget.selectedFriend['name']}님에게 내 위치 공유를 종료하시겠습니까?',
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(false),
-                      child: Text('취소'),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(true),
-                      style: TextButton.styleFrom(foregroundColor: Colors.red),
-                      child: Text('종료'),
-                    ),
-                  ],
-                ),
-          ) ??
-          false;
-
-      if (!result) {
-        setState(() {
-          _isLoading = false;
-        });
-        return;
-      }
-
-      // 소켓을 통한 위치 공유 종료 요청
-      if (!_socketService.isConnected) {
-        await _socketService.initSocket();
-      }
-      _socketService.stopLocationSharing(widget.selectedFriend['id']);
-
-      // API를 통한 위치 공유 종료 요청
-      final success = await LocationService.endLocationSharing(
-        widget.selectedFriend['id'],
-      );
-
-      // 다른 친구들과 위치 공유가 있는지 확인
-      final activeShares = await LocationService.getActiveLocationSharings();
-      if (activeShares == null || activeShares.isEmpty) {
-        // 더 이상 공유 중인 친구가 없으면 전체 공유 기능 비활성화
-        final realTimeLocationService = RealTimeLocationService();
-        realTimeLocationService.disableSharing();
-        print('모든 위치 공유가 종료되어 공유 기능 비활성화됨');
-      }
-
-      setState(() {
-        _isLoading = false;
-        if (success) {
-          _iAmSharingLocation = false;
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('내 위치 공유가 종료되었습니다')));
-
-          // 위치 정보 새로고침
-          _loadLocations();
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('위치 공유 종료 요청 실패. 나중에 다시 시도하세요.')),
-          );
-        }
-      });
-    } catch (e) {
-      print('위치 공유 종료 오류: $e');
-      setState(() {
-        _isLoading = false;
-      });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('위치 공유 종료 중 오류가 발생했습니다.')));
     }
   }
 
