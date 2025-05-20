@@ -202,6 +202,7 @@ class LocationService {
       // 토큰 가져오기
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token');
+      final userId = prefs.getString('user_id');
 
       if (token == null) {
         print('로그인이 필요합니다');
@@ -216,10 +217,13 @@ class LocationService {
 
       final apiBaseUrl = getApiBaseUrl();
 
-      // 요청 바디 생성 - 중요: 일방향 공유로 설정 (양방향 공유가 아님)
+      // 요청 바디 생성 - 명확한 방향성 지정
       final Map<String, dynamic> requestBody = {
         'friend_id': friendId,
         'unidirectional': true, // 일방향 공유 플래그 추가
+        'direction': 'me_to_friend', // 방향성 명확히 지정
+        'sharer_id': userId, // 명시적으로 내가 공유자임을 지정
+        'sharee_id': friendId, // 명시적으로 친구가 수신자임을 지정
       };
 
       // durationMinutes가 null이 아니고 양수인 경우에만 추가
@@ -240,7 +244,7 @@ class LocationService {
 
       // 응답 상태 코드에 따른 처리
       if (response.statusCode == 200) {
-        print('위치 공유 요청 성공 - 일방향 공유');
+        print('위치 공유 요청 성공 - 내가 친구에게 공유');
         return true;
       } else {
         print('위치 공유 요청 실패: ${response.statusCode} - ${response.body}');
@@ -470,7 +474,7 @@ class LocationService {
         return false;
       }
 
-      // 토큰 유효성 검사
+      // 토큰 만료 확인
       if (TokenService.isTokenExpired(token)) {
         print('토큰이 만료되었습니다. 다시 로그인해주세요.');
         return false;
@@ -483,11 +487,11 @@ class LocationService {
         headers: {'Authorization': 'Bearer $token'},
       );
 
-      // 응답 상태 코드에 따른 처리
       if (response.statusCode == 200) {
         final List<dynamic> sharings = json.decode(response.body);
 
-        // 내가 공유자(sharer_id)인 경우만 확인
+        // 내가 공유자(sharer_id), 친구가 수신자(sharee_id)인 경우만 확인
+        // 즉, 내가 -> 친구에게 공유 중인 방향성
         for (var sharing in sharings) {
           if (sharing['sharer_id'] == userId &&
               sharing['sharee_id'] == friendId &&
@@ -513,7 +517,7 @@ class LocationService {
     }
   }
 
-  // 친구가 나에게 위치를 공유 중인지 확인하는 메서드
+  // 친구가 나에게 위치를 공유 중인지 확인하는 메서드 (친구 -> 나)
   static Future<bool> checkFriendIsSharingWith(String friendId) async {
     try {
       // 토큰 가져오기
@@ -526,7 +530,7 @@ class LocationService {
         return false;
       }
 
-      // 토큰 유효성 검사
+      // 토큰 만료 확인
       if (TokenService.isTokenExpired(token)) {
         print('토큰이 만료되었습니다. 다시 로그인해주세요.');
         return false;
@@ -539,11 +543,11 @@ class LocationService {
         headers: {'Authorization': 'Bearer $token'},
       );
 
-      // 응답 상태 코드에 따른 처리
       if (response.statusCode == 200) {
         final List<dynamic> sharings = json.decode(response.body);
 
-        // 친구가 공유자(sharer_id)인 경우만 확인
+        // 친구가 공유자(sharer_id), 내가 수신자(sharee_id)인 경우만 확인
+        // 즉, 친구 -> 나에게 공유 중인 방향성
         for (var sharing in sharings) {
           if (sharing['sharer_id'] == friendId &&
               sharing['sharee_id'] == userId &&

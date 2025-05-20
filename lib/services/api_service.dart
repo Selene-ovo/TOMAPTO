@@ -4,6 +4,8 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
+import 'package:tomapto/services/real_time_location_service.dart';
+import 'package:tomapto/services/socket_service.dart';
 
 class ApiService {
   static String getApiBaseUrl() {
@@ -124,6 +126,7 @@ class ApiService {
   // 로그아웃 요청
   static Future<Map<String, dynamic>> logout() async {
     try {
+      // API 기본 URL 가져오기
       final apiBaseUrl = getApiBaseUrl();
       final token = await getToken();
 
@@ -134,7 +137,18 @@ class ApiService {
 
       print('로그아웃 API 호출: $apiBaseUrl/account/logout');
 
-      // 서버에 로그아웃 요청
+      // 실시간 위치 업데이트 서비스 위치 공유 비활성화
+      try {
+        final realTimeLocationService = RealTimeLocationService();
+        // 위치 공유 비활성화 - 백그라운드 위치 추적은 유지
+        realTimeLocationService.disableSharing();
+        print('위치 공유 기능 비활성화됨');
+      } catch (e) {
+        print('위치 공유 비활성화 중 오류: $e');
+        // 오류가 발생해도 로그아웃 진행
+      }
+
+      // 서버에 로그아웃 요청 - 이 요청이 모든 위치 공유를 서버에서 비활성화함
       final response = await http.post(
         Uri.parse('$apiBaseUrl/account/logout'),
         headers: {
@@ -147,10 +161,21 @@ class ApiService {
       print('로그아웃 API 응답 코드: ${response.statusCode}');
       print('로그아웃 API 응답 데이터: ${response.body}');
 
+      // 소켓 연결 해제
+      try {
+        final socketService = SocketService();
+        socketService.disconnect();
+        print('소켓 연결 해제됨');
+      } catch (e) {
+        print('소켓 연결 해제 중 오류: $e');
+        // 오류가 발생해도 로그아웃 진행
+      }
+
       // 로컬 저장소에서 토큰과 사용자 정보 삭제
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('token');
       await prefs.remove('user_id');
+      await prefs.remove('is_logged_in');
       // remember_me 설정은 유지 (사용자 편의성 향상)
 
       // 응답 파싱 (실패하더라도 로컬에서는 로그아웃 처리)
@@ -164,9 +189,18 @@ class ApiService {
 
       // 오류가 발생하더라도 로컬에서는 로그아웃 처리
       try {
+        // 소켓 연결 해제
+        final socketService = SocketService();
+        socketService.disconnect();
+
+        // 위치 공유 비활성화
+        final realTimeLocationService = RealTimeLocationService();
+        realTimeLocationService.disableSharing();
+
         final prefs = await SharedPreferences.getInstance();
         await prefs.remove('token');
         await prefs.remove('user_id');
+        await prefs.remove('is_logged_in');
         // remember_me 설정은 유지 (사용자 편의성 향상)
 
         return {'success': true, 'message': '서버 연결 오류, 로컬에서 로그아웃 처리 완료'};

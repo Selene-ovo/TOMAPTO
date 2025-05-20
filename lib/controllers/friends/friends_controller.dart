@@ -46,6 +46,8 @@ class FriendsController {
   }
 
   // 검색 메서드
+  // friends_controller.dart 파일의 searchUsers 메서드
+
   Future<List<Map<String, dynamic>>> searchUsers(
     String searchTerm,
     Function setState,
@@ -70,7 +72,7 @@ class FriendsController {
         return [];
       }
 
-      // 결과 처리 - 여기서 각 결과의 상태 확인
+      // 결과 처리 - 명확한 불리언 타입으로 변환
       final processedResults =
           results.map((user) {
             // request_id가 있다면 문자열로 변환하여 저장
@@ -90,6 +92,18 @@ class FriendsController {
                 user['request_received'],
               );
             }
+
+            // 친구 관계 상태와 요청 상태를 확인하는 로그 추가
+            print(
+              '사용자 ${user['user_id']} 상태: 친구=${user['is_friend']}, 요청 보냄=${user['request_sent']}, 요청 받음=${user['request_received']}',
+            );
+            if (user.containsKey('friendship_status')) {
+              print('friendship_status: ${user['friendship_status']}');
+            }
+            if (user.containsKey('request_status')) {
+              print('request_status: ${user['request_status']}');
+            }
+
             return user;
           }).toList();
 
@@ -108,8 +122,10 @@ class FriendsController {
     }
   }
 
-  // 다양한 타입의 값을 불리언으로 변환하는 헬퍼 메서드
+  // 불리언 값 확인 함수 개선
   bool _getBoolValue(dynamic value) {
+    if (value == null) return false;
+
     if (value is bool) {
       return value;
     } else if (value is int) {

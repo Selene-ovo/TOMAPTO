@@ -12,9 +12,13 @@ import 'package:tomapto/controllers/friends/friends_controller.dart';
 
 class FriendsAddPage extends StatefulWidget {
   final String initialSearchTerm;
+  final int initialTabIndex; // 새로 추가된 파라미터
 
-  const FriendsAddPage({Key? key, this.initialSearchTerm = ''})
-    : super(key: key);
+  const FriendsAddPage({
+    Key? key,
+    this.initialSearchTerm = '',
+    this.initialTabIndex = 0, // 기본값은 '검색 결과' 탭 (0)
+  }) : super(key: key);
 
   @override
   _FriendsAddPageState createState() => _FriendsAddPageState();
@@ -47,7 +51,13 @@ class _FriendsAddPageState extends State<FriendsAddPage>
   void initState() {
     super.initState();
     _searchController.text = widget.initialSearchTerm;
-    _tabController = TabController(length: 2, vsync: this);
+
+    // 탭 컨트롤러에 초기 탭 인덱스 설정
+    _tabController = TabController(
+      length: 2,
+      vsync: this,
+      initialIndex: widget.initialTabIndex, // 위젯에서 전달된 초기 탭 인덱스 사용
+    );
 
     // 소켓 서비스 초기화
     _socketService = SocketService();
@@ -299,6 +309,8 @@ class _FriendsAddPageState extends State<FriendsAddPage>
 
   // 다양한 타입의 불리언 값 처리를 위한 헬퍼 메서드
   bool _getBoolValue(dynamic value) {
+    if (value == null) return false;
+
     if (value is bool) {
       return value;
     } else if (value is int) {
@@ -313,16 +325,16 @@ class _FriendsAddPageState extends State<FriendsAddPage>
   void _showUserOptions(Map<String, dynamic> user) {
     // 백엔드 로직에 맞춰 상태 확인
     bool isFriend =
-        user['is_friend'] == true &&
+        _getBoolValue(user['is_friend']) &&
         (user['friendship_status'] == 'active' ||
             user['friendship_status'] == null);
 
     // 요청 상태가 pending일 때만 요청 취소 옵션 표시
     bool isRequestSent =
-        user['request_sent'] == true &&
+        _getBoolValue(user['request_sent']) &&
         (user['request_status'] == 'pending' || user['request_status'] == null);
 
-    bool isRequestReceived = user['request_received'] == true;
+    bool isRequestReceived = _getBoolValue(user['request_received']);
 
     showDialog(
       context: context,
@@ -376,6 +388,16 @@ class _FriendsAddPageState extends State<FriendsAddPage>
                         Navigator.pop(context);
                         if (user['request_id'] != null) {
                           _cancelFriendRequest(user['request_id']);
+                          // 요청 취소 SnackBar 표시
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                '${user['user_nickname'] ?? user['user_id']}님에게 보낸 친구 요청을 취소했습니다',
+                              ),
+                              backgroundColor: Colors.black,
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
                         }
                       },
                       child: Container(
@@ -408,6 +430,16 @@ class _FriendsAddPageState extends State<FriendsAddPage>
                         Navigator.pop(context);
                         if (user['request_id'] != null) {
                           _acceptFriendRequest(user['request_id']);
+                          // 요청 수락 SnackBar 표시
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                '${user['user_nickname'] ?? user['user_id']}님의 친구 요청을 수락했습니다',
+                              ),
+                              backgroundColor: Colors.black,
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
                         }
                       },
                       child: Container(
@@ -427,7 +459,6 @@ class _FriendsAddPageState extends State<FriendsAddPage>
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w500,
-                              color: Colors.green,
                             ),
                             textAlign: TextAlign.left,
                           ),
@@ -440,6 +471,16 @@ class _FriendsAddPageState extends State<FriendsAddPage>
                       onTap: () {
                         Navigator.pop(context);
                         _sendFriendRequest(user['user_id']);
+                        // 요청 보내기 SnackBar 표시
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              '${user['user_nickname'] ?? user['user_id']}님에게 친구 요청을 보냈습니다',
+                            ),
+                            backgroundColor: Colors.black,
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
                       },
                       child: Container(
                         width: double.infinity,
@@ -478,6 +519,16 @@ class _FriendsAddPageState extends State<FriendsAddPage>
                           setState,
                         );
                         if (success) {
+                          // 친구 삭제 SnackBar 표시
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                '${user['user_nickname'] ?? user['user_id']}님을 친구 목록에서 삭제했습니다',
+                              ),
+                              backgroundColor: Colors.black,
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
                           await Future.delayed(Duration(milliseconds: 800));
                           _searchUsers();
                         }
@@ -510,6 +561,16 @@ class _FriendsAddPageState extends State<FriendsAddPage>
                         setState,
                       );
                       if (success) {
+                        // 친구 차단 SnackBar 표시
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              '${user['user_nickname'] ?? user['user_id']}님을 차단했습니다',
+                            ),
+                            backgroundColor: Colors.black,
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
                         _searchUsers();
                       }
                     },
@@ -583,11 +644,12 @@ class _FriendsAddPageState extends State<FriendsAddPage>
                       color: Colors.grey[200],
                       borderRadius: BorderRadius.circular(24),
                     ),
-                    child: Padding(
-                      padding: const EdgeInsets.only(left: 20.0),
+                    child: Center(
+                      // 여기에 Center 위젯 추가
                       child: TextField(
                         controller: _searchController,
                         style: TextStyle(fontSize: 14),
+                        textAlignVertical: TextAlignVertical.center, // 수직 중앙 정렬
                         decoration: InputDecoration(
                           hintText: '닉네임을 입력해주세요.',
                           hintStyle: TextStyle(
@@ -595,7 +657,11 @@ class _FriendsAddPageState extends State<FriendsAddPage>
                             color: Colors.grey[500],
                           ),
                           border: InputBorder.none,
-                          contentPadding: EdgeInsets.symmetric(vertical: 11),
+                          isDense: true, // 보다 조밀한 레이아웃
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 0, // 수직 패딩 제거
+                          ),
                         ),
                         onSubmitted: (_) => _searchUsers(),
                       ),
@@ -620,17 +686,43 @@ class _FriendsAddPageState extends State<FriendsAddPage>
             ),
           ),
 
-          // 광고 플레이스홀더
-          AdPlaceholder(),
+          // 광고 플레이스홀더를 이미지로 대체
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              vertical: 8.0,
+              horizontal: 16.0,
+            ),
+            child: Image.asset(
+              'assets/icons/adsense_banner.png',
+              width: double.infinity,
+              height: 50,
+              fit: BoxFit.cover,
+            ),
+          ),
           SizedBox(height: 5),
 
           // 탭바
-          TabBar(
-            controller: _tabController,
-            labelColor: Colors.black,
-            unselectedLabelColor: Colors.grey,
-            indicatorColor: Colors.red,
-            tabs: const [Tab(text: '검색 결과'), Tab(text: '요청 알림')],
+          Container(
+            width: MediaQuery.of(context).size.width, // 전체 화면 너비
+            child: TabBar(
+              controller: _tabController,
+              labelColor: Colors.black,
+              unselectedLabelColor: Colors.grey,
+              indicatorColor: Colors.red,
+              indicatorSize: TabBarIndicatorSize.tab, // 탭 너비에 맞춤
+              indicatorWeight: 3.0, // 인디케이터 두께
+              labelPadding: EdgeInsets.zero, // 패딩 제거
+              tabs: [
+                Container(
+                  width: MediaQuery.of(context).size.width / 2, // 화면 너비의 50%
+                  child: const Tab(text: '검색 결과'),
+                ),
+                Container(
+                  width: MediaQuery.of(context).size.width / 2, // 화면 너비의 50%
+                  child: const Tab(text: '요청 알림'),
+                ),
+              ],
+            ),
           ),
 
           // 구분선
@@ -673,25 +765,18 @@ class _FriendsAddPageState extends State<FriendsAddPage>
       itemBuilder: (context, index) {
         final user = _searchResults[index];
 
-        // 백엔드 로직에 맞춰 상태 확인
+        // 백엔드 로직에 맞춰 상태 확인 - 정확한 상태값으로 판단
         final bool isFriend =
-            user['is_friend'] == true &&
+            _getBoolValue(user['is_friend']) &&
             (user['friendship_status'] == 'active' ||
                 user['friendship_status'] == null);
 
         final bool isRequestSent =
-            user['request_sent'] == true &&
+            _getBoolValue(user['request_sent']) &&
             (user['request_status'] == 'pending' ||
                 user['request_status'] == null);
 
-        final bool isRequestReceived = user['request_received'] == true;
-
-        // 디버깅용 로그 (request_id 타입 확인)
-        if (user.containsKey('request_id')) {
-          print(
-            'User ${user['user_id']} request_id 타입: ${user['request_id'].runtimeType}, 값: ${user['request_id']}',
-          );
-        }
+        final bool isRequestReceived = _getBoolValue(user['request_received']);
 
         return Column(
           children: [
@@ -719,7 +804,7 @@ class _FriendsAddPageState extends State<FriendsAddPage>
                     // 친구인 경우 아무 버튼도 표시하지 않음
                     SizedBox.shrink()
                   else if (isRequestSent)
-                    // 아이콘 버튼만 표시
+                    // 요청 보낸 경우 더보기 버튼만 표시
                     IconButton(
                       icon: Icon(Icons.more_vert),
                       onPressed: () => _showUserOptions(user),
@@ -729,17 +814,20 @@ class _FriendsAddPageState extends State<FriendsAddPage>
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // 거절 버튼
+                        // 거절 버튼 - 크기 축소
                         Container(
+                          width: 36, // 크기 축소
+                          height: 36, // 크기 축소
                           decoration: BoxDecoration(
                             border: Border.all(color: Colors.grey[300]!),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: IconButton(
+                            padding: EdgeInsets.zero, // 패딩 제거로 아이콘 위치 조정
                             icon: Icon(
                               Icons.close,
                               color: Colors.red,
-                              size: 20,
+                              size: 20, // 아이콘 크기 유지
                             ),
                             onPressed: () {
                               if (user.containsKey('request_id')) {
@@ -749,30 +837,20 @@ class _FriendsAddPageState extends State<FriendsAddPage>
                           ),
                         ),
                         SizedBox(width: 8),
-                        // 수락 버튼
+                        // 수락 버튼 - 크기 축소
                         Container(
+                          width: 36, // 크기 축소
+                          height: 36, // 크기 축소
                           decoration: BoxDecoration(
                             border: Border.all(color: Colors.grey[300]!),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: IconButton(
-                            icon: Stack(
-                              children: [
-                                Icon(
-                                  Icons.person,
-                                  color: Colors.black,
-                                  size: 20,
-                                ),
-                                Positioned(
-                                  right: -4,
-                                  bottom: -4,
-                                  child: Icon(
-                                    Icons.add_circle,
-                                    color: Colors.green,
-                                    size: 14,
-                                  ),
-                                ),
-                              ],
+                            padding: EdgeInsets.zero, // 패딩 제거로 아이콘 위치 조정
+                            icon: Image.asset(
+                              'assets/icons/person_add.png',
+                              width: 24, // 아이콘 크기 유지
+                              height: 24, // 아이콘 크기 유지
                             ),
                             onPressed: () {
                               if (user.containsKey('request_id')) {
@@ -822,11 +900,6 @@ class _FriendsAddPageState extends State<FriendsAddPage>
         itemBuilder: (context, index) {
           final request = _friendRequests[index];
 
-          // 디버깅용 로그 (request_id 타입 확인)
-          print(
-            '요청 목록 request_id 타입: ${request['request_id'].runtimeType}, 값: ${request['request_id']}',
-          );
-
           return Column(
             children: [
               ListTile(
@@ -855,14 +928,21 @@ class _FriendsAddPageState extends State<FriendsAddPage>
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // 거절 버튼 (테두리만 있는 버튼)
+                    // 거절 버튼 (테두리만 있는 버튼) - 크기 축소
                     Container(
+                      width: 36, // 크기 축소
+                      height: 36, // 크기 축소
                       decoration: BoxDecoration(
                         border: Border.all(color: Colors.grey[300]!),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: IconButton(
-                        icon: Icon(Icons.close, color: Colors.red, size: 20),
+                        padding: EdgeInsets.zero, // 패딩 제거로 아이콘 위치 조정
+                        icon: Icon(
+                          Icons.close,
+                          color: Colors.red,
+                          size: 20,
+                        ), // 아이콘 크기 유지
                         onPressed: () {
                           if (request.containsKey('request_id')) {
                             _rejectFriendRequest(request['request_id']);
@@ -871,26 +951,20 @@ class _FriendsAddPageState extends State<FriendsAddPage>
                       ),
                     ),
                     SizedBox(width: 8),
-                    // 수락 버튼 (테두리만 있는 버튼, 사람 + 아이콘)
+                    // 수락 버튼 - 사람 + 아이콘 이미지로 변경 - 크기 축소
                     Container(
+                      width: 36, // 크기 축소
+                      height: 36, // 크기 축소
                       decoration: BoxDecoration(
                         border: Border.all(color: Colors.grey[300]!),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: IconButton(
-                        icon: Stack(
-                          children: [
-                            Icon(Icons.person, color: Colors.black, size: 20),
-                            Positioned(
-                              right: -4,
-                              bottom: -4,
-                              child: Icon(
-                                Icons.add_circle,
-                                color: Colors.green,
-                                size: 14,
-                              ),
-                            ),
-                          ],
+                        padding: EdgeInsets.zero, // 패딩 제거
+                        icon: Image.asset(
+                          'assets/icons/person_add.png',
+                          width: 24, // 아이콘 크기 유지
+                          height: 24, // 아이콘 크기 유지
                         ),
                         onPressed: () {
                           if (request.containsKey('request_id')) {
