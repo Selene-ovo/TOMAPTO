@@ -25,7 +25,8 @@ class _RealTimeLocationSharingPageState
   NLatLng? _friendPosition;
   final Set<NMarker> _markers = {};
   bool _isInitialCameraSet = false;
-  bool _isLoading = true;
+  bool _isLoading = true; // 초기 로딩 상태만 true로 설정
+  bool _isInitialLoadComplete = false; // 초기 로딩 완료 여부 추적
   String _errorMessage = '';
 
   // 소켓 서비스 인스턴스
@@ -50,13 +51,13 @@ class _RealTimeLocationSharingPageState
     _initSocket();
     _loadLocations();
 
-    // 1초마다 위치 정보 갱신 (API 호출) - 백업 메커니즘
+    // 1초마다 위치 정보 갱신 (API 호출) - 로딩 표시 없이 실시간 업데이트 유지
     _locationUpdateTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      // 마지막 업데이트 후 10초 이상 지났으면 API로 다시 로드
+      // 마지막 업데이트 후 1초 이상 지났으면 API로 다시 로드
       final now = DateTime.now();
       if (_lastUpdateTime == null ||
           now.difference(_lastUpdateTime!).inSeconds > 1) {
-        _loadLocations();
+        _refreshLocations(); // 로딩 표시 없이 새로고침하는 함수 사용
       }
     });
   }
@@ -115,8 +116,8 @@ class _RealTimeLocationSharingPageState
           setState(() {
             _friendIsSharingLocation = true; // 친구의 위치 공유 활성화
           });
-          // 위치 정보 새로고침
-          _loadLocations();
+          // 위치 정보 새로고침 (로딩 표시 없이)
+          _refreshLocations();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('${widget.selectedFriend['name']}님이 위치 공유를 시작했습니다'),
@@ -131,7 +132,7 @@ class _RealTimeLocationSharingPageState
     }
   }
 
-  // DB에서 내 위치와 친구 위치 정보 로드
+  // 초기 로딩 시에만 로딩 표시와 함께 데이터 로드
   Future<void> _loadLocations() async {
     setState(() {
       _isLoading = true;
@@ -139,103 +140,11 @@ class _RealTimeLocationSharingPageState
     });
 
     try {
-      // 토큰 유효성 확인
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('token');
-      final userId = prefs.getString('user_id');
-
-      if (token == null || TokenService.isTokenExpired(token)) {
-        setState(() {
-          _errorMessage = '로그인이 필요하거나 세션이 만료되었습니다';
-          _isLoading = false;
-        });
-        return;
-      }
-
-      print(
-        '위치 정보 로드 중... 내 ID: $userId, 친구 ID: ${widget.selectedFriend['id']}',
-      );
-
-      // 1. 내 위치 가져오기
-      final myLocationData = await LocationService.getCurrentLocation();
-      if (myLocationData != null) {
-        setState(() {
-          _myPosition = NLatLng(
-            myLocationData.latitude,
-            myLocationData.longitude,
-          );
-        });
-
-        // 내 위치를 가져온 후 바로 카메라 이동 (초기화 후)
-        if (_mapController != null && !_isInitialCameraSet) {
-          _mapController!.updateCamera(
-            NCameraUpdate.withParams(target: _myPosition!, zoom: 15),
-          );
-          _isInitialCameraSet = true;
-        }
-      } else {
-        print('내 위치 정보를 가져오는데 실패했습니다.');
-      }
-
-      // 2. 중요: 두 가지 위치 공유 상태를 별도로 확인
-      final friendId = widget.selectedFriend['id'];
-
-      // 2-1. 내가 위치 공유 중인지 확인 (내가 공유자, 친구가 수신자)
-      final iAmSharing = await LocationService.checkIAmSharingWith(friendId);
-      print('내가 위치 공유 중인지 확인 결과: $iAmSharing');
-
-      // 2-2. 친구가 위치 공유 중인지 확인 (친구가 공유자, 내가 수신자)
-      final friendIsSharing = await LocationService.checkFriendIsSharingWith(
-        friendId,
-      );
-      print('친구가 위치 공유 중인지 확인 결과: $friendIsSharing');
-
-      // 3. 위치 공유 상태 업데이트
-      setState(() {
-        // 내가 위치 공유 중인지 여부 (나 -> 친구)
-        _iAmSharingLocation = iAmSharing;
-
-        // 친구가 위치 공유 중인지 여부 (친구 -> 나)
-        _friendIsSharingLocation = friendIsSharing;
-
-        // 중요: 친구가 공유하지 않는 경우 친구 위치 정보 제거
-        if (!friendIsSharing) {
-          _friendPosition = null;
-        }
-      });
-
-      print('위치 공유 상태: 내가 공유 중: $iAmSharing, 친구가 공유 중: $friendIsSharing');
-
-      // 4. 친구 위치 정보 가져오기 - 친구가 공유 중인 경우에만
-      if (friendIsSharing) {
-        final friendLocationData = await LocationService.getFriendLocation(
-          friendId,
-        );
-
-        if (friendLocationData != null) {
-          // 문자열을 double로 변환하여 저장
-          setState(() {
-            _friendPosition = NLatLng(
-              double.parse(friendLocationData['latitude'].toString()),
-              double.parse(friendLocationData['longitude'].toString()),
-            );
-            _lastUpdateTime = DateTime.now();
-          });
-          print(
-            '친구 위치 정보 로드 성공: ${friendLocationData['latitude']}, ${friendLocationData['longitude']}',
-          );
-        } else {
-          print('친구 위치 정보를 가져오는데 실패했습니다.');
-        }
-      }
-
-      // 위치 데이터를 얻은 후 마커 업데이트
-      if (_mapController != null) {
-        _updateMapMarkers();
-      }
+      await _fetchLocationData();
 
       setState(() {
         _isLoading = false;
+        _isInitialLoadComplete = true;
       });
     } catch (e) {
       print('위치 정보 로드 오류: $e');
@@ -243,6 +152,113 @@ class _RealTimeLocationSharingPageState
         _errorMessage = '위치 정보를 불러오는데 실패했습니다. 나중에 다시 시도해주세요.';
         _isLoading = false;
       });
+    }
+  }
+
+  // 로딩 표시 없이 위치 정보 갱신
+  Future<void> _refreshLocations() async {
+    if (!_isInitialLoadComplete) return;
+
+    try {
+      await _fetchLocationData();
+    } catch (e) {
+      print('위치 정보 새로고침 오류: $e');
+      // 오류가 발생해도 UI에 표시하지 않음
+    }
+  }
+
+  // 실제 위치 데이터를 가져오는 공통 로직
+  Future<void> _fetchLocationData() async {
+    // 토큰 유효성 확인
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token');
+    final userId = prefs.getString('user_id');
+
+    if (token == null || TokenService.isTokenExpired(token)) {
+      setState(() {
+        _errorMessage = '로그인이 필요하거나 세션이 만료되었습니다';
+      });
+      return;
+    }
+
+    print('위치 정보 로드 중... 내 ID: $userId, 친구 ID: ${widget.selectedFriend['id']}');
+
+    // 1. 내 위치 가져오기
+    final myLocationData = await LocationService.getCurrentLocation();
+    if (myLocationData != null) {
+      setState(() {
+        _myPosition = NLatLng(
+          myLocationData.latitude,
+          myLocationData.longitude,
+        );
+      });
+
+      // 내 위치를 가져온 후 바로 카메라 이동 (초기화 후)
+      if (_mapController != null && !_isInitialCameraSet) {
+        _mapController!.updateCamera(
+          NCameraUpdate.withParams(target: _myPosition!, zoom: 15),
+        );
+        _isInitialCameraSet = true;
+      }
+    } else {
+      print('내 위치 정보를 가져오는데 실패했습니다.');
+    }
+
+    // 2. 중요: 두 가지 위치 공유 상태를 별도로 확인
+    final friendId = widget.selectedFriend['id'];
+
+    // 2-1. 내가 위치 공유 중인지 확인 (내가 공유자, 친구가 수신자)
+    final iAmSharing = await LocationService.checkIAmSharingWith(friendId);
+    print('내가 위치 공유 중인지 확인 결과: $iAmSharing');
+
+    // 2-2. 친구가 위치 공유 중인지 확인 (친구가 공유자, 내가 수신자)
+    final friendIsSharing = await LocationService.checkFriendIsSharingWith(
+      friendId,
+    );
+    print('친구가 위치 공유 중인지 확인 결과: $friendIsSharing');
+
+    // 3. 위치 공유 상태 업데이트
+    setState(() {
+      // 내가 위치 공유 중인지 여부 (나 -> 친구)
+      _iAmSharingLocation = iAmSharing;
+
+      // 친구가 위치 공유 중인지 여부 (친구 -> 나)
+      _friendIsSharingLocation = friendIsSharing;
+
+      // 중요: 친구가 공유하지 않는 경우 친구 위치 정보 제거
+      if (!friendIsSharing) {
+        _friendPosition = null;
+      }
+    });
+
+    print('위치 공유 상태: 내가 공유 중: $iAmSharing, 친구가 공유 중: $friendIsSharing');
+
+    // 4. 친구 위치 정보 가져오기 - 친구가 공유 중인 경우에만
+    if (friendIsSharing) {
+      final friendLocationData = await LocationService.getFriendLocation(
+        friendId,
+      );
+
+      if (friendLocationData != null) {
+        // 문자열을 double로 변환하여 저장
+        setState(() {
+          _friendPosition = NLatLng(
+            double.parse(friendLocationData['latitude'].toString()),
+            double.parse(friendLocationData['longitude'].toString()),
+          );
+          _lastUpdateTime = DateTime.now();
+        });
+        print(
+          '친구 위치 정보 로드 성공: ${friendLocationData['latitude']}, ${friendLocationData['longitude']}',
+        );
+      } else {
+        print('친구 위치 정보를 가져오는데 실패했습니다.');
+      }
+    }
+
+    // 위치 데이터를 얻은 후 마커 업데이트
+    if (_mapController != null) {
+      _updateMapMarkers();
     }
   }
 
@@ -345,7 +361,7 @@ class _RealTimeLocationSharingPageState
       }
     }
 
-    // 카메라 위치 조정
+    // 최초 카메라 위치 조정
     if (!_isInitialCameraSet) {
       if (_myPosition != null &&
           _friendPosition != null &&
@@ -472,8 +488,8 @@ class _RealTimeLocationSharingPageState
             context,
           ).showSnackBar(SnackBar(content: Text('내 위치 공유가 활성화되었습니다')));
 
-          // 위치 정보 새로고침
-          _loadLocations();
+          // 위치 정보 새로고침 (로딩 표시 없음)
+          _refreshLocations();
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('위치 공유 시작 요청 실패. 나중에 다시 시도하세요.')),
@@ -572,7 +588,7 @@ class _RealTimeLocationSharingPageState
             ),
           ),
 
-          // 로딩 표시
+          // 로딩 표시 (초기 로딩 시에만 표시)
           if (_isLoading)
             Container(
               color: Colors.white.withOpacity(0.7),
