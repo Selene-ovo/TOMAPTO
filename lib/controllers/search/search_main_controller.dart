@@ -151,7 +151,7 @@ class SearchMainController extends ChangeNotifier {
 
   Future<List<NaverSearchResult>> searchPlaces(
     String query, {
-    int display = 10,
+    int display = 20,
   }) async {
     try {
       if (_clientId.isEmpty || _clientSecret.isEmpty) {
