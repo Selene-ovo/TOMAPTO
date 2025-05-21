@@ -450,9 +450,9 @@ class _SearchResultPageState extends State<SearchResultPage> {
   }
 
   // 임시로 즐겨찾기 상태를 확인하는 메서드
-  bool _isFavorite(String name) {
+  bool _isFavorite(String fullcategory) {
     // 실제로는 DB에서 확인하는 로직 필요
-    return name.contains('대학교'); // 임시로 대학교가 포함된 경우만 즐겨찾기로 표시
+    return fullcategory.contains('대학교'); // 임시로 대학교가 포함된 경우만 즐겨찾기로 표시
   }
 
   Widget _buildActionButton(

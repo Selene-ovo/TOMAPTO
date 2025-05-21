@@ -1119,7 +1119,7 @@ class _SignUpPageState extends State<SignUpPage> {
                           ),
                         ),
                         minimumSize: MaterialStateProperty.all(
-                          const Size(60, 52),
+                          const Size(60, 50),
                         ),
                         splashFactory: NoSplash.splashFactory,
                       ),

@@ -521,53 +521,6 @@ class _WalkModalState extends State<WalkModal> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  /* Row(
-                    children: [
-                      const Icon(
-                        Icons.arrow_circle_right_rounded,
-                        color: Color(0xFFFB233B),
-                        size: 24,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          widget.originPlace,
-                          style: const TextStyle(
-                            fontFamily: "Pretendard",
-                            fontWeight: FontWeight.w500,
-                            fontSize: 14,
-                            color: Color(0xFF363636),
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.arrow_circle_left_rounded,
-                        color: Color(0xFF0771EB),
-                        size: 24,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          widget.destinationPlace,
-                          style: const TextStyle(
-                            fontFamily: "Pretendard",
-                            fontWeight: FontWeight.w500,
-                            fontSize: 14,
-                            color: Color(0xFF363636),
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-*/
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
@@ -645,7 +598,6 @@ class _WalkModalState extends State<WalkModal> {
                     ),
                   ),
                   const SizedBox(height: 16),
-
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
