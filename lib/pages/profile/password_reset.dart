@@ -5,10 +5,15 @@ import 'dart:convert';
 import 'dart:async';
 import 'dart:io' show Platform;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-
+import 'package:tomapto/widgets/navbar.dart'; // navbar.dart import 추가
 
 class PasswordResetPage extends StatefulWidget {
-  const PasswordResetPage({Key? key}) : super(key: key);
+  final bool isFromProfileEdit; // 프로필 편집에서 왔는지 여부
+  
+  const PasswordResetPage({
+    Key? key, 
+    this.isFromProfileEdit = false, // 기본값은 false (일반적인 비밀번호 찾기)
+  }) : super(key: key);
 
   @override
   _PasswordResetPageState createState() => _PasswordResetPageState();
@@ -44,6 +49,9 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
   bool _hasLetter = false;
   bool _hasNumber = false;
   
+  // 네비게이션 바 상태
+  int _currentNavIndex = 3; // 마이 페이지로 설정 (프로필 관련이므로)
+  
   // 이메일 도메인
   final List<String> _emailDomains = [
     '@naver.com',
@@ -56,6 +64,7 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
   @override
   void initState() {
     super.initState();
+    print('PasswordResetPage initState - isFromProfileEdit: ${widget.isFromProfileEdit}'); // 디버그 로그
     _setupListeners();
   }
   
@@ -70,6 +79,74 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
     // 비밀번호 입력 필드 변경 리스너 추가
     _newPasswordController.addListener(_validatePassword);
     _confirmPasswordController.addListener(_validatePassword);
+  }
+  
+  // 네비게이션 탭 핸들러
+  void _onNavTap(int index) {
+    setState(() {
+      _currentNavIndex = index;
+    });
+    // 실제 네비게이션은 BottomNavBar에서 처리됨
+  }
+  
+  // 페이지 제목 동적 생성
+  String get _pageTitle {
+    final title = widget.isFromProfileEdit ? '비밀번호 변경' : '비밀번호 찾기';
+    print('_pageTitle: $title (isFromProfileEdit: ${widget.isFromProfileEdit})'); // 디버그 로그
+    return title;
+  }
+  
+  // 메인 타이틀 동적 생성
+  String get _mainTitle {
+    if (_showPasswordFields) {
+      return '새 비밀번호를 설정해주세요';
+    } else if (widget.isFromProfileEdit) {
+      print('프로필 편집에서 온 경우 - 메인 타이틀: 비밀번호 변경 칭찬합니다.'); // 디버그 로그
+      return '비밀번호 변경 칭찬합니다.';
+    } else {
+      print('일반 접근 경우 - 메인 타이틀: 비밀번호를 잊으셨나요?'); // 디버그 로그
+      return '비밀번호를 잊으셨나요?';
+    }
+  }
+  
+  // 설명 텍스트 동적 생성
+  String get _descriptionText {
+    if (_showPasswordFields) {
+      return '새로운 비밀번호를 입력해주세요.\n안전한 비밀번호로 설정하시기 바랍니다.';
+    } else if (widget.isFromProfileEdit) {
+      print('프로필 편집에서 온 경우 - 설명 텍스트'); // 디버그 로그
+      return '주기적으로 비밀번호를 변경하는 것은 좋은 습관입니다.\n아이디와 이메일을 통해 인증해주세요.';
+    } else {
+      print('일반 접근 경우 - 설명 텍스트'); // 디버그 로그
+      return '걱정하지 마세요! 비밀번호를 재설정하는데 도움이 되는\n메시지를 보내드리겠습니다.';
+    }
+  }
+  
+  // 이모지 동적 생성
+  Widget get _emojiSection {
+    if (widget.isFromProfileEdit) {
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: const [
+          Text('👍', style: TextStyle(fontSize: 35)), // 중간 크기
+          SizedBox(width: 8),
+          Text('👍', style: TextStyle(fontSize: 50)), // 크게
+          SizedBox(width: 8),
+          Text('👍', style: TextStyle(fontSize: 30)), // 작게
+        ],
+      );
+    } else {
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: const [
+          Text('🤔', style: TextStyle(fontSize: 35)),
+          SizedBox(width: 8),
+          Text('🤔', style: TextStyle(fontSize: 50)),
+          SizedBox(width: 8),
+          Text('🤔', style: TextStyle(fontSize: 35)),
+        ],
+      );
+    }
   }
   
   // 비밀번호 유효성 검사
@@ -433,8 +510,13 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
           ),
         );
         
-        // 로그인 페이지로 이동
-        Navigator.of(context).popUntil((route) => route.isFirst);
+        // 프로필 편집에서 왔다면 결과를 전달하고 돌아가기
+        if (widget.isFromProfileEdit) {
+          Navigator.of(context).pop({'passwordChanged': true});
+        } else {
+          // 일반적인 비밀번호 찾기에서 왔다면 로그인 페이지로 이동
+          Navigator.of(context).popUntil((route) => route.isFirst);
+        }
       } else {
         scaffoldMessenger.showSnackBar(
           SnackBar(
@@ -467,8 +549,8 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        title: const Text(
-          '비밀번호 찾기',
+        title: Text(
+          _pageTitle, // 동적 페이지 제목
           style: TextStyle(
             color: Colors.black,
             fontSize: 18,
@@ -495,25 +577,14 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
             children: [
               SizedBox(height: 10 * (screenHeight / 812)),
               
-              // 이모지
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
-                  Text('🤔', style: TextStyle(fontSize: 35)),
-                  SizedBox(width: 8),
-                  Text('🤔', style: TextStyle(fontSize: 50)),
-                  SizedBox(width: 8),
-                  Text('🤔', style: TextStyle(fontSize: 35)),
-                ],
-              ),
+              // 이모지 - 동적 생성
+              _emojiSection,
               
               SizedBox(height: 24 * (screenHeight / 812)),
               
-              // Main title
+              // Main title - 동적 생성
               Text(
-                _showPasswordFields 
-                    ? '새 비밀번호를 설정해주세요' 
-                    : '비밀번호를 잊으셨나요?',
+                _mainTitle,
                 style: const TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -524,11 +595,9 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
               
               SizedBox(height: 12 * (screenHeight / 812)),
               
-              // Description text
+              // Description text - 동적 생성
               Text(
-                _showPasswordFields
-                    ? '새로운 비밀번호를 입력해주세요.\n안전한 비밀번호로 설정하시기 바랍니다.'
-                    : '걱정하지 마세요! 비밀번호를 재설정하는데 도움이 되는\n메시지를 보내드리겠습니다.',
+                _descriptionText,
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 15,
@@ -731,38 +800,17 @@ class _PasswordResetPageState extends State<PasswordResetPage> {
               ),
               
               SizedBox(height: 20 * (screenHeight / 812)),
+              
+              // 하단 네비게이션바 공간 확보를 위한 여백
+              SizedBox(height: 90),
             ],
           ),
         ),
       ),
-      // Bottom navigation bar
-      bottomNavigationBar: Container(
-        color: Colors.white,
-        height: 80,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            Icon(Icons.home_outlined, color: Colors.grey, size: 28),
-            Icon(Icons.apps, color: Colors.grey, size: 28),
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                color: Colors.red,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(Icons.location_on, color: Colors.white, size: 32),
-            ),
-            Icon(Icons.star_outline, color: Colors.grey, size: 28),
-            Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.person_outline, color: Colors.black, size: 28),
-                Text('마이', style: TextStyle(fontSize: 10, color: Colors.black)),
-              ],
-            ),
-          ],
-        ),
+      // navbar.dart의 BottomNavBar 사용
+      bottomNavigationBar: BottomNavBar(
+        currentIndex: _currentNavIndex,
+        onTap: _onNavTap,
       ),
     );
   }

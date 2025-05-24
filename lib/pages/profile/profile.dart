@@ -4,6 +4,8 @@ import 'package:tomapto/widgets/navbar.dart';
 import 'package:tomapto/controllers/account/profile_controller.dart';
 import 'package:tomapto/pages/profile/login.dart';
 import 'package:tomapto/setting/setting.dart';
+import 'package:tomapto/pages/profile/profile_edit.dart'; // 프로필 편집 페이지 import 추가
+import 'package:shared_preferences/shared_preferences.dart'; // SharedPreferences import 추가
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -74,6 +76,69 @@ class _ProfilePageState extends State<ProfilePage> {
   // 새로고침 처리
   Future<void> _refreshData() async {
     await _controller.refreshProfile(context, setState);
+  }
+
+  // 프로필 편집 페이지로 이동
+  void _navigateToProfileEdit() async {
+    // SharedPreferences에서 사용자 ID 가져오기
+    final prefs = await SharedPreferences.getInstance();
+    final String currentUserId = prefs.getString('user_id') ?? "";
+    
+    if (currentUserId.isEmpty) {
+      // 사용자 ID가 없으면 오류 메시지 표시
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '사용자 정보를 찾을 수 없습니다. 다시 로그인해주세요.',
+            style: TextStyle(fontFamily: 'Pretendard'),
+          ),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+      );
+      return;
+    }
+    
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ProfileEditPage(
+          currentUserId: currentUserId, // SharedPreferences에서 가져온 사용자 ID 전달
+          currentNickname: _controller.userNickname,
+        ),
+      ),
+    );
+
+    // 프로필 편집에서 돌아온 후 데이터가 업데이트 되었으면 새로고침
+    if (result != null && result['updated'] == true) {
+      await _refreshData();
+      
+      // 성공 메시지 표시 (선택사항)
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white, size: 20),
+                SizedBox(width: 8),
+                Text(
+                  '프로필이 업데이트되었습니다.',
+                  style: TextStyle(fontFamily: 'Pretendard'),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
+      }
+    }
   }
 
   // 로그아웃 처리
@@ -214,16 +279,56 @@ class _ProfilePageState extends State<ProfilePage> {
                           ),
                           child: Row(
                             children: [
-                              // 프로필 아이콘
-                              Container(
-                                width: 48 * (screenWidth / 375),
-                                height: 48 * (screenWidth / 375),
-                                decoration: const BoxDecoration(
-                                  shape: BoxShape.circle,
-                                ),
-                                child: SvgPicture.asset(
-                                  'assets/icons/profile_default.svg',
-                                  fit: BoxFit.contain,
+                              // 프로필 아이콘 - 클릭 가능하도록 GestureDetector로 감싸기
+                              GestureDetector(
+                                onTap: _navigateToProfileEdit, // 프로필 편집 페이지로 이동
+                                child: Container(
+                                  width: 48 * (screenWidth / 375),
+                                  height: 48 * (screenWidth / 375),
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    // 클릭 가능함을 시각적으로 표현하기 위해 살짝 배경색 추가
+                                    color: Colors.grey[50],
+                                    border: Border.all(
+                                      color: Colors.grey[200]!,
+                                      width: 1,
+                                    ),
+                                  ),
+                                  child: Stack(
+                                    children: [
+                                      // 프로필 아이콘
+                                      Center(
+                                        child: SvgPicture.asset(
+                                          'assets/icons/profile_default.svg',
+                                          fit: BoxFit.contain,
+                                          width: 36 * (screenWidth / 375),
+                                          height: 36 * (screenWidth / 375),
+                                        ),
+                                      ),
+                                      // 편집 버튼 아이콘 (우하단에 작은 아이콘)
+                                      Positioned(
+                                        bottom: 0,
+                                        right: 0,
+                                        child: Container(
+                                          width: 16,
+                                          height: 16,
+                                          decoration: BoxDecoration(
+                                            color: Color(0xFFFB233B),
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: Colors.white,
+                                              width: 1,
+                                            ),
+                                          ),
+                                          child: Icon(
+                                            Icons.edit,
+                                            color: Colors.white,
+                                            size: 10,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                               SizedBox(width: 16 * (screenWidth / 375)),
@@ -233,14 +338,25 @@ class _ProfilePageState extends State<ProfilePage> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      _controller.userNickname,
-                                      style: TextStyle(
-                                        fontSize: 18 * (screenWidth / 375),
-                                        fontWeight: FontWeight.bold,
-                                        color: const Color(0xFF363636),
-                                        fontFamily: 'Pretendard',
-                                      ),
+                                    Row(
+                                      children: [
+                                        Text(
+                                          _controller.userNickname,
+                                          style: TextStyle(
+                                            fontSize: 18 * (screenWidth / 375),
+                                            fontWeight: FontWeight.bold,
+                                            color: const Color(0xFF363636),
+                                            fontFamily: 'Pretendard',
+                                          ),
+                                        ),
+                                        SizedBox(width: 6),
+                                        // 편집 가능함을 알려주는 작은 아이콘
+                                        Icon(
+                                          Icons.edit_outlined,
+                                          color: Colors.grey[400],
+                                          size: 14,
+                                        ),
+                                      ],
                                     ),
                                     SizedBox(height: 4 * (screenHeight / 812)),
                                     Row(

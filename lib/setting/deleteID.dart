@@ -19,7 +19,6 @@ class _DeleteIDScreenState extends State<DeleteIDScreen> {
   bool _agreeToDelete = false;
   bool _isLoading = false;
   String? _password;
-  String? _reason; // 탈퇴 사유를 저장할 변수 추가
 
   // 개발 환경에 따라 적절한 API URL 설정
   String apiUrl = '';
@@ -78,7 +77,7 @@ class _DeleteIDScreenState extends State<DeleteIDScreen> {
       final url = Uri.parse('$apiUrl/api/account/delete');
       
       print('회원탈퇴 요청 URL: $url');
-      print('요청 데이터: {"password": "****", "reason": "${_reason ?? ''}"}');
+      print('요청 데이터: {"password": "****"}');
       
       // 타임아웃 시간 늘리기 (120초로 설정)
       final response = await http.post(
@@ -89,7 +88,6 @@ class _DeleteIDScreenState extends State<DeleteIDScreen> {
         },
         body: jsonEncode({
           'password': _password,
-          'reason': _reason ?? '',
         }),
       ).timeout(const Duration(seconds: 120)); // 타임아웃 시간 120초로 설정
       
@@ -105,23 +103,9 @@ class _DeleteIDScreenState extends State<DeleteIDScreen> {
           _showSuccessDialog();
         }
       } else {
-        // 서버에서 오류 응답이 온 경우
-        Map<String, dynamic> errorData;
-        try {
-          errorData = jsonDecode(response.body);
-          print('오류 응답 데이터: $errorData');
-        } catch (e) {
-          print('응답 본문 파싱 오류: $e');
-          errorData = {'message': '서버에서 알 수 없는 오류가 발생했습니다.'};
-        }
-        
-        // 비밀번호 관련 오류 메시지를 명확하게 표시
-        if (errorData.containsKey('message') && 
-            errorData['message'].toString().contains('비밀번호')) {
-          throw Exception('비밀번호가 일치하지 않습니다.');
-        } else {
-          throw Exception(errorData['message'] ?? '회원탈퇴 처리 중 오류가 발생했습니다.');
-        }
+        // 비밀번호가 일치하지 않는 경우 간단한 메시지만 표시
+        _showErrorSnackBar('비밀번호가 일치하지 않습니다.');
+        return;
       }
     } on TimeoutException catch (_) {
       // 타임아웃 오류 처리
@@ -320,55 +304,6 @@ class _DeleteIDScreenState extends State<DeleteIDScreen> {
                         onChanged: (value) {
                           setState(() {
                             _password = value;
-                          });
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-                
-                const SizedBox(height: 1),
-                
-                // 탈퇴 사유 (선택)
-                Container(
-                  color: Colors.white,
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        '탈퇴 사유 (선택)',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        '더 나은 서비스를 위해 탈퇴 사유를 알려주세요.',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        maxLines: 3,
-                        decoration: InputDecoration(
-                          hintText: '탈퇴 사유를 입력하세요 (선택사항)',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: Colors.grey[300]!),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 12,
-                          ),
-                        ),
-                        onChanged: (value) {
-                          setState(() {
-                            _reason = value;
                           });
                         },
                       ),
