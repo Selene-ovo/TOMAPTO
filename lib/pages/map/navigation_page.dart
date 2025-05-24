@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'dart:math';
+import 'dart:async';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:tomapto/controllers/map/transit_map_controller.dart';
 import 'package:tomapto/controllers/map/navigation_controller.dart';
@@ -34,6 +36,7 @@ class _NavigationPageState extends State<NavigationPage>
   bool _isPathDisplayed = false;
   bool _hasLocationPermission = false;
   bool _isInForeground = true;
+  bool _showTemporaryRoute = false;
 
   // 도착 감지
   bool _hasArrived = false;
@@ -66,6 +69,13 @@ class _NavigationPageState extends State<NavigationPage>
   @override
   void initState() {
     super.initState();
+
+    // 도보 모드일 때 즉시 임시 경로 표시
+    if (widget.mode == TransitMode.walk) {
+      _showTemporaryRoute = true;
+      _showTemporaryWalkRoute();
+    }
+
     WidgetsBinding.instance.addObserver(this);
 
     // 초기 위치는 출발지로 설정
@@ -83,6 +93,50 @@ class _NavigationPageState extends State<NavigationPage>
 
     _initializeNotifications();
     _checkLocationPermission();
+  }
+
+  // 임시 도보 경로 표시
+  void _showTemporaryWalkRoute() {
+    setState(() {
+      _isPathDisplayed = true;
+      _lastInstruction = "목적지로 걸어가는 중...";
+
+      final distance = _calculateSimpleDistance(
+        widget.origin,
+        widget.destination,
+      );
+      final time = (distance / 1.4 / 60).ceil(); // 분 단위
+
+      _remainingDistance =
+          distance < 1000
+              ? "${distance.round()}m"
+              : "${(distance / 1000).toStringAsFixed(1)}km";
+      _remainingTime = "${time}분";
+    });
+
+    // 5초 후에 실제 경로로 교체 (백그라운드에서 로딩 완료 시)
+    Timer(Duration(seconds: 5), () {
+      if (_showTemporaryRoute) {
+        setState(() {
+          _showTemporaryRoute = false;
+        });
+      }
+    });
+  }
+
+  double _calculateSimpleDistance(NLatLng start, NLatLng end) {
+    const double earthRadius = 6371000;
+    final double lat1 = start.latitude * (pi / 180);
+    final double lat2 = end.latitude * (pi / 180);
+    final double dLat = (end.latitude - start.latitude) * (pi / 180);
+    final double dLon = (end.longitude - start.longitude) * (pi / 180);
+
+    final double a =
+        sin(dLat / 2) * sin(dLat / 2) +
+        cos(lat1) * cos(lat2) * sin(dLon / 2) * sin(dLon / 2);
+    final double c = 2 * atan2(sqrt(a), sqrt(1 - a));
+
+    return earthRadius * c;
   }
 
   // 알림 초기화
@@ -265,8 +319,10 @@ class _NavigationPageState extends State<NavigationPage>
     // 2. 위치 업데이트 스트림 구독 (현재 위치)
     _navigationController.locationStream.listen(_handleLocationUpdate);
 
-    // 3. 경로 이탈 스트림 구독 (경로 이탈 감지)
-    _navigationController.routeDeviationStream.listen(_handleRouteDeviation);
+    // 3. 경로 이탈 스트림 구독 (경로 이탈 감지) - 자동차 모드에서만
+    if (widget.mode == TransitMode.car) {
+      _navigationController.routeDeviationStream.listen(_handleRouteDeviation);
+    }
 
     // 4. 도착 이벤트 스트림 구독 (목적지 도착)
     _navigationController.arrivalStream.listen((_) => _handleArrival());
@@ -283,22 +339,22 @@ class _NavigationPageState extends State<NavigationPage>
 
   // 네비게이션 정보 처리
   void _handleNavigationInfo(Map<String, dynamic> info) {
-    setState(() {
-      _isPathDisplayed = true;
-      _lastInstruction = info['instruction'] as String;
-      _remainingDistance = info['distance'] as String;
-      _remainingTime = info['timeRemaining'] as String;
-    });
+    // 임시 경로 모드가 아닐 때만 업데이트
+    if (!_showTemporaryRoute) {
+      setState(() {
+        _isPathDisplayed = true;
+        _lastInstruction = info['instruction'] as String;
+        _remainingDistance = info['distance'] as String;
+        _remainingTime = info['timeRemaining'] as String;
+      });
+    }
 
-    // 새로운 지시가 나타났을 때 음성 안내
+    // 음성 안내...
     if (_isVoiceGuidanceEnabled && _lastInstruction != _prevInstruction) {
       _prevInstruction = _lastInstruction;
 
-      // 음성 안내 (앱이 백그라운드일 때는 알림으로 대체)
       if (!_isInForeground) {
         _showNavigationNotification(_lastInstruction);
-      } else {
-        // 여기에 TTS(Text-to-Speech) 구현을 추가할 수 있음
       }
     }
   }
@@ -311,6 +367,81 @@ class _NavigationPageState extends State<NavigationPage>
       // 현재 속도 업데이트 (시뮬레이션)
       _currentSpeed = _navigationController.getCurrentSpeed();
     });
+
+    // NavigationController에서 현재 heading 정보 가져오기
+    final currentHeading = _navigationController.getCurrentHeading();
+
+    // 현재 위치 오버레이 업데이트 (heading 포함)
+    _updateLocationOverlay(position, heading: currentHeading);
+  }
+
+  // 현재 위치 오버레이 업데이트 메서드 추가
+  void _updateLocationOverlay(NLatLng position, {double? heading}) {
+    if (_mapController == null) return;
+
+    try {
+      // 위치 오버레이 가져오기
+      final locationOverlay = _mapController!.getLocationOverlay();
+
+      // 위치 설정
+      locationOverlay.setPosition(position);
+
+      // === 색상 커스터마이징 ===
+      // 모드에 따른 색상 설정
+      if (widget.mode == TransitMode.car) {
+        // 자동차 모드: 빨간색 계열
+        locationOverlay.setCircleColor(Color(0x10FB233B)); // 반투명 빨간색 원
+      } else {
+        // 도보 모드: 파란색 계열
+        locationOverlay.setCircleColor(Color(0x100771EB)); // 반투명 파란색 원
+      }
+
+      // === 원 크기 설정 ===
+      locationOverlay.setCircleRadius(10.0); // 기본값보다 크게
+
+      // === 아이콘 커스터마이징 ===
+      // 모드에 따른 아이콘 설정
+      /*if (widget.mode == TransitMode.car) {
+        // 자동차 아이콘 사용
+        locationOverlay.setIcon(
+          NOverlayImage.fromAssetImage(
+            'assets/icons/car_location_icon.png', // 자동차 아이콘 (없으면 기본 아이콘 사용)
+          ),
+        );
+      } else {
+        // 도보 아이콘 사용 (기본 아이콘 또는 커스텀)
+        locationOverlay.setIcon(
+          NOverlayImage.fromAssetImage(
+            'assets/icons/walk_location_icon.png', // 도보 아이콘 (없으면 기본 아이콘 사용)
+          ),
+        );
+      }*/
+
+      // === 아이콘 크기 설정 ===
+      locationOverlay.setIconSize(Size(100, 100)); // 아이콘 크기
+
+      // === 앵커 포인트 설정 ===
+      locationOverlay.setAnchor(NPoint(0.5, 0.5)); // 중심점 기준
+
+      // 방향 설정 (heading 정보가 있을 때)
+      if (heading != null) {
+        locationOverlay.setBearing(heading);
+        print('위치 오버레이 방향 설정: ${heading.toStringAsFixed(1)}도');
+      }
+
+      // 오버레이가 보이도록 설정
+      locationOverlay.setIsVisible(true);
+
+      // 위치 추적 모드 설정
+      _mapController!.setLocationTrackingMode(
+        widget.mode == TransitMode.car
+            ? NLocationTrackingMode
+                .face // 자동차: 방향도 따라감
+            : NLocationTrackingMode.follow, // 도보: 위치만 따라감
+      );
+    } catch (e) {
+      print('위치 오버레이 업데이트 오류: $e');
+    }
   }
 
   // 턴바이턴 정보 업데이트 처리
@@ -327,7 +458,7 @@ class _NavigationPageState extends State<NavigationPage>
     });
   }
 
-  // 경로 이탈 처리
+  // 경로 이탈 처리 (자동차 모드에서만)
   void _handleRouteDeviation(bool isDeviated) {
     // 이미 처리 중이거나, 도착했거나, 이탈이 아니면 무시
     if (_isLoading || _hasArrived || !isDeviated) {
@@ -550,6 +681,66 @@ class _NavigationPageState extends State<NavigationPage>
     );
   }
 
+  // 내 위치로 이동하는 메서드
+  void _moveToCurrentLocation() async {
+    if (_mapController == null) return;
+
+    try {
+      // NaverMap 초기 옵션과 동일한 값 사용
+      double targetZoom =
+          widget.mode == TransitMode.car ? 18.0 : 16.0; // 초기 옵션과 동일
+      double targetTilt =
+          widget.mode == TransitMode.car ? 35.0 : 0.0; // 초기 옵션과 동일
+
+      // 현재 위치가 있으면 해당 위치로 이동
+      if (_currentPosition != null) {
+        await _mapController!.updateCamera(
+          NCameraUpdate.withParams(
+            target: _currentPosition!,
+            zoom: targetZoom, // 21 (자동차) / 16 (도보)
+            tilt: targetTilt, // 35도 (자동차) / 0도 (도보)
+          ),
+        );
+
+        // 위치 추적 모드 재설정
+        await _mapController!.setLocationTrackingMode(
+          widget.mode == TransitMode.car
+              ? NLocationTrackingMode.face
+              : NLocationTrackingMode.follow,
+        );
+
+        print(
+          '기존 위치로 이동 - ${widget.mode == TransitMode.car ? "자동차" : "도보"} 모드',
+        );
+        print('줌: $targetZoom, 틸트: $targetTilt도');
+      } else {
+        // 현재 위치를 새로 가져오기
+        Position position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+        );
+
+        final currentLocation = NLatLng(position.latitude, position.longitude);
+
+        await _mapController!.updateCamera(
+          NCameraUpdate.withParams(
+            target: currentLocation,
+            zoom: targetZoom, // 21 (자동차) / 16 (도보)
+            tilt: targetTilt, // 35도 (자동차) / 0도 (도보)
+          ),
+        );
+
+        setState(() {
+          _currentPosition = currentLocation;
+        });
+
+        print('새 위치로 이동 - ${widget.mode == TransitMode.car ? "자동차" : "도보"} 모드');
+        print('줌: $targetZoom, 틸트: $targetTilt도');
+      }
+    } catch (e) {
+      print('현재 위치 이동 오류: $e');
+    }
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
@@ -597,11 +788,12 @@ class _NavigationPageState extends State<NavigationPage>
           NaverMap(
             options: NaverMapViewOptions(
               logoClickEnable: false,
-              locationButtonEnable: false,
+              locationButtonEnable: false, // API 위치 버튼 비활성화
               nightModeEnable: true,
               initialCameraPosition: NCameraPosition(
                 target: widget.origin,
-                zoom: 16,
+                tilt: widget.mode == TransitMode.car ? 35.0 : 0.0,
+                zoom: widget.mode == TransitMode.car ? 21 : 16,
               ),
               // 자동차 모드에서는 네비게이션 지도 사용, 도보 모드에서는 기본 지도 사용
               mapType:
@@ -617,17 +809,46 @@ class _NavigationPageState extends State<NavigationPage>
               // 맵 컨트롤러 설정
               _navigationController.setMapController(controller);
 
+              // 위치 추적 모드 초기 설정
+              controller.setLocationTrackingMode(
+                widget.mode == TransitMode.car
+                    ? NLocationTrackingMode
+                        .face // 자동차: 방향 추적
+                    : NLocationTrackingMode.follow, // 도보: 위치만 추적
+              );
+
+              // 현재 위치 오버레이 설정
+              final locationOverlay = controller.getLocationOverlay();
+              locationOverlay.setIsVisible(true);
+
+              // 초기 위치가 있으면 현재 위치 오버레이 업데이트
+              if (_currentPosition != null) {
+                final initialHeading =
+                    _navigationController.getCurrentHeading();
+                _updateLocationOverlay(
+                  _currentPosition!,
+                  heading: initialHeading,
+                );
+              }
+
               // 도착지 마커 추가
               final markerImage = NOverlayImage.fromAssetImage(
-                'assets/icons/end_marker.png',
+                'assets/icons/end_marker.png', // 기존 확실한 파일 사용
               );
+
               final destinationMarker = NMarker(
                 id: 'destination_marker',
                 position: widget.destination,
                 icon: markerImage,
                 size: const Size(40, 50),
                 anchor: const NPoint(0.5, 1.0),
+                // 모드에 따라 색상 적용
+                iconTintColor:
+                    widget.mode == TransitMode.car
+                        ? Color(0xFFFF001C) // 자동차: 빨간색
+                        : Color(0xFF0077FF), // 도보: 파란색
               );
+
               controller.addOverlay(destinationMarker);
 
               // 전체 경로가 보이도록 카메라 이동
@@ -750,7 +971,39 @@ class _NavigationPageState extends State<NavigationPage>
               ),
             ),
 
-          // 속도 제한 표시 (좌측 하단)
+          // 커스텀 현재 위치 버튼 (우측 하단) - 새로 추가
+          Positioned(
+            bottom: 170,
+            right: 20,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 6,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: _moveToCurrentLocation,
+                  borderRadius: BorderRadius.circular(30),
+                  child: Container(
+                    width: 50,
+                    height: 50,
+                    decoration: BoxDecoration(shape: BoxShape.circle),
+                    child: Icon(Icons.my_location, color: mainColor, size: 24),
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // 속도 제한 표시 (좌측 하단) - 자동차 모드에서만
           if (widget.mode == TransitMode.car && !_hasArrived)
             Positioned(
               bottom: 170,
@@ -852,6 +1105,43 @@ class _NavigationPageState extends State<NavigationPage>
               ),
             ),
 
+          // 도보 모드일 때 위치 버튼 위치 조정
+          if (widget.mode == TransitMode.walk && !_hasArrived)
+            Positioned(
+              bottom: 170,
+              right: 20,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 6,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: _moveToCurrentLocation,
+                    borderRadius: BorderRadius.circular(30),
+                    child: Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(shape: BoxShape.circle),
+                      child: Icon(
+                        Icons.my_location,
+                        color: mainColor,
+                        size: 24,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
           // 하단 정보 패널 (축소된 버전)
           Positioned(
             bottom: 0,
@@ -918,7 +1208,7 @@ class _NavigationPageState extends State<NavigationPage>
                                 _remainingDistance,
                                 style: TextStyle(
                                   fontFamily: "Pretendard",
-                                  fontSize: 15,
+                                  fontSize: 14,
                                   fontWeight: FontWeight.w600,
                                   color: mainColor,
                                 ),
@@ -927,7 +1217,7 @@ class _NavigationPageState extends State<NavigationPage>
                                 ' • ',
                                 style: TextStyle(
                                   fontFamily: "Pretendard",
-                                  fontSize: 15,
+                                  fontSize: 14,
                                   color: Colors.grey,
                                 ),
                               ),
@@ -935,7 +1225,7 @@ class _NavigationPageState extends State<NavigationPage>
                                 _remainingTime,
                                 style: TextStyle(
                                   fontFamily: "Pretendard",
-                                  fontSize: 15,
+                                  fontSize: 14,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),

@@ -2,6 +2,7 @@ import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:async';
 
 class RouteData {
   final String totalTime;
@@ -28,14 +29,107 @@ class RouteController {
   // TMAP API 키 캐싱
   String? _cachedTmapApiKey;
 
-  // 주소 검색용 API 키 캐싱 (address_controller에서 이동)
+  // 주소 검색용 API 키 캐싱
   String? _cachedClientId;
   String? _cachedClientSecret;
+
+  // 경로 캐시 개선
+  static final Map<String, Map<String, dynamic>> _routeCache = {};
+  static final Map<String, Map<String, dynamic>> _walkRouteCache = {};
+  static const int _maxCacheSize = 50;
+  static const Duration _cacheExpiry = Duration(minutes: 10);
+  static const Duration _walkCacheExpiry = Duration(minutes: 15);
 
   // 마지막으로 계산된 경로 캐싱
   List<RouteData>? _cachedPublicTransportRoutes;
   Map<String, dynamic>? _cachedCarRoute;
   Map<String, dynamic>? _cachedWalkRoute;
+
+  // 캐시 키 생성
+  String _generateCacheKey(NLatLng start, NLatLng end, String mode) {
+    return '${mode}_${start.latitude.toStringAsFixed(4)}_${start.longitude.toStringAsFixed(4)}_${end.latitude.toStringAsFixed(4)}_${end.longitude.toStringAsFixed(4)}';
+  }
+
+  // 주기적 캐시 정리
+  static Timer? _cacheCleanupTimer;
+
+  static void startCacheCleanup() {
+    _cacheCleanupTimer?.cancel();
+    _cacheCleanupTimer = Timer.periodic(Duration(minutes: 5), (timer) {
+      _cleanupExpiredCache();
+    });
+  }
+
+  static void _cleanupExpiredCache() {
+    final now = DateTime.now();
+
+    // 자동차 경로 캐시 정리
+    _routeCache.removeWhere((key, value) {
+      final cacheTime = value['cacheTime'] as DateTime;
+      return now.difference(cacheTime) > _cacheExpiry;
+    });
+
+    // 도보 경로 캐시 정리
+    _walkRouteCache.removeWhere((key, value) {
+      final cacheTime = value['cacheTime'] as DateTime;
+      return now.difference(cacheTime) > _walkCacheExpiry;
+    });
+
+    print(
+      '캐시 정리 완료: 자동차(${_routeCache.length}), 도보(${_walkRouteCache.length})',
+    );
+  }
+
+  // 캐시에서 경로 가져오기
+  Map<String, dynamic>? _getFromCache(String key) {
+    final cached = _routeCache[key];
+    if (cached != null) {
+      final cacheTime = cached['cacheTime'] as DateTime;
+      if (DateTime.now().difference(cacheTime) < _cacheExpiry) {
+        print('캐시에서 경로 반환: $key');
+        return cached['data'] as Map<String, dynamic>;
+      } else {
+        _routeCache.remove(key);
+      }
+    }
+    return null;
+  }
+
+  // 도보 캐시에서 가져오기
+  Map<String, dynamic>? _getWalkFromCache(String key) {
+    final cached = _walkRouteCache[key];
+    if (cached != null) {
+      final cacheTime = cached['cacheTime'] as DateTime;
+      if (DateTime.now().difference(cacheTime) < _walkCacheExpiry) {
+        print('도보 캐시에서 경로 반환: $key');
+        return cached['data'] as Map<String, dynamic>;
+      } else {
+        _walkRouteCache.remove(key);
+      }
+    }
+    return null;
+  }
+
+  // 캐시에 경로 저장
+  void _saveToCache(String key, Map<String, dynamic> data) {
+    // 캐시 크기 제한
+    if (_routeCache.length >= _maxCacheSize) {
+      final oldestKey = _routeCache.keys.first;
+      _routeCache.remove(oldestKey);
+    }
+
+    _routeCache[key] = {'data': data, 'cacheTime': DateTime.now()};
+  }
+
+  // 도보 캐시에 저장
+  void _saveWalkToCache(String key, Map<String, dynamic> data) {
+    if (_walkRouteCache.length >= 30) {
+      final oldestKey = _walkRouteCache.keys.first;
+      _walkRouteCache.remove(oldestKey);
+    }
+
+    _walkRouteCache[key] = {'data': data, 'cacheTime': DateTime.now()};
+  }
 
   // 모든 API 키 초기화
   Future<bool> _initAllApiKeys() async {
@@ -62,7 +156,7 @@ class RouteController {
     return true;
   }
 
-  // 주소 검색 기능 (address_controller에서 이동)
+  // 주소 검색 기능 (기존 유지)
   Future<List<Map<String, dynamic>>> searchAddressByKeyword(
     String keyword,
   ) async {
@@ -81,13 +175,15 @@ class RouteController {
     print('로컬 검색 API 호출: $url');
 
     try {
-      final response = await http.get(
-        url,
-        headers: {
-          'X-Naver-Client-Id': _cachedClientId!,
-          'X-Naver-Client-Secret': _cachedClientSecret!,
-        },
-      );
+      final response = await http
+          .get(
+            url,
+            headers: {
+              'X-Naver-Client-Id': _cachedClientId!,
+              'X-Naver-Client-Secret': _cachedClientSecret!,
+            },
+          )
+          .timeout(Duration(seconds: 5)); // 타임아웃 추가
 
       print('로컬 검색 응답 코드: ${response.statusCode}');
 
@@ -98,16 +194,14 @@ class RouteController {
         if (data['items'] != null && data['items'].isNotEmpty) {
           print('로컬 검색 결과 수: ${data['items'].length}');
 
-          // 로컬 검색 결과를 간단한 형식으로 변환
           return data['items'].map<Map<String, dynamic>>((item) {
-            // HTML 태그 제거
             String title = item['title'].replaceAll(RegExp(r'<[^>]*>'), '');
 
             return {
               'name': title,
               'address': item['roadAddress'] ?? item['address'] ?? '',
-              'x': item['mapx'] ?? '0', // 경도
-              'y': item['mapy'] ?? '0', // 위도
+              'x': item['mapx'] ?? '0',
+              'y': item['mapy'] ?? '0',
             };
           }).toList();
         }
@@ -120,27 +214,24 @@ class RouteController {
     }
   }
 
-  // 주소-좌표 변환 (address_controller에서 이동)
+  // 주소-좌표 변환 (기존 유지)
   NLatLng convertAddressToCoords(Map<String, dynamic> searchResult) {
     try {
-      // 네이버 지도 API의 좌표는 경위도에 10^7을 곱한 값을 사용
       double x = double.parse(searchResult['x']) / 10000000.0;
       double y = double.parse(searchResult['y']) / 10000000.0;
 
-      return NLatLng(y, x); // NLatLng는 (위도, 경도) 순서
+      return NLatLng(y, x);
     } catch (e) {
       print('좌표 변환 오류: $e');
-      // 기본값으로 서울시청 좌표 반환
       return NLatLng(37.5666805, 126.9784147);
     }
   }
 
-  // 좌표-주소 변환 (간단 버전)
+  // 좌표-주소 변환 (기존 유지)
   Future<String> getAddressFromCoords(NLatLng position) async {
-    // API 키 확인
     bool keysInitialized = await _initAllApiKeys();
     if (!keysInitialized) {
-      return '서울특별시 강남구'; // 기본 주소
+      return '서울특별시 강남구';
     }
 
     final url =
@@ -148,33 +239,34 @@ class RouteController {
         'coords=${position.longitude},${position.latitude}&output=json';
 
     try {
-      final response = await http.get(
-        Uri.parse(url),
-        headers: {
-          'X-NCP-APIGW-API-KEY-ID': _cachedApiKey!,
-          'X-NCP-APIGW-API-KEY': _cachedSecretKey!,
-          'Accept': 'application/json',
-        },
-      );
+      final response = await http
+          .get(
+            Uri.parse(url),
+            headers: {
+              'X-NCP-APIGW-API-KEY-ID': _cachedApiKey!,
+              'X-NCP-APIGW-API-KEY': _cachedSecretKey!,
+              'Accept': 'application/json',
+            },
+          )
+          .timeout(Duration(seconds: 5));
 
       if (response.statusCode == 200) {
         final responseBody = utf8.decode(response.bodyBytes);
         final data = json.decode(responseBody);
 
         if (data['results'] != null && data['results'].isNotEmpty) {
-          // 간단한 주소 파싱
           return _parseSimpleAddress(data);
         }
       }
 
-      return '강원특별자치도 강릉시'; // 기본 주소
+      return '강원특별자치도 강릉시';
     } catch (e) {
       print('주소 변환 오류: $e');
       return '강원특별자치도 강릉시';
     }
   }
 
-  // 간단한 주소 파싱
+  // 간단한 주소 파싱 (기존 유지)
   String _parseSimpleAddress(Map<String, dynamic> response) {
     try {
       final results = response['results'];
@@ -192,7 +284,6 @@ class RouteController {
         }
       }
 
-      // 도로명 주소가 없으면 법정동 주소 사용
       for (var result in results) {
         if (result['name'] == 'legalcode' && result['region'] != null) {
           final region = result['region'];
@@ -213,11 +304,21 @@ class RouteController {
     }
   }
 
-  // TMAP API를 사용한 도보 경로 검색 메서드
+  // TMAP API를 사용한 도보 경로 검색 메서드 (최적화)
   Future<Map<String, dynamic>> searchWalkRouteWithTmap(
     NLatLng start,
     NLatLng end,
   ) async {
+    print('TMAP 도보 경로 요청 시작: ${DateTime.now()}');
+
+    // 캐시 확인
+    final cacheKey = _generateCacheKey(start, end, 'walk');
+    final cached = _getWalkFromCache(cacheKey);
+    if (cached != null) {
+      print('도보 경로 캐시 히트!');
+      return cached;
+    }
+
     // TMAP API 키 확인
     bool keysInitialized = await _initAllApiKeys();
     if (!keysInitialized) {
@@ -232,10 +333,10 @@ class RouteController {
 
       // 요청 바디 구성
       final requestBody = {
-        'startX': start.longitude.toString(),
-        'startY': start.latitude.toString(),
-        'endX': end.longitude.toString(),
-        'endY': end.latitude.toString(),
+        'startX': start.longitude.toStringAsFixed(6),
+        'startY': start.latitude.toStringAsFixed(6),
+        'endX': end.longitude.toStringAsFixed(6),
+        'endY': end.latitude.toStringAsFixed(6),
         'reqCoordType': 'WGS84GEO',
         'resCoordType': 'WGS84GEO',
         'startName': '출발지',
@@ -243,83 +344,31 @@ class RouteController {
       };
 
       print('TMAP 도보 경로 요청 URL: $url');
-      print('요청 파라미터: $requestBody');
 
-      // API 호출
-      final response = await http.post(
-        url,
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'appKey': _cachedTmapApiKey!,
-        },
-        body: Uri(queryParameters: requestBody).query,
-      );
+      // API 호출 (타임아웃 설정)
+      final response = await http
+          .post(
+            url,
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'appKey': _cachedTmapApiKey!,
+            },
+            body: Uri(queryParameters: requestBody).query,
+          )
+          .timeout(Duration(seconds: 5)); // 도보는 5초 타임아웃
 
       print('TMAP 도보 경로 응답 상태 코드: ${response.statusCode}');
-      print('TMAP 도보 경로 응답 내용: ${response.body}');
 
       if (response.statusCode == 200) {
-        // JSON 응답 처리
         final data = json.decode(response.body);
+        final routeData = _parseTmapWalkResponse(data, start, end);
 
-        // TMAP 응답 파싱
-        if (data['features'] != null) {
-          final features = data['features'] as List;
-          final List<NLatLng> pathCoordinates = [];
-          int totalTime = 0;
-          int totalDistance = 0;
+        // 캐시에 저장
+        _saveWalkToCache(cacheKey, routeData);
 
-          // 모든 feature를 순회하며 경로 좌표 추출
-          for (var feature in features) {
-            final geometry = feature['geometry'];
-            final properties = feature['properties'];
-
-            // 시간과 거리 정보 추출
-            if (properties != null) {
-              if (properties['totalTime'] != null) {
-                final totalTimeValue = properties['totalTime'] as num;
-                totalTime = totalTimeValue.round();
-              }
-
-              if (properties['totalDistance'] != null) {
-                totalDistance = (properties['totalDistance'] as num).round();
-              }
-            }
-
-            // LineString 타입일 때 좌표 추출
-            if (geometry['type'] == 'LineString') {
-              final coordinates = geometry['coordinates'] as List;
-              for (var coord in coordinates) {
-                if (coord is List && coord.length >= 2) {
-                  double longitude = (coord[0] as num).toDouble();
-                  double latitude = (coord[1] as num).toDouble();
-                  pathCoordinates.add(NLatLng(latitude, longitude));
-                }
-              }
-            }
-            // Point 타입일 때는 단일 좌표
-            else if (geometry['type'] == 'Point') {
-              final coordinates = geometry['coordinates'] as List;
-              if (coordinates.length >= 2) {
-                double longitude = (coordinates[0] as num).toDouble();
-                double latitude = (coordinates[1] as num).toDouble();
-                pathCoordinates.add(NLatLng(latitude, longitude));
-              }
-            }
-          }
-
-          // 캐시에 저장
-          _cachedWalkRoute = {
-            'routes': [
-              {'path': pathCoordinates},
-            ],
-            'distance': totalDistance,
-            'duration': totalTime,
-          };
-
-          return _cachedWalkRoute!;
-        }
+        print('TMAP 도보 경로 파싱 완료: ${DateTime.now()}');
+        return routeData;
       }
 
       return _getMockWalkRouteData(start, end);
@@ -329,7 +378,125 @@ class RouteController {
     }
   }
 
-  // 기존 메서드들은 그대로 유지
+  // TMAP 응답 파싱 최적화
+  Map<String, dynamic> _parseTmapWalkResponse(
+    dynamic data,
+    NLatLng start,
+    NLatLng end,
+  ) {
+    final List<NLatLng> pathCoordinates = [];
+    int totalTime = 0;
+    int totalDistance = 0;
+
+    try {
+      if (data['features'] != null) {
+        final features = data['features'] as List;
+
+        // 총 시간/거리 추출
+        for (var feature in features) {
+          final properties = feature['properties'];
+          if (properties != null) {
+            if (properties['totalTime'] != null) {
+              totalTime = (properties['totalTime'] as num).round();
+            }
+            if (properties['totalDistance'] != null) {
+              totalDistance = (properties['totalDistance'] as num).round();
+            }
+            if (totalTime > 0 && totalDistance > 0) break;
+          }
+        }
+
+        // 좌표 추출
+        for (var feature in features) {
+          final geometry = feature['geometry'];
+          if (geometry == null) continue;
+
+          if (geometry['type'] == 'LineString') {
+            final coordinates = geometry['coordinates'] as List;
+            for (var coord in coordinates) {
+              if (coord is List && coord.length >= 2) {
+                double longitude = (coord[0] as num).toDouble();
+                double latitude = (coord[1] as num).toDouble();
+                pathCoordinates.add(NLatLng(latitude, longitude));
+              }
+            }
+          } else if (geometry['type'] == 'Point') {
+            final coordinates = geometry['coordinates'] as List;
+            if (coordinates.length >= 2) {
+              double longitude = (coordinates[0] as num).toDouble();
+              double latitude = (coordinates[1] as num).toDouble();
+              pathCoordinates.add(NLatLng(latitude, longitude));
+            }
+          }
+        }
+      }
+
+      // 좌표가 부족하면 간단한 경로 생성
+      if (pathCoordinates.length < 2) {
+        pathCoordinates.clear();
+        pathCoordinates.addAll(_generateSimpleWalkPath(start, end));
+
+        if (totalDistance == 0) {
+          totalDistance = _calculateDistance(start, end).round();
+        }
+        if (totalTime == 0) {
+          totalTime = (totalDistance / 1.4).round(); // 도보 속도 1.4m/s
+        }
+      }
+
+      return {
+        'routes': [
+          {'path': pathCoordinates},
+        ],
+        'distance': totalDistance,
+        'duration': totalTime,
+      };
+    } catch (e) {
+      print('TMAP 응답 파싱 오류: $e');
+      return _getMockWalkRouteData(start, end);
+    }
+  }
+
+  // 간단한 도보 경로 생성
+  List<NLatLng> _generateSimpleWalkPath(NLatLng start, NLatLng end) {
+    final distance = _calculateDistance(start, end);
+
+    if (distance < 100) {
+      return [start, end];
+    }
+
+    final points = <NLatLng>[start];
+    final steps = (distance / 200).clamp(1, 4).round();
+
+    for (int i = 1; i < steps; i++) {
+      final ratio = i / steps;
+      final lat = start.latitude + (end.latitude - start.latitude) * ratio;
+      final lng = start.longitude + (end.longitude - start.longitude) * ratio;
+      points.add(NLatLng(lat, lng));
+    }
+
+    points.add(end);
+    return points;
+  }
+
+  // 거리 계산 메서드
+  double _calculateDistance(NLatLng point1, NLatLng point2) {
+    const double earthRadius = 6371000;
+    final double lat1 = point1.latitude * (3.141592653589793 / 180);
+    final double lat2 = point2.latitude * (3.141592653589793 / 180);
+    final double dLat =
+        (point2.latitude - point1.latitude) * (3.141592653589793 / 180);
+    final double dLon =
+        (point2.longitude - point1.longitude) * (3.141592653589793 / 180);
+
+    final double a =
+        (dLat / 2) * (dLat / 2) + lat1 * lat2 * (dLon / 2) * (dLon / 2);
+    final double c = 2 * (a / (1 + a));
+
+    return earthRadius * c;
+  }
+
+  // 기존 메서드들 유지
   Future<Map<String, dynamic>> searchWalkRoute(
     NLatLng start,
     NLatLng end,
@@ -362,6 +529,13 @@ class RouteController {
     NLatLng start,
     NLatLng end,
   ) async {
+    // 캐시 확인
+    final cacheKey = _generateCacheKey(start, end, 'car');
+    final cached = _getFromCache(cacheKey);
+    if (cached != null) {
+      return cached;
+    }
+
     if (_cachedCarRoute != null) {
       return _cachedCarRoute!;
     }
@@ -379,13 +553,15 @@ class RouteController {
         'option=trafast',
       );
 
-      final response = await http.get(
-        url,
-        headers: {
-          'X-NCP-APIGW-API-KEY-ID': _cachedApiKey!,
-          'X-NCP-APIGW-API-KEY': _cachedSecretKey!,
-        },
-      );
+      final response = await http
+          .get(
+            url,
+            headers: {
+              'X-NCP-APIGW-API-KEY-ID': _cachedApiKey!,
+              'X-NCP-APIGW-API-KEY': _cachedSecretKey!,
+            },
+          )
+          .timeout(Duration(seconds: 8));
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -415,7 +591,7 @@ class RouteController {
             }
           }
 
-          _cachedCarRoute = {
+          final routeData = {
             'routes': [
               {'path': pathCoordinates, 'summary': route['summary']},
             ],
@@ -424,7 +600,11 @@ class RouteController {
             'toll': route['summary']?['tollFare'] ?? 0,
           };
 
-          return _cachedCarRoute!;
+          // 캐시에 저장
+          _saveToCache(cacheKey, routeData);
+          _cachedCarRoute = routeData;
+
+          return routeData;
         }
       }
 
@@ -442,7 +622,7 @@ class RouteController {
     _cachedWalkRoute = null;
   }
 
-  // 예시 데이터 생성 메서드들
+  // 예시 데이터 생성 메서드들 (기존 유지)
   List<RouteData> _getMockPublicTransportData() {
     return [
       RouteData(
@@ -493,23 +673,14 @@ class RouteController {
   }
 
   Map<String, dynamic> _getMockWalkRouteData(NLatLng start, NLatLng end) {
+    final distance = _calculateDistance(start, end).round();
+    final duration = (distance / 1.4).round(); // 도보 속도 1.4m/s
+
     return {
-      'distance': 1200,
-      'duration': 840,
+      'distance': distance,
+      'duration': duration,
       'routes': [
-        {
-          'path': [
-            start,
-            NLatLng(start.latitude + 0.001, start.longitude + 0.002),
-            NLatLng(start.latitude + 0.002, start.longitude + 0.003),
-            NLatLng(start.latitude + 0.003, start.longitude + 0.004),
-            end,
-          ],
-          'segments': [
-            {'name': '강남대로', 'distance': 500, 'duration': 350},
-            {'name': '역삼로', 'distance': 700, 'duration': 490},
-          ],
-        },
+        {'path': _generateSimpleWalkPath(start, end)},
       ],
     };
   }

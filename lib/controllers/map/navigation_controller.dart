@@ -15,7 +15,6 @@ class NavigationController {
 
   // 오버레이 객체들
   NPathOverlay? _routePathOverlay;
-  NMarker? _startMarker;
   NMarker? _destinationMarker;
   NMarker? _currentLocationMarker;
 
@@ -55,7 +54,17 @@ class NavigationController {
   Map<String, dynamic>? _currentInstruction;
   Map<String, dynamic>? _nextInstruction;
 
-  // ===== StreamController 부분 시작 =====
+  // 현재 방향 정보 저장 변수 추가
+  double _currentHeading = 0.0;
+
+  // 현재 방향 정보 getter 추가
+  double getCurrentHeading() {
+    return _currentHeading;
+  }
+
+  double _lastHeading = 0.0; // 이전 방향 저장
+  static const double _headingThreshold = 10.0; // 10도 이상 변화시에만 업데이트
+
   final StreamController<Map<String, dynamic>> _navigationInfoController =
       StreamController<Map<String, dynamic>>.broadcast();
   final StreamController<NLatLng> _locationController =
@@ -80,6 +89,10 @@ class NavigationController {
   Stream<int> get speedLimitStream => _speedLimitController.stream;
   // ===== StreamController 부분 끝 =====
 
+  // 경로 로딩 상태 추가
+  bool _isRouteLoading = false;
+  bool get isRouteLoading => _isRouteLoading;
+
   // 생성자
   NavigationController(this.mode, this._origin, this._destination) {
     // 모드에 따른 마커 색상 설정
@@ -97,41 +110,127 @@ class NavigationController {
     _currentPosition = _origin;
 
     // 경로 탐색 (비동기 호출이므로 생성자에서 직접 await 불가)
-    _fetchRoute();
+    _fetchRouteAsync();
+  }
+
+  void _fetchRouteAsync() async {
+    _isRouteLoading = true;
+    try {
+      await _fetchRoute();
+    } finally {
+      _isRouteLoading = false;
+    }
+  }
+
+  Future<Map<String, dynamic>> _getRouteData() async {
+    if (mode == TransitMode.car) {
+      return await _routeController.searchCarRoute(_origin, _destination);
+    } else {
+      return await _routeController.searchWalkRoute(_origin, _destination);
+    }
+  }
+
+  void _createStraightPathFast() {
+    _pathCoordinates = [_origin, _destination];
+
+    if (_mapController != null) {
+      displayPathOverlay(_pathCoordinates);
+    }
+
+    // 기본 지시사항만 생성
+    _createBasicInstructions();
+  }
+
+  void _createBasicInstructions() {
+    _turnByTurnInstructions = [
+      {
+        'direction': "목적지로 이동",
+        'directionIcon': Icons.navigation,
+        'point': _destination,
+        'distance': _calculateDistance(_origin, _destination).round(),
+        'nextDistance': 0,
+        'roadName': "직선 경로",
+        'index': 1,
+      },
+    ];
+
+    if (_turnByTurnInstructions.isNotEmpty) {
+      _currentInstruction = _turnByTurnInstructions.first;
+      _turnByTurnController.add(_currentInstruction!);
+    }
+  }
+
+  void _generateTurnByTurnInstructionsAsync() {
+    Future.microtask(() {
+      _generateTurnByTurnInstructions();
+    });
+  }
+
+  // 도보용 간단한 지시사항 생성
+  void _generateSimpleWalkInstructions() {
+    _turnByTurnInstructions = [];
+
+    if (_pathCoordinates.length < 2) return;
+
+    final distance = _calculateDistance(_origin, _destination);
+
+    // 간단한 지시사항만 생성
+    _turnByTurnInstructions.add({
+      'direction': "목적지로 걸어가세요",
+      'directionIcon': Icons.directions_walk,
+      'point': _destination,
+      'distance': distance.round(),
+      'nextDistance': 0,
+      'roadName': "도보 경로",
+      'index': 0,
+      'distanceToPoint': distance.round(),
+    });
+
+    if (_turnByTurnInstructions.isNotEmpty) {
+      _currentInstruction = _turnByTurnInstructions.first;
+      _turnByTurnController.add(_currentInstruction!);
+    }
   }
 
   // API를 사용해 경로 가져오기
   Future<void> _fetchRoute() async {
+    print('경로 요청 시작: ${DateTime.now()}');
+
     try {
       Map<String, dynamic> routeData;
 
-      // 모드에 따라 다른 API 사용
-      if (mode == TransitMode.car) {
-        // 자동차 경로 요청
-        routeData = await _routeController.searchCarRoute(
-          _origin,
-          _destination,
-        );
+      if (mode == TransitMode.walk) {
+        // 도보는 더 짧은 타임아웃
+        routeData = await Future.any([
+          _routeController.searchWalkRoute(_origin, _destination),
+          Future.delayed(
+            Duration(seconds: 5),
+            () => throw TimeoutException('도보 경로 타임아웃'),
+          ),
+        ]);
       } else {
-        // 도보 경로 요청
-        routeData = await _routeController.searchWalkRoute(
-          _origin,
-          _destination,
-        );
+        routeData = await Future.any([
+          _routeController.searchCarRoute(_origin, _destination),
+          Future.delayed(
+            Duration(seconds: 8),
+            () => throw TimeoutException('자동차 경로 타임아웃'),
+          ),
+        ]);
       }
 
-      // 경로 좌표 추출
       if (routeData['routes'] != null && routeData['routes'].isNotEmpty) {
         final route = routeData['routes'][0];
         if (route['path'] != null) {
           _pathCoordinates = List<NLatLng>.from(route['path']);
+          print('경로 로딩 완료: ${_pathCoordinates.length}개 좌표');
 
-          print('API에서 가져온 경로 좌표 개수: ${_pathCoordinates.length}');
+          // 도보 모드는 간단한 턴바이턴만 생성
+          if (mode == TransitMode.walk) {
+            _generateSimpleWalkInstructions();
+          } else {
+            _generateTurnByTurnInstructionsAsync();
+          }
 
-          // 턴바이턴 지시 사항 생성
-          _generateTurnByTurnInstructions();
-
-          // 맵 컨트롤러가 이미 설정되어 있다면 경로 표시
           if (_mapController != null) {
             displayPathOverlay(_pathCoordinates);
           }
@@ -139,8 +238,7 @@ class NavigationController {
       }
     } catch (e) {
       print('경로 가져오기 오류: $e');
-      // 오류 발생 시 직선 경로로 대체
-      _createStraightPath();
+      _createStraightPathFast();
     }
   }
 
@@ -337,9 +435,20 @@ class NavigationController {
   void setMapController(NaverMapController controller) {
     _mapController = controller;
 
-    // 맵 컨트롤러가 준비되면 현재 위치 마커 추가
-    if (_currentPosition != null) {
-      updateCurrentLocationMarker(_currentPosition!, 0);
+    // 위치 오버레이 초기 설정
+    try {
+      final locationOverlay = controller.getLocationOverlay();
+      locationOverlay.setIsVisible(true);
+
+      // 현재 위치와 방향이 있으면 설정
+      if (_currentPosition != null) {
+        locationOverlay.setPosition(_currentPosition!);
+        if (_currentHeading != 0.0) {
+          locationOverlay.setBearing(_currentHeading);
+        }
+      }
+    } catch (e) {
+      print('위치 오버레이 초기 설정 오류: $e');
     }
 
     // 경로가 이미 로드되어 있다면 경로 표시
@@ -366,6 +475,10 @@ class NavigationController {
 
       // 현재 속도 업데이트 (m/s에서 km/h로 변환)
       _currentSpeed = (position.speed * 3.6).clamp(0, 200);
+
+      // 현재 방향 업데이트 (heading 정보 저장)
+      _currentHeading = position.heading;
+      print('현재 방향: ${_currentHeading.toStringAsFixed(1)}도');
 
       // 위치 스트림에 알림
       _locationController.add(newPosition);
@@ -492,7 +605,8 @@ class NavigationController {
   // 경로 재계산
   Future<Map<String, dynamic>> recalculateRoute(NLatLng newOrigin) async {
     print('경로 재계산 시작: 출발지=${newOrigin}, 도착지=${_destination}');
-    // 출발지 주소 가져오기 추가
+
+    // 출발지 주소 가져오기
     String originAddress = await getAddressFromCoordinates(newOrigin);
     print('새 출발지 주소: $originAddress');
 
@@ -659,7 +773,7 @@ class NavigationController {
   void clearAllOverlays() {
     if (_mapController == null) return;
 
-    print('모든 오버레이 제거 시작');
+    print('모든 오버레이 제거/숨김 시작');
 
     try {
       // 경로선 제거
@@ -669,11 +783,47 @@ class NavigationController {
         print('경로선 제거 완료');
       }
 
-      // 출발지 마커 제거
-      if (_startMarker != null) {
-        _mapController!.deleteOverlay(_startMarker!.info);
-        _startMarker = null;
-        print('출발지 마커 제거 완료');
+      // 도착지 마커 제거
+      if (_destinationMarker != null) {
+        _mapController!.deleteOverlay(_destinationMarker!.info);
+        _destinationMarker = null;
+        print('도착지 마커 제거 완료');
+      }
+
+      // 현재 위치 마커 제거 (위치 오버레이로 대체)
+      if (_currentLocationMarker != null) {
+        _mapController!.deleteOverlay(_currentLocationMarker!.info);
+        _currentLocationMarker = null;
+        print('현재 위치 마커 제거 완료');
+      }
+
+      // 위치 오버레이는 숨기기만 함 (완전 제거하지 않음)
+      try {
+        final locationOverlay = _mapController!.getLocationOverlay();
+        locationOverlay.setIsVisible(false);
+        print('위치 오버레이 숨김 완료');
+      } catch (e) {
+        print('위치 오버레이 숨김 중 오류: $e');
+      }
+
+      print('모든 오버레이 제거/숨김 완료');
+    } catch (e) {
+      print('오버레이 제거/숨김 중 오류: $e');
+    }
+  }
+
+  // 경로선과 마커 제거 (위치 오버레이는 유지)
+  void clearPathOverlays() {
+    if (_mapController == null) return;
+
+    print('경로선과 마커 제거 시작 (위치 오버레이는 유지)');
+
+    try {
+      // 경로선 제거
+      if (_routePathOverlay != null) {
+        _mapController!.deleteOverlay(_routePathOverlay!.info);
+        _routePathOverlay = null;
+        print('경로선 제거 완료');
       }
 
       // 도착지 마커 제거
@@ -683,21 +833,20 @@ class NavigationController {
         print('도착지 마커 제거 완료');
       }
 
-      // 현재 위치 마커 제거
+      // 현재 위치 마커가 있다면 제거 (위치 오버레이로 대체되므로)
       if (_currentLocationMarker != null) {
         _mapController!.deleteOverlay(_currentLocationMarker!.info);
         _currentLocationMarker = null;
         print('현재 위치 마커 제거 완료');
       }
 
-      print('모든 오버레이 제거 완료');
+      print('경로선과 마커 제거 완료 (위치 오버레이는 유지)');
     } catch (e) {
       print('오버레이 제거 중 오류: $e');
     }
   }
 
   // 경로 이탈 확인
-  // 경로 이탈 확인 메서드 개선
   bool _isDeviated(NLatLng position) {
     if (_pathCoordinates.isEmpty) return false;
 
@@ -766,6 +915,11 @@ class NavigationController {
 
   // 경로 이탈 시 자동 재계산 처리
   void handleRouteDeviation(NLatLng currentPosition) {
+    // 도보 모드에서는 경로 이탈 감지 및 재계산 비활성화
+    if (mode == TransitMode.walk) {
+      return;
+    }
+
     if (_isDeviated(currentPosition)) {
       print('경로 재계산 시작: 현재 위치에서 목적지까지');
       _routeDeviationController.add(true);
@@ -834,84 +988,46 @@ class NavigationController {
     return bearing;
   }
 
-  // 마커 추가
-  void addMarkers(
-    NLatLng origin,
-    NLatLng destination,
-    String originName,
-    String destinationName,
-  ) {
-    if (_mapController == null) return;
-
-    // 기존 마커 제거
-    if (_startMarker != null) {
-      _mapController!.deleteOverlay(_startMarker!.info);
-    }
-
-    if (_destinationMarker != null) {
-      _mapController!.deleteOverlay(_destinationMarker!.info);
-    }
-
-    // 출발지 마커 생성 (기본 마커)
-    _startMarker = NMarker(id: 'navigation_start_marker', position: origin);
-
-    // 출발지 마커 색상 변경
-    _startMarker!.setIconTintColor(_startMarkerColor);
-
-    // 출발지 마커 캡션 설정
-    _startMarker!.setCaption(NOverlayCaption(text: '출발'));
-
-    // 도착지 마커 생성 (기본 마커)
-    _destinationMarker = NMarker(
-      id: 'navigation_end_marker',
-      position: destination,
-    );
-
-    // 도착지 마커 색상 변경
-    _destinationMarker!.setIconTintColor(_destinationMarkerColor);
-
-    // 도착지 마커 캡션 설정
-    _destinationMarker!.setCaption(NOverlayCaption(text: '도착'));
-
-    // 마커 클릭 이벤트 설정
-    _startMarker!.setOnTapListener((marker) {
-      print('출발지 마커 클릭');
-    });
-
-    _destinationMarker!.setOnTapListener((marker) {
-      print('도착지 마커 클릭');
-    });
-
-    // 마커 추가
-    _mapController!.addOverlay(_startMarker!);
-    _mapController!.addOverlay(_destinationMarker!);
-  }
-
-  // 현재 위치 마커 추가/업데이트 (마커 생성하지 않고 카메라만 이동)
+  // 현재 위치 마커
   void updateCurrentLocationMarker(NLatLng position, double? heading) {
     if (_mapController == null) return;
 
-    // 기존 마커 제거
-    if (_currentLocationMarker != null) {
-      _mapController!.deleteOverlay(_currentLocationMarker!.info);
-      _currentLocationMarker = null;
-    }
+    try {
+      final locationOverlay = _mapController!.getLocationOverlay();
+      locationOverlay.setPosition(position);
 
-    // 현재 위치 마커는 더 이상 생성하지 않음
-    // 대신 카메라만 현재 위치로 이동
-    _mapController!.updateCamera(
-      NCameraUpdate.withParams(
-        target: position,
-        zoom: 17,
-        bearing: heading ?? 0,
-      ),
-    );
+      // 방향 변화가 임계값 이상일 때만 업데이트
+      if (heading != null && !heading.isNaN) {
+        double headingDiff = (heading - _lastHeading).abs();
+
+        // 360도 경계 처리 (예: 350도 -> 10도)
+        if (headingDiff > 180) {
+          headingDiff = 360 - headingDiff;
+        }
+
+        if (headingDiff > _headingThreshold) {
+          locationOverlay.setBearing(heading);
+          _currentHeading = heading;
+          _lastHeading = heading;
+          print('방향 업데이트: ${heading.toStringAsFixed(1)}도');
+        }
+      }
+
+      // 오버레이가 보이도록 설정
+      locationOverlay.setIsVisible(true);
+
+      // 위치 추적 모드 설정
+      _mapController!.setLocationTrackingMode(
+        mode == TransitMode.car
+            ? NLocationTrackingMode.face
+            : NLocationTrackingMode.follow,
+      );
+    } catch (e) {
+      print('위치 오버레이 업데이트 오류: $e');
+    }
   }
 
-  // 경로 표시
-  // navigation_controller.dart의 displayPathOverlay 메서드 수정
-
-  // 경로선 표시 메서드 개선
+  // 경로선 표시
   void displayPathOverlay(List<NLatLng> coordinates) {
     if (_mapController == null || coordinates.isEmpty) {
       print('경로선 표시 불가: 맵 컨트롤러 없거나 좌표 없음');
@@ -920,20 +1036,20 @@ class NavigationController {
 
     print('경로선 표시 시작: 좌표 개수=${coordinates.length}');
 
-    // 기존 오버레이 모두 제거 (car_modal.dart 방식과 동일)
-    clearAllOverlays();
+    // 기존 오버레이 제거 (현재 위치 마커는 제외)
+    clearPathOverlays();
 
     // 경로 좌표 저장
     _pathCoordinates = coordinates;
 
     try {
-      // 색상 설정 - car_modal.dart와 동일하게 설정
+      // 색상 설정
       Color pathColor =
           mode == TransitMode.car ? Color(0xFFFB233B) : Color(0xFF0771EB);
       Color outlineColor =
           mode == TransitMode.car ? Color(0xFFB11829) : Color(0xFF0353AE);
 
-      // 경로선 생성 - car_modal.dart와 동일한 스타일
+      // 경로선 생성
       _routePathOverlay = NPathOverlay(
         id: 'navigation_route',
         coords: coordinates,
@@ -956,217 +1072,40 @@ class NavigationController {
       _mapController!.addOverlay(_routePathOverlay!);
       print('경로선 맵에 추가 완료');
 
-      // 출발지 마커 추가
-      if (_origin != null) {
-        final markerImage = NOverlayImage.fromAssetImage(
-          'assets/icons/start_marker.png',
-        );
-        _startMarker = NMarker(
-          id: 'navigation_start_marker',
-          position: _origin,
-          icon: markerImage,
-          size: const Size(40, 50),
-          anchor: const NPoint(0.5, 1.0),
-        );
-        _mapController!.addOverlay(_startMarker!);
-        print('출발지 마커 추가 완료');
-      }
-
       // 도착지 마커 추가
       if (_destination != null) {
+        // 확실히 존재하는 기본 아이콘 사용
         final markerImage = NOverlayImage.fromAssetImage(
           'assets/icons/end_marker.png',
         );
+
         _destinationMarker = NMarker(
           id: 'navigation_end_marker',
           position: _destination,
           icon: markerImage,
           size: const Size(40, 50),
           anchor: const NPoint(0.5, 1.0),
+          // 모드에 따라 색상으로 구분
+          iconTintColor:
+              mode == TransitMode.car
+                  ? Color(0xFFFB233B) // 자동차: 빨간색 계열
+                  : Color(0xFF0771EB), // 도보: 파란색 계열
         );
+
         _mapController!.addOverlay(_destinationMarker!);
-        print('도착지 마커 추가 완료');
+        print(
+          '도착지 마커 추가 완료 - ${mode == TransitMode.car ? "자동차(빨간색)" : "도보(파란색)"}',
+        );
+      }
+
+      // 위치 오버레이 활성화 (현재 위치가 있는 경우)
+      if (_currentPosition != null) {
+        final locationOverlay = _mapController!.getLocationOverlay();
+        locationOverlay.setPosition(_currentPosition!);
+        locationOverlay.setIsVisible(true);
       }
     } catch (e) {
       print('경로선 생성/추가 오류: $e');
-    }
-  }
-
-  // 경로 재계산 메서드 개선
-  Future<bool> enhancedRecalculateRoute(NLatLng newOrigin) async {
-    print('개선된 경로 재계산 시작: 출발지=${newOrigin}, 도착지=${_destination}');
-
-    try {
-      Map<String, dynamic> routeData;
-
-      // 기존 경로선 제거
-      if (_mapController != null && _routePathOverlay != null) {
-        try {
-          _mapController!.deleteOverlay(_routePathOverlay!.info);
-          print('기존 경로선 제거 성공');
-        } catch (e) {
-          print('기존 경로선 제거 중 오류: $e');
-        }
-        _routePathOverlay = null;
-      }
-
-      // 경로 데이터 요청
-      if (mode == TransitMode.car) {
-        routeData = await _routeController.searchCarRoute(
-          newOrigin,
-          _destination,
-        );
-      } else {
-        routeData = await _routeController.searchWalkRoute(
-          newOrigin,
-          _destination,
-        );
-      }
-
-      print('경로 데이터 수신 완료');
-
-      // 맵 컨트롤러 확인
-      if (_mapController == null) {
-        print('경로 재계산: 맵 컨트롤러가 null임. 경로선 표시 불가');
-        return false;
-      }
-
-      // 경로 좌표 추출
-      List<NLatLng> pathCoordinates = [];
-
-      if (routeData['routes'] != null && routeData['routes'].isNotEmpty) {
-        final route = routeData['routes'][0];
-        if (route['path'] != null) {
-          pathCoordinates = List<NLatLng>.from(route['path']);
-          print('새 경로 좌표 개수: ${pathCoordinates.length}');
-        }
-      }
-
-      if (pathCoordinates.isEmpty) {
-        print('경로 좌표가 비어있음. 기본 경로 생성');
-        // 기본 직선 경로 생성
-        pathCoordinates = [
-          newOrigin,
-          NLatLng(
-            newOrigin.latitude +
-                (_destination.latitude - newOrigin.latitude) * 0.5,
-            newOrigin.longitude +
-                (_destination.longitude - newOrigin.longitude) * 0.5,
-          ),
-          _destination,
-        ];
-      }
-
-      // 경로 좌표 저장
-      _pathCoordinates = pathCoordinates;
-
-      // 색상 설정
-      Color pathColor =
-          mode == TransitMode.car ? Color(0xFFFB233B) : Color(0xFF0771EB);
-      Color outlineColor =
-          mode == TransitMode.car ? Color(0xFFB11829) : Color(0xFF0353AE);
-
-      // 새 경로선 생성 (고유 ID 사용)
-      String uniqueId =
-          'navigation_route_path_${DateTime.now().millisecondsSinceEpoch}';
-      print('새 경로선 ID: $uniqueId');
-
-      _routePathOverlay = NPathOverlay(
-        id: uniqueId,
-        coords: pathCoordinates,
-        width: 12.0,
-        color: pathColor,
-        outlineWidth: 5.0,
-        outlineColor: outlineColor,
-        patternImage: NOverlayImage.fromAssetImage(
-          'assets/icons/arrow_icon.png',
-        ),
-        patternInterval: 20,
-        isHideCollidedCaptions: false,
-        isHideCollidedMarkers: false,
-        isHideCollidedSymbols: false,
-      );
-
-      // 맵에 경로선 추가
-      print('새 경로선 추가 시도');
-      _mapController!.addOverlay(_routePathOverlay!);
-      print('새 경로선 추가 성공');
-
-      // 카메라 위치 업데이트
-      _mapController!.updateCamera(
-        NCameraUpdate.withParams(target: newOrigin, zoom: 17.0),
-      );
-
-      // 턴바이턴 지시 업데이트
-      _generateTurnByTurnInstructions();
-
-      print('경로 재계산 완료');
-      return true;
-    } catch (e) {
-      print('경로 재계산 중 오류 발생: $e');
-
-      // 오류 발생 시도 기본 경로 생성 시도
-      try {
-        if (_mapController != null) {
-          // 기존 경로선 제거
-          if (_routePathOverlay != null) {
-            _mapController!.deleteOverlay(_routePathOverlay!.info);
-            _routePathOverlay = null;
-          }
-
-          // 기본 경로 생성
-          _pathCoordinates = [
-            newOrigin,
-            NLatLng(
-              newOrigin.latitude +
-                  (_destination.latitude - newOrigin.latitude) * 0.5,
-              newOrigin.longitude +
-                  (_destination.longitude - newOrigin.longitude) * 0.5,
-            ),
-            _destination,
-          ];
-
-          // 색상 설정
-          Color pathColor =
-              mode == TransitMode.car ? Color(0xFFFB233B) : Color(0xFF0771EB);
-          Color outlineColor =
-              mode == TransitMode.car ? Color(0xFFB11829) : Color(0xFF0353AE);
-
-          // 새 경로선 생성
-          _routePathOverlay = NPathOverlay(
-            id: 'navigation_route_path_emergency',
-            coords: _pathCoordinates,
-            width: 12.0,
-            color: pathColor,
-            outlineWidth: 5.0,
-            outlineColor: outlineColor,
-            patternImage: NOverlayImage.fromAssetImage(
-              'assets/icons/arrow_icon.png',
-            ),
-            patternInterval: 20,
-            isHideCollidedCaptions: false,
-            isHideCollidedMarkers: false,
-            isHideCollidedSymbols: false,
-          );
-
-          // 맵에 경로선 추가
-          _mapController!.addOverlay(_routePathOverlay!);
-
-          // 카메라 위치 업데이트
-          _mapController!.updateCamera(
-            NCameraUpdate.withParams(target: newOrigin, zoom: 17.0),
-          );
-
-          // 턴바이턴 지시 업데이트
-          _generateTurnByTurnInstructions();
-
-          print('비상 경로 생성 성공');
-          return true;
-        }
-      } catch (e2) {
-        print('비상 경로 생성 중 오류: $e2');
-      }
-      return false;
     }
   }
 
