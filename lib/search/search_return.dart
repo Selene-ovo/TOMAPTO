@@ -110,6 +110,96 @@ class _SearchResultPageState extends State<SearchResultPage> {
     });
   }
 
+  // 현재 내 위치 버튼 클릭 처리
+  void _onCurrentLocationPressed() async {
+    try {
+      // 로딩 상태 표시
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator()),
+      );
+
+      // 현재 위치 가져오기
+      final position = await _controller.getCurrentPosition();
+
+      // 로딩 다이얼로그 닫기
+      Navigator.pop(context);
+
+      if (position != null) {
+        // 좌표값을 직접 사용하여 길찾기 페이지로 이동
+        final currentLocation = NLatLng(position.latitude, position.longitude);
+
+        if (widget.isSearchingOrigin) {
+          // 출발지로 설정 - 좌표와 함께 전달
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(
+              builder:
+                  (context) => TransitApp(
+                    initialOriginPlace: "현재 위치", // 표시용 텍스트
+                    initialOriginCoords: currentLocation, // 실제 좌표 전달
+                    initialDestinationPlace:
+                        widget.currentDestinationPlace != '도착지 입력'
+                            ? widget.currentDestinationPlace
+                            : null,
+                  ),
+            ),
+            (route) => false,
+          );
+        } else {
+          // 도착지로 설정 - 좌표와 함께 전달
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(
+              builder:
+                  (context) => TransitApp(
+                    initialOriginPlace:
+                        widget.currentOriginPlace != '위치 확인 중...' &&
+                                widget.currentOriginPlace != '위치 권한 없음' &&
+                                widget.currentOriginPlace != '위치 확인 실패'
+                            ? widget.currentOriginPlace
+                            : null,
+                    initialDestinationPlace: "현재 위치", // 표시용 텍스트
+                    initialDestinationCoords: currentLocation, // 실제 좌표 전달
+                  ),
+            ),
+            (route) => false,
+          );
+        }
+
+        // 최근 검색어에 추가
+        _controller.addToRecentSearches("현재 위치");
+      } else {
+        // 위치 정보를 가져올 수 없는 경우
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              '현재 위치를 가져올 수 없습니다. 위치 권한을 확인해주세요.',
+              style: TextStyle(fontFamily: "Pretendard"),
+            ),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      // 로딩 다이얼로그가 열려있으면 닫기
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '위치 정보를 가져오는 중 오류가 발생했습니다: $e',
+            style: const TextStyle(fontFamily: "Pretendard"),
+          ),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
   // 출발지로 설정하고 길찾기 페이지로 바로 이동하는 메서드
   void _setAsOrigin(SearchResult result) {
     // 기존 도착지 정보를 유지하면서 새로운 출발지 설정
@@ -201,10 +291,68 @@ class _SearchResultPageState extends State<SearchResultPage> {
     }
 
     if (searchResults.isEmpty) {
-      return const Center(child: Text('검색 결과가 없습니다. 다른 검색어를 입력해보세요.'));
+      return Column(
+        children: [
+          const SizedBox(height: 20),
+          // 현재 위치 선택 옵션 추가
+          _buildCurrentLocationOption(),
+          const Divider(height: 1, color: Color(0xFFE2E2E2)),
+          const Expanded(
+            child: Center(child: Text('검색 결과가 없습니다. 다른 검색어를 입력해보세요.')),
+          ),
+        ],
+      );
     }
 
-    return _buildSearchResultsList();
+    return Column(
+      children: [
+        // 현재 위치 선택 옵션 추가
+        _buildCurrentLocationOption(),
+        const Divider(height: 1, color: Color(0xFFE2E2E2)),
+        Expanded(child: _buildSearchResultsList()),
+      ],
+    );
+  }
+
+  // 현재 위치 선택 옵션 위젯
+  Widget _buildCurrentLocationOption() {
+    return GestureDetector(
+      onTap: _onCurrentLocationPressed,
+      child: Container(
+        color: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.my_location_rounded,
+              color: Color(0xFF0771EB),
+              size: 24,
+            ),
+            const SizedBox(width: 18),
+            const Expanded(
+              child: Text(
+                '현재 위치',
+                style: TextStyle(
+                  fontFamily: "Pretendard",
+                  color: Color(0xFF0771EB),
+                  fontWeight: FontWeight.w500,
+                  fontSize: 18,
+                ),
+              ),
+            ),
+            Text(
+              widget.isSearchingOrigin ? '출발' : '도착',
+              style: const TextStyle(
+                fontFamily: "Pretendard",
+                color: Color(0xFF727272),
+                fontWeight: FontWeight.w500,
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildAppBar(BuildContext context) {
@@ -222,11 +370,10 @@ class _SearchResultPageState extends State<SearchResultPage> {
                     size: 36,
                     color: Color(0xFF363636),
                   ),
-                  padding: EdgeInsets.zero, // 패딩 제거하여 정확한 터치 영역 설정
+                  padding: EdgeInsets.zero,
                   constraints: BoxConstraints(),
                   onPressed: () => Navigator.pop(context),
                 ),
-
                 Expanded(
                   child: Text(
                     widget.searchTerm,
@@ -255,7 +402,7 @@ class _SearchResultPageState extends State<SearchResultPage> {
         Container(
           height: 0.6,
           width: double.infinity,
-          color: Color(0xFFE2E2E2), // 테마 색상 사용 또는 직접 색상 지정
+          color: Color(0xFFE2E2E2),
         ),
       ],
     );
@@ -316,7 +463,7 @@ class _SearchResultPageState extends State<SearchResultPage> {
       itemBuilder: (context, index) {
         final result = searchResults[index];
         return GestureDetector(
-          onTap: () => _selectSearchResult(result), // 항목 자체를 탭하면 선택 처리
+          onTap: () => _selectSearchResult(result),
           child: Container(
             color: Colors.white,
             child: Column(
@@ -421,7 +568,6 @@ class _SearchResultPageState extends State<SearchResultPage> {
                         textColor: Color(0xFF0771EB),
                         onPressed: () => _setAsOrigin(result),
                       ),
-
                       const SizedBox(width: 8),
                       _buildSaveButton(
                         '저장',
@@ -437,7 +583,7 @@ class _SearchResultPageState extends State<SearchResultPage> {
                                 : Colors.grey[600]!,
                         onPressed: () => _toggleFavorite(index),
                       ),
-                      const Spacer(), // Spacer 위치 변경
+                      const Spacer(),
                     ],
                   ),
                 ),
@@ -452,7 +598,7 @@ class _SearchResultPageState extends State<SearchResultPage> {
   // 임시로 즐겨찾기 상태를 확인하는 메서드
   bool _isFavorite(String fullcategory) {
     // 실제로는 DB에서 확인하는 로직 필요
-    return fullcategory.contains('대학교'); // 임시로 대학교가 포함된 경우만 즐겨찾기로 표시
+    return fullcategory.contains('대학교');
   }
 
   Widget _buildActionButton(
@@ -490,7 +636,7 @@ class _SearchResultPageState extends State<SearchResultPage> {
     IconData icon, {
     Color textColor = Colors.white,
     Color borderColor = Colors.transparent,
-    Color iconColor = Colors.grey, // 기본값 설정
+    Color iconColor = Colors.grey,
     required VoidCallback onPressed,
   }) {
     return Material(

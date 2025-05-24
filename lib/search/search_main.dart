@@ -4,6 +4,8 @@ import 'package:tomapto/controllers/search/search_main_controller.dart';
 import 'package:tomapto/search/search_return.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_naver_map/flutter_naver_map.dart';
+import 'package:tomapto/pages/map/transit.dart';
 
 class SearchMainPage extends StatefulWidget {
   final String initialSearchTerm;
@@ -92,6 +94,96 @@ class _SearchMainPageState extends State<SearchMainPage>
     }
   }
 
+  // 현재 내 위치 버튼 클릭 처리
+  void _onCurrentLocationPressed() async {
+    try {
+      // 로딩 상태 표시
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator()),
+      );
+
+      // 현재 위치 가져오기
+      final position = await _controller.getCurrentPosition();
+
+      // 로딩 다이얼로그 닫기
+      Navigator.pop(context);
+
+      if (position != null) {
+        // 좌표값을 직접 사용하여 길찾기 페이지로 이동
+        final currentLocation = NLatLng(position.latitude, position.longitude);
+
+        if (widget.isSearchingOrigin) {
+          // 출발지로 설정 - 좌표와 함께 전달
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(
+              builder:
+                  (context) => TransitApp(
+                    initialOriginPlace: "현재 위치", // 표시용 텍스트
+                    initialOriginCoords: currentLocation, // 실제 좌표 전달
+                    initialDestinationPlace:
+                        widget.currentDestinationPlace != '도착지 입력'
+                            ? widget.currentDestinationPlace
+                            : null,
+                  ),
+            ),
+            (route) => false,
+          );
+        } else {
+          // 도착지로 설정 - 좌표와 함께 전달
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(
+              builder:
+                  (context) => TransitApp(
+                    initialOriginPlace:
+                        widget.currentOriginPlace != '위치 확인 중...' &&
+                                widget.currentOriginPlace != '위치 권한 없음' &&
+                                widget.currentOriginPlace != '위치 확인 실패'
+                            ? widget.currentOriginPlace
+                            : null,
+                    initialDestinationPlace: "현재 위치", // 표시용 텍스트
+                    initialDestinationCoords: currentLocation, // 실제 좌표 전달
+                  ),
+            ),
+            (route) => false,
+          );
+        }
+
+        // 최근 검색어에 추가
+        _controller.addToRecentSearches("현재 위치");
+      } else {
+        // 위치 정보를 가져올 수 없는 경우
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              '현재 위치를 가져올 수 없습니다. 위치 권한을 확인해주세요.',
+              style: TextStyle(fontFamily: "Pretendard"),
+            ),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      // 로딩 다이얼로그가 열려있으면 닫기
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '위치 정보를 가져오는 중 오류가 발생했습니다: $e',
+            style: const TextStyle(fontFamily: "Pretendard"),
+          ),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
   @override
   void dispose() {
     _controller.dispose();
@@ -108,6 +200,8 @@ class _SearchMainPageState extends State<SearchMainPage>
         body: Column(
           children: [
             _buildAppBar(),
+            // 현재 내 위치 버튼 추가
+            _buildCurrentLocationButton(),
             SizedBox(
               width: double.infinity,
               height: 71,
@@ -172,6 +266,78 @@ class _SearchMainPageState extends State<SearchMainPage>
                   _isSearching ? _buildSearchResults() : _buildRecentSearches(),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  // 현재 내 위치 버튼 위젯
+  Widget _buildCurrentLocationButton() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: Color(0xFFE2E2E2), width: 1)),
+      ),
+      child: InkWell(
+        onTap: _onCurrentLocationPressed,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8F9FA),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFFE2E2E2), width: 1),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF4C9EFC),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Icon(
+                  Icons.my_location_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '현재 내 위치',
+                      style: TextStyle(
+                        fontFamily: "Pretendard",
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF363636),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      widget.isSearchingOrigin ? '출발지로 설정' : '도착지로 설정',
+                      style: TextStyle(
+                        fontFamily: "Pretendard",
+                        fontSize: 14,
+                        fontWeight: FontWeight.w400,
+                        color: const Color(0xFF727272),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.arrow_forward_ios_rounded,
+                color: Color(0xFF727272),
+                size: 16,
+              ),
+            ],
+          ),
         ),
       ),
     );
