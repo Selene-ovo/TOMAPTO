@@ -748,6 +748,118 @@ class _NavigationPageState extends State<NavigationPage>
     super.dispose();
   }
 
+  void _setInitialCameraView(NaverMapController controller) {
+    // 출발지와 도착지를 모두 포함하는 초기 뷰 설정
+    final bounds = _calculateRouteBounds(widget.origin, widget.destination);
+
+    controller.updateCamera(
+      NCameraUpdate.fitBounds(
+        bounds,
+        padding: EdgeInsets.all(80), // 넉넉한 패딩
+      ),
+    );
+
+    print('초기 카메라 뷰 설정 완료');
+  }
+
+  void _addDestinationMarker(NaverMapController controller) {
+    final markerImage = NOverlayImage.fromAssetImage(
+      'assets/icons/end_marker.png',
+    );
+
+    final destinationMarker = NMarker(
+      id: 'destination_marker',
+      position: widget.destination,
+      icon: markerImage,
+      size: const Size(40, 50),
+      anchor: const NPoint(0.5, 1.0),
+      iconTintColor:
+          widget.mode == TransitMode.car
+              ? Color(0xFFFF001C)
+              : Color(0xFF0077FF),
+    );
+
+    controller.addOverlay(destinationMarker);
+    print('도착지 마커 추가 완료');
+  }
+
+  void _waitForRouteAndAdjustCamera(NaverMapController controller) {
+    // 경로 로딩 완료까지 대기 후 카메라 조정
+    Timer.periodic(Duration(milliseconds: 500), (timer) {
+      // 경로가 로드되었는지 확인
+      if (_navigationController.hasPathCoordinates() &&
+          _navigationController.hasPathOverlay()) {
+        timer.cancel();
+        print('경로 로딩 완료 - 카메라 최종 조정 시작');
+
+        // 잠시 후 적절한 네비게이션 카메라로 전환
+        Future.delayed(Duration(milliseconds: 1000), () {
+          _setNavigationCamera(controller);
+        });
+      }
+
+      // 최대 10초 대기
+      if (timer.tick > 20) {
+        timer.cancel();
+        print('경로 로딩 타임아웃 - 기본 카메라 설정');
+        _setNavigationCamera(controller);
+      }
+    });
+  }
+
+  void _setNavigationCamera(NaverMapController controller) async {
+    try {
+      if (widget.mode == TransitMode.car) {
+        // 자동차 모드: 현재 위치 중심, 높은 줌, 틸트 적용
+        await controller.updateCamera(
+          NCameraUpdate.withParams(
+            target: _currentPosition ?? widget.origin,
+            zoom: 18.0, // 네비게이션에 적합한 줌 레벨
+            tilt: 35.0, // 3D 시점
+            bearing: _navigationController.getCurrentHeading(), // 현재 방향
+          ),
+        );
+
+        // 위치 추적 모드: 방향도 따라감
+        await controller.setLocationTrackingMode(NLocationTrackingMode.face);
+      } else {
+        // 도보 모드: 약간 넓은 시야, 틸트 없음
+        await controller.updateCamera(
+          NCameraUpdate.withParams(
+            target: _currentPosition ?? widget.origin,
+            zoom: 16.0, // 도보에 적합한 줌 레벨
+            tilt: 0.0, // 평면 시점
+          ),
+        );
+
+        // 위치 추적 모드: 위치만 따라감
+        await controller.setLocationTrackingMode(NLocationTrackingMode.follow);
+      }
+
+      print(
+        '네비게이션 카메라 설정 완료 - ${widget.mode == TransitMode.car ? "자동차" : "도보"} 모드',
+      );
+    } catch (e) {
+      print('네비게이션 카메라 설정 오류: $e');
+    }
+  }
+
+  NLatLngBounds _calculateRouteBounds(NLatLng start, NLatLng end) {
+    double minLat = min(start.latitude, end.latitude);
+    double maxLat = max(start.latitude, end.latitude);
+    double minLng = min(start.longitude, end.longitude);
+    double maxLng = max(start.longitude, end.longitude);
+
+    // 최소 영역 보장 (너무 작은 경우 확장)
+    double latPadding = max(0.001, (maxLat - minLat) * 0.1);
+    double lngPadding = max(0.001, (maxLng - minLng) * 0.1);
+
+    return NLatLngBounds(
+      southWest: NLatLng(minLat - latPadding, minLng - lngPadding),
+      northEast: NLatLng(maxLat + latPadding, maxLng + lngPadding),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // 메인 컬러 설정 (자동차/도보 모드에 따라)
@@ -801,65 +913,51 @@ class _NavigationPageState extends State<NavigationPage>
                       ? NMapType.navi
                       : NMapType.basic,
               contentPadding: EdgeInsets.only(bottom: 150),
+              zoomGesturesEnable: widget.mode != TransitMode.car, // 줌 제스처 제한
+              tiltGesturesEnable: widget.mode != TransitMode.car, // 틸트 제스처 제한
             ),
-            onMapReady: (controller) {
+            onMapReady: (controller) async {
               print('맵 컨트롤러 준비 완료');
               _mapController = controller;
 
               // 맵 컨트롤러 설정
               _navigationController.setMapController(controller);
 
-              // 위치 추적 모드 초기 설정
-              controller.setLocationTrackingMode(
-                widget.mode == TransitMode.car
-                    ? NLocationTrackingMode
-                        .face // 자동차: 방향 추적
-                    : NLocationTrackingMode.follow, // 도보: 위치만 추적
-              );
+              try {
+                // 1. 먼저 전체 경로가 보이도록 카메라 설정 (넉넉한 줌 아웃)
+                _setInitialCameraView(controller);
 
-              // 현재 위치 오버레이 설정
-              final locationOverlay = controller.getLocationOverlay();
-              locationOverlay.setIsVisible(true);
-
-              // 초기 위치가 있으면 현재 위치 오버레이 업데이트
-              if (_currentPosition != null) {
-                final initialHeading =
-                    _navigationController.getCurrentHeading();
-                _updateLocationOverlay(
-                  _currentPosition!,
-                  heading: initialHeading,
+                // 2. 위치 추적 모드 초기 설정 (일시적으로 none으로 설정)
+                await controller.setLocationTrackingMode(
+                  NLocationTrackingMode.none,
                 );
+
+                // 3. 현재 위치 오버레이 설정
+                final locationOverlay = controller.getLocationOverlay();
+                locationOverlay.setIsVisible(true);
+
+                // 4. 초기 위치가 있으면 현재 위치 오버레이 업데이트
+                if (_currentPosition != null) {
+                  final initialHeading =
+                      _navigationController.getCurrentHeading();
+                  _updateLocationOverlay(
+                    _currentPosition!,
+                    heading: initialHeading,
+                  );
+                }
+
+                // 5. 도착지 마커 추가
+                _addDestinationMarker(controller);
+
+                // 6. 경로 로딩 대기 및 카메라 최종 조정
+                _waitForRouteAndAdjustCamera(controller);
+
+                setState(() {
+                  _isPathDisplayed = true;
+                });
+              } catch (e) {
+                print('맵 초기화 오류: $e');
               }
-
-              // 도착지 마커 추가
-              final markerImage = NOverlayImage.fromAssetImage(
-                'assets/icons/end_marker.png', // 기존 확실한 파일 사용
-              );
-
-              final destinationMarker = NMarker(
-                id: 'destination_marker',
-                position: widget.destination,
-                icon: markerImage,
-                size: const Size(40, 50),
-                anchor: const NPoint(0.5, 1.0),
-                // 모드에 따라 색상 적용
-                iconTintColor:
-                    widget.mode == TransitMode.car
-                        ? Color(0xFFFF001C) // 자동차: 빨간색
-                        : Color(0xFF0077FF), // 도보: 파란색
-              );
-
-              controller.addOverlay(destinationMarker);
-
-              // 전체 경로가 보이도록 카메라 이동
-              _navigationController.fitBoundsToShowRoute(
-                widget.origin,
-                widget.destination,
-              );
-
-              setState(() {
-                _isPathDisplayed = true;
-              });
             },
           ),
 
