@@ -93,6 +93,23 @@ class NavigationController {
   bool _isRouteLoading = false;
   bool get isRouteLoading => _isRouteLoading;
 
+  // 경로 좌표가 로드되었는지 확인
+  bool hasPathCoordinates() {
+    return _pathCoordinates.isNotEmpty;
+  }
+
+  // 경로 오버레이가 생성되었는지 확인
+  bool hasPathOverlay() {
+    return _routePathOverlay != null;
+  }
+
+  // 현재 로딩된 경로를 다시 표시
+  void displayCurrentPath() {
+    if (_pathCoordinates.isNotEmpty) {
+      displayPathOverlay(_pathCoordinates);
+    }
+  }
+
   // 생성자
   NavigationController(this.mode, this._origin, this._destination) {
     // 모드에 따른 마커 색상 설정
@@ -239,20 +256,6 @@ class NavigationController {
     } catch (e) {
       print('경로 가져오기 오류: $e');
       _createStraightPathFast();
-    }
-  }
-
-  bool hasPathCoordinates() {
-    return _pathCoordinates.isNotEmpty;
-  }
-
-  bool hasPathOverlay() {
-    return _routePathOverlay != null;
-  }
-
-  void displayCurrentPath() {
-    if (_pathCoordinates.isNotEmpty) {
-      displayPathOverlay(_pathCoordinates);
     }
   }
 
