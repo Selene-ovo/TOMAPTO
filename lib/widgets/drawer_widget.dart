@@ -1,6 +1,7 @@
 // widgets/drawer_widget.dart
 import 'package:flutter/material.dart';
 import 'package:tomapto/pages/friends/friends_add.dart';
+import 'package:tomapto/pages/friends/blacklist_friends.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -271,10 +272,10 @@ class _DrawerWidgetState extends State<DrawerWidget> {
                 style: TextStyle(fontWeight: FontWeight.w500),
               ),
               onTap: () {
-                Navigator.pop(context);
-                // 차단 목록 페이지로 이동
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('차단 목록 기능은 준비 중입니다')),
+                Navigator.pop(context); // 드로어 닫기
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => BlacklistFriends()),
                 );
               },
             ),
