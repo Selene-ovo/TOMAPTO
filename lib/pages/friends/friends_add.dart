@@ -564,7 +564,7 @@ class _FriendsAddPageState extends State<FriendsAddPage>
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w500,
-                            color: Colors.black,
+                            color: Colors.red,
                           ),
                           textAlign: TextAlign.left,
                         ),
