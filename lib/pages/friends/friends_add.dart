@@ -141,18 +141,28 @@ class _FriendsAddPageState extends State<FriendsAddPage>
     });
 
     try {
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      _searchResults = await _friendsController.searchUsers(
+      final results = await _friendsController.searchUsers(
         searchTerm,
         setState,
       );
+
+      // 검색 결과 보정 - 요청 받음 상태가 잘못 설정된 경우 수정
+      for (var user in results) {
+        // request_id가 없거나 비어있는데 request_received가 true인 경우 수정
+        if ((_getBoolValue(user['request_received']) == true) &&
+            (!user.containsKey('request_id') || user['request_id'] == null)) {
+          user['request_received'] = false;
+          print('사용자 ${user['user_id']}의 request_received 상태 수정됨: false');
+        }
+      }
+
+      setState(() {
+        _searchResults = results;
+        _isLoading = false;
+      });
     } catch (e) {
       setState(() {
         _errorMessage = '사용자 검색 중 오류가 발생했습니다';
-        _isLoading = false;
-      });
-    } finally {
-      setState(() {
         _isLoading = false;
       });
     }
@@ -323,18 +333,27 @@ class _FriendsAddPageState extends State<FriendsAddPage>
 
   // 사용자 옵션 모달 표시
   void _showUserOptions(Map<String, dynamic> user) {
-    // 백엔드 로직에 맞춰 상태 확인
+    // 서버에서 올바른 상태를 확인하기 전에 추가 검증
     bool isFriend =
         _getBoolValue(user['is_friend']) &&
         (user['friendship_status'] == 'active' ||
             user['friendship_status'] == null);
 
-    // 요청 상태가 pending일 때만 요청 취소 옵션 표시
     bool isRequestSent =
         _getBoolValue(user['request_sent']) &&
         (user['request_status'] == 'pending' || user['request_status'] == null);
 
-    bool isRequestReceived = _getBoolValue(user['request_received']);
+    // 중요: request_id가 유효하지 않은 경우 요청 받음 상태를 무시하고 일반 상태로 처리
+    bool isRequestReceived = false;
+
+    // 디버깅
+    print(
+      '사용자 ${user['user_id']} 상태: ' +
+          'is_friend=${user['is_friend']}, ' +
+          'request_sent=${user['request_sent']}, ' +
+          'request_received=${user['request_received']}, ' +
+          'request_id=${user['request_id']}',
+    );
 
     showDialog(
       context: context,
@@ -353,10 +372,27 @@ class _FriendsAddPageState extends State<FriendsAddPage>
                 children: [
                   // 첫 번째 버튼: 상태에 따라 다른 옵션 표시
                   if (isFriend)
-                    // 친구인 경우: "이미 친구입니다" 표시
+                    // 친구인 경우: "친구 삭제하기" 표시
                     InkWell(
-                      onTap: () {
+                      onTap: () async {
                         Navigator.pop(context);
+                        final success = await _friendsController.deleteFriend(
+                          user['user_id'],
+                          setState,
+                        );
+                        if (success) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                '${user['user_nickname'] ?? user['user_id']}님을 친구 목록에서 삭제했습니다',
+                              ),
+                              backgroundColor: Colors.black,
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
+                          await Future.delayed(Duration(milliseconds: 800));
+                          _searchUsers();
+                        }
                       },
                       child: Container(
                         width: double.infinity,
@@ -371,10 +407,11 @@ class _FriendsAddPageState extends State<FriendsAddPage>
                         child: Padding(
                           padding: EdgeInsets.only(left: 16.0),
                           child: Text(
-                            '이미 친구입니다',
+                            '친구 삭제하기',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w500,
+                              color: Colors.black,
                             ),
                             textAlign: TextAlign.left,
                           ),
@@ -417,48 +454,7 @@ class _FriendsAddPageState extends State<FriendsAddPage>
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w500,
-                            ),
-                            textAlign: TextAlign.left,
-                          ),
-                        ),
-                      ),
-                    )
-                  else if (isRequestReceived)
-                    // 요청 받은 경우: "요청 수락하기" 표시
-                    InkWell(
-                      onTap: () {
-                        Navigator.pop(context);
-                        if (user['request_id'] != null) {
-                          _acceptFriendRequest(user['request_id']);
-                          // 요청 수락 SnackBar 표시
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                '${user['user_nickname'] ?? user['user_id']}님의 친구 요청을 수락했습니다',
-                              ),
-                              backgroundColor: Colors.black,
-                              duration: Duration(seconds: 2),
-                            ),
-                          );
-                        }
-                      },
-                      child: Container(
-                        width: double.infinity,
-                        padding: EdgeInsets.all(12.0),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.only(
-                            topLeft: Radius.circular(16),
-                            topRight: Radius.circular(16),
-                          ),
-                        ),
-                        child: Padding(
-                          padding: EdgeInsets.only(left: 16.0),
-                          child: Text(
-                            '요청 수락하기',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
+                              color: Colors.black,
                             ),
                             textAlign: TextAlign.left,
                           ),
@@ -466,7 +462,7 @@ class _FriendsAddPageState extends State<FriendsAddPage>
                       ),
                     )
                   else
-                    // 일반 상태(친구 아님, 요청 없음): "친구 요청 보내기" 표시
+                    // 일반 상태(친구 아님): "친구 요청 보내기" 표시
                     InkWell(
                       onTap: () {
                         Navigator.pop(context);
@@ -499,6 +495,7 @@ class _FriendsAddPageState extends State<FriendsAddPage>
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w500,
+                              color: Colors.black,
                             ),
                             textAlign: TextAlign.left,
                           ),
@@ -509,69 +506,45 @@ class _FriendsAddPageState extends State<FriendsAddPage>
                   // 구분선
                   Container(height: 1, color: Colors.grey[300]),
 
-                  // 두 번째 버튼: 친구인 경우에만 "친구 삭제하기" 표시
-                  if (isFriend)
-                    InkWell(
-                      onTap: () async {
-                        Navigator.pop(context);
-                        final success = await _friendsController.deleteFriend(
+                  // 두 번째 버튼: 항상 "친구 차단하기" 표시
+                  InkWell(
+                    onTap: () async {
+                      Navigator.pop(context); // 모달 닫기
+                      try {
+                        final success = await _friendsController.blockFriend(
                           user['user_id'],
                           setState,
                         );
                         if (success) {
-                          // 친구 삭제 SnackBar 표시
+                          // 친구 차단 SnackBar 표시
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(
-                                '${user['user_nickname'] ?? user['user_id']}님을 친구 목록에서 삭제했습니다',
+                                '${user['user_nickname'] ?? user['user_id']}님을 차단했습니다',
                               ),
                               backgroundColor: Colors.black,
                               duration: Duration(seconds: 2),
                             ),
                           );
-                          await Future.delayed(Duration(milliseconds: 800));
-                          _searchUsers();
-                        }
-                      },
-                      child: Container(
-                        width: double.infinity,
-                        padding: EdgeInsets.all(12.0),
-                        decoration: BoxDecoration(color: Colors.white),
-                        child: Padding(
-                          padding: EdgeInsets.only(left: 16.0),
-                          child: Text(
-                            '친구 삭제하기',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.red,
+                          _searchUsers(); // 검색 결과 새로고침
+                        } else {
+                          // 실패 시 스낵바 표시
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('차단 처리 중 오류가 발생했습니다. 다시 시도해주세요.'),
+                              backgroundColor: Colors.red,
                             ),
-                            textAlign: TextAlign.left,
-                          ),
-                        ),
-                      ),
-                    ),
-
-                  // 세 번째 버튼: 항상 "친구 차단하기" 표시
-                  InkWell(
-                    onTap: () async {
-                      Navigator.pop(context);
-                      final success = await _friendsController.blockFriend(
-                        user['user_id'],
-                        setState,
-                      );
-                      if (success) {
-                        // 친구 차단 SnackBar 표시
+                          );
+                        }
+                      } catch (e) {
+                        print('차단 처리 중 오류: $e');
+                        // 오류 스낵바 표시
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text(
-                              '${user['user_nickname'] ?? user['user_id']}님을 차단했습니다',
-                            ),
-                            backgroundColor: Colors.black,
-                            duration: Duration(seconds: 2),
+                            content: Text('차단 처리 중 오류가 발생했습니다. 다시 시도해주세요.'),
+                            backgroundColor: Colors.red,
                           ),
                         );
-                        _searchUsers();
                       }
                     },
                     child: Container(
@@ -765,19 +738,6 @@ class _FriendsAddPageState extends State<FriendsAddPage>
       itemBuilder: (context, index) {
         final user = _searchResults[index];
 
-        // 백엔드 로직에 맞춰 상태 확인 - 정확한 상태값으로 판단
-        final bool isFriend =
-            _getBoolValue(user['is_friend']) &&
-            (user['friendship_status'] == 'active' ||
-                user['friendship_status'] == null);
-
-        final bool isRequestSent =
-            _getBoolValue(user['request_sent']) &&
-            (user['request_status'] == 'pending' ||
-                user['request_status'] == null);
-
-        final bool isRequestReceived = _getBoolValue(user['request_received']);
-
         return Column(
           children: [
             ListTile(
@@ -796,84 +756,9 @@ class _FriendsAddPageState extends State<FriendsAddPage>
                 user['user_nickname'] ?? user['user_id'],
                 style: TextStyle(fontWeight: FontWeight.w500, fontSize: 15),
               ),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // 상태에 따른 버튼 표시
-                  if (isFriend)
-                    // 친구인 경우 아무 버튼도 표시하지 않음
-                    SizedBox.shrink()
-                  else if (isRequestSent)
-                    // 요청 보낸 경우 더보기 버튼만 표시
-                    IconButton(
-                      icon: Icon(Icons.more_vert),
-                      onPressed: () => _showUserOptions(user),
-                    )
-                  else if (isRequestReceived)
-                    // 요청 받은 경우 수락/거절 버튼 표시 (왼쪽: 거절, 오른쪽: 수락)
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // 거절 버튼 - 크기 축소
-                        Container(
-                          width: 36, // 크기 축소
-                          height: 36, // 크기 축소
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey[300]!),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: IconButton(
-                            padding: EdgeInsets.zero, // 패딩 제거로 아이콘 위치 조정
-                            icon: Icon(
-                              Icons.close,
-                              color: Colors.red,
-                              size: 20, // 아이콘 크기 유지
-                            ),
-                            onPressed: () {
-                              if (user.containsKey('request_id')) {
-                                _rejectFriendRequest(user['request_id']);
-                              }
-                            },
-                          ),
-                        ),
-                        SizedBox(width: 8),
-                        // 수락 버튼 - 크기 축소
-                        Container(
-                          width: 36, // 크기 축소
-                          height: 36, // 크기 축소
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey[300]!),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: IconButton(
-                            padding: EdgeInsets.zero, // 패딩 제거로 아이콘 위치 조정
-                            icon: Image.asset(
-                              'assets/icons/person_add.png',
-                              width: 24, // 아이콘 크기 유지
-                              height: 24, // 아이콘 크기 유지
-                            ),
-                            onPressed: () {
-                              if (user.containsKey('request_id')) {
-                                _acceptFriendRequest(user['request_id']);
-                              }
-                            },
-                          ),
-                        ),
-                        SizedBox(width: 8),
-                        // 더보기 아이콘
-                        IconButton(
-                          icon: Icon(Icons.more_vert),
-                          onPressed: () => _showUserOptions(user),
-                        ),
-                      ],
-                    )
-                  else
-                    // 일반 상태(친구 아님) - 더보기 아이콘만 표시
-                    IconButton(
-                      icon: Icon(Icons.more_vert),
-                      onPressed: () => _showUserOptions(user),
-                    ),
-                ],
+              trailing: IconButton(
+                icon: Icon(Icons.more_vert),
+                onPressed: () => _showUserOptions(user),
               ),
             ),
             Divider(height: 1, thickness: 0.5, color: Colors.grey[300]),
@@ -976,7 +861,6 @@ class _FriendsAddPageState extends State<FriendsAddPage>
                   ],
                 ),
               ),
-              Divider(height: 1, thickness: 0.5, color: Colors.grey[300]),
             ],
           );
         },

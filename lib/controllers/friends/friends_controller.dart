@@ -46,8 +46,6 @@ class FriendsController {
   }
 
   // 검색 메서드
-  // friends_controller.dart 파일의 searchUsers 메서드
-
   Future<List<Map<String, dynamic>>> searchUsers(
     String searchTerm,
     Function setState,
@@ -80,6 +78,14 @@ class FriendsController {
               user['request_id'] = _ensureStringId(user['request_id']);
             }
 
+            // request_id가 없거나 비어있는데 request_received가 true인 경우 수정
+            if ((_getBoolValue(user['request_received']) == true) &&
+                (!user.containsKey('request_id') ||
+                    user['request_id'] == null)) {
+              user['request_received'] = false;
+              print('사용자 ${user['user_id']}의 request_received 상태 수정됨: false');
+            }
+
             // 명시적 불리언 변환 적용
             if (user.containsKey('is_friend')) {
               user['is_friend'] = _getBoolValue(user['is_friend']);
@@ -95,14 +101,11 @@ class FriendsController {
 
             // 친구 관계 상태와 요청 상태를 확인하는 로그 추가
             print(
-              '사용자 ${user['user_id']} 상태: 친구=${user['is_friend']}, 요청 보냄=${user['request_sent']}, 요청 받음=${user['request_received']}',
+              '사용자 ${user['user_id']} 상태: 친구=${user['is_friend']}, ' +
+                  '요청 보냄=${user['request_sent']}, ' +
+                  '요청 받음=${user['request_received']}, ' +
+                  '요청 ID=${user['request_id']}',
             );
-            if (user.containsKey('friendship_status')) {
-              print('friendship_status: ${user['friendship_status']}');
-            }
-            if (user.containsKey('request_status')) {
-              print('request_status: ${user['request_status']}');
-            }
 
             return user;
           }).toList();
@@ -356,15 +359,107 @@ class FriendsController {
     setState(() => isLoading = true);
 
     try {
-      final success = await FriendsService.blockFriend(friendId);
+      // SharedPreferences에서 토큰 가져오기
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+
+      if (token == null) {
+        setState(() {
+          isLoading = false;
+          errorMessage = '로그인이 필요합니다';
+        });
+        return false;
+      }
+
+      // API 호출
+      final apiBaseUrl = getApiBaseUrl();
+      print('친구 차단 API 호출: $apiBaseUrl/friends/block');
+      print('차단할 친구 ID: $friendId');
+
+      final response = await http.post(
+        Uri.parse('$apiBaseUrl/friends/block'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode({'friend_id': friendId}),
+      );
+
+      print('차단 응답 코드: ${response.statusCode}');
+      print('차단 응답 데이터: ${response.body}');
+
       setState(() {
         isLoading = false;
       });
-      return success;
+
+      if (response.statusCode == 200) {
+        return true;
+      } else {
+        final data = json.decode(response.body);
+        setState(() {
+          errorMessage = data['error'] ?? '친구 차단에 실패했습니다.';
+        });
+        return false;
+      }
     } catch (e) {
+      print('친구 차단 오류: $e');
       setState(() {
         isLoading = false;
-        errorMessage = '친구 차단 실패: $e';
+        errorMessage = '서버 연결 오류가 발생했습니다.';
+      });
+      return false;
+    }
+  }
+
+  // 차단 해제
+  Future<bool> unblockFriend(String blockedId, Function setState) async {
+    setState(() => isLoading = true);
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+
+      if (token == null) {
+        setState(() {
+          isLoading = false;
+          errorMessage = '로그인이 필요합니다';
+        });
+        return false;
+      }
+
+      final apiBaseUrl = getApiBaseUrl();
+      print('차단 해제 API 호출: $apiBaseUrl/friends/unblock');
+
+      final response = await http.post(
+        Uri.parse('$apiBaseUrl/friends/unblock'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode({'blocked_id': blockedId}),
+      );
+
+      print('차단 해제 응답 코드: ${response.statusCode}');
+      print('차단 해제 응답 데이터: ${response.body}');
+
+      setState(() {
+        isLoading = false;
+      });
+
+      if (response.statusCode == 200) {
+        return true;
+      } else {
+        final data = json.decode(response.body);
+        setState(() {
+          errorMessage = data['error'] ?? '차단 해제에 실패했습니다.';
+        });
+        return false;
+      }
+    } catch (e) {
+      print('차단 해제 오류: $e');
+      setState(() {
+        isLoading = false;
+        errorMessage = '서버 연결 오류가 발생했습니다.';
       });
       return false;
     }
