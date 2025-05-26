@@ -279,7 +279,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           ),
                           child: Row(
                             children: [
-                              // 프로필 아이콘 - 클릭 가능하도록 GestureDetector로 감싸기
+                              // 프로필 아이콘 - 클릭 가능하도록 GestureDetector로 감싸기 (원형 이미지로 수정)
                               GestureDetector(
                                 onTap: _navigateToProfileEdit, // 프로필 편집 페이지로 이동
                                 child: Container(
@@ -287,38 +287,60 @@ class _ProfilePageState extends State<ProfilePage> {
                                   height: 48 * (screenWidth / 375),
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
-                                    // 클릭 가능함을 시각적으로 표현하기 위해 살짝 배경색 추가
-                                    color: Colors.grey[50],
-                                    border: Border.all(
-                                      color: Colors.grey[200]!,
-                                      width: 1,
-                                    ),
+                                    // 그림자 효과 추가
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.1),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
                                   ),
                                   child: Stack(
                                     children: [
-                                      // 프로필 아이콘
-                                      Center(
-                                        child: SvgPicture.asset(
-                                          'assets/icons/profile_default.svg',
-                                          fit: BoxFit.contain,
-                                          width: 36 * (screenWidth / 375),
-                                          height: 36 * (screenWidth / 375),
+                                      // 프로필 이미지 컨테이너
+                                      Container(
+                                        width: 48 * (screenWidth / 375),
+                                        height: 48 * (screenWidth / 375),
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: Colors.grey[100], // 배경색
+                                          border: Border.all(
+                                            color: Colors.grey[200]!,
+                                            width: 1.5,
+                                          ),
+                                        ),
+                                        child: ClipOval( // 원형으로 클립
+                                          child: SvgPicture.asset(
+                                            'assets/icons/profile_default.svg',
+                                            fit: BoxFit.cover, // cover로 변경하여 원형에 꽉 채우기
+                                            width: 48 * (screenWidth / 375),
+                                            height: 48 * (screenWidth / 375),
+                                          ),
                                         ),
                                       ),
                                       // 편집 버튼 아이콘 (우하단에 작은 아이콘)
                                       Positioned(
-                                        bottom: 0,
-                                        right: 0,
+                                        bottom: -2,
+                                        right: -2,
                                         child: Container(
-                                          width: 16,
-                                          height: 16,
+                                          width: 18,
+                                          height: 18,
                                           decoration: BoxDecoration(
                                             color: Color(0xFFFB233B),
                                             shape: BoxShape.circle,
                                             border: Border.all(
                                               color: Colors.white,
-                                              width: 1,
+                                              width: 2,
                                             ),
+                                            // 편집 버튼에도 그림자 효과 추가
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.black.withOpacity(0.2),
+                                                blurRadius: 3,
+                                                offset: const Offset(0, 1),
+                                              ),
+                                            ],
                                           ),
                                           child: Icon(
                                             Icons.edit,
@@ -335,49 +357,52 @@ class _ProfilePageState extends State<ProfilePage> {
 
                               // 사용자 정보
                               Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Text(
-                                          _controller.userNickname,
-                                          style: TextStyle(
-                                            fontSize: 18 * (screenWidth / 375),
-                                            fontWeight: FontWeight.bold,
-                                            color: const Color(0xFF363636),
-                                            fontFamily: 'Pretendard',
+                                child: GestureDetector(
+                                  onTap: _navigateToProfileEdit, // 닉네임 클릭 시 프로필 편집 페이지로 이동
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Text(
+                                            _controller.userNickname,
+                                            style: TextStyle(
+                                              fontSize: 18 * (screenWidth / 375),
+                                              fontWeight: FontWeight.bold,
+                                              color: const Color(0xFF363636),
+                                              fontFamily: 'Pretendard',
+                                            ),
                                           ),
-                                        ),
-                                        SizedBox(width: 6),
-                                        // 편집 가능함을 알려주는 작은 아이콘
-                                        Icon(
-                                          Icons.edit_outlined,
-                                          color: Colors.grey[400],
-                                          size: 14,
-                                        ),
-                                      ],
-                                    ),
-                                    SizedBox(height: 4 * (screenHeight / 812)),
-                                    Row(
-                                      children: [
-                                        Text(
-                                          'Lv.${_controller.userLevel} 씨앗',
-                                          style: TextStyle(
-                                            fontSize: 14 * (screenWidth / 375),
-                                            color: Colors.grey[600],
-                                            fontFamily: 'Pretendard',
+                                          SizedBox(width: 6),
+                                          // 편집 가능함을 알려주는 작은 아이콘
+                                          Icon(
+                                            Icons.edit_outlined,
+                                            color: Colors.grey[400],
+                                            size: 14,
                                           ),
-                                        ),
-                                        const SizedBox(width: 4),
-                                        const Icon(
-                                          Icons.info_outline,
-                                          color: Colors.grey,
-                                          size: 12,
-                                        ),
-                                      ],
-                                    ),
-                                  ],
+                                        ],
+                                      ),
+                                      SizedBox(height: 4 * (screenHeight / 812)),
+                                      Row(
+                                        children: [
+                                          Text(
+                                            'Lv.${_controller.userLevel} 씨앗',
+                                            style: TextStyle(
+                                              fontSize: 14 * (screenWidth / 375),
+                                              color: Colors.grey[600],
+                                              fontFamily: 'Pretendard',
+                                            ),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          const Icon(
+                                            Icons.info_outline,
+                                            color: Colors.grey,
+                                            size: 12,
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
 
