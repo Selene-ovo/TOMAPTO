@@ -590,7 +590,6 @@ class _FriendScreenState extends State<FriendScreen> {
   // 친구 검색 함수
   void _searchFriends(String query) {
     if (!_isLoggedIn) {
-      // 로그인되지 않은 경우 로그인 다이얼로그 표시
       showDialog(
         context: context,
         builder:
@@ -623,20 +622,25 @@ class _FriendScreenState extends State<FriendScreen> {
     }
 
     if (query.isEmpty) {
-      _fetchFriendsFromServer(); // 검색어가 없으면 서버에서 다시 불러오기
+      _fetchFriendsFromServer(); // 전체 친구 목록 다시 불러오기
       return;
     }
 
-    // 검색어가 있으면 검색 페이지로 이동
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => FriendsAddPage(initialSearchTerm: query),
-      ),
-    ).then((_) {
-      // 돌아왔을 때 친구 목록 및 위치 공유 상태 새로고침
-      _fetchFriendsFromServer();
-      _fetchLocationSharingStatus();
+    // 현재 친구 목록에서 닉네임/이름으로 검색
+    setState(() {
+      final allFriends = List<Map<String, dynamic>>.from(
+        friends,
+      ); // 전체 친구 목록 백업
+      final filteredFriends =
+          allFriends.where((friend) {
+            final nickname = friend['nickname']?.toString().toLowerCase() ?? '';
+            final name = friend['name']?.toString().toLowerCase() ?? '';
+            final searchLower = query.toLowerCase();
+
+            return nickname.contains(searchLower) || name.contains(searchLower);
+          }).toList();
+
+      friends = filteredFriends; // 필터링된 결과로 업데이트
     });
   }
 
@@ -1002,7 +1006,9 @@ class _FriendScreenState extends State<FriendScreen> {
                                   ],
                                 ),
                                 title: Text(
-                                  validFriend['name'],
+                                  validFriend['nickname']?.isNotEmpty == true
+                                      ? validFriend['nickname']
+                                      : validFriend['name'],
                                   style: TextStyle(
                                     fontWeight: FontWeight.w500,
                                     fontSize: 15,

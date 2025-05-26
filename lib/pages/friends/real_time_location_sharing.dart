@@ -193,15 +193,13 @@ class _RealTimeLocationSharingPageState
         );
       });
 
-      // 내 위치를 가져온 후 바로 카메라 이동 (초기화 후)
-      if (_mapController != null && !_isInitialCameraSet) {
+      // 내 위치를 가져온 후 바로 카메라 이동
+      if (_mapController != null) {
         _mapController!.updateCamera(
           NCameraUpdate.withParams(target: _myPosition!, zoom: 15),
         );
         _isInitialCameraSet = true;
       }
-    } else {
-      print('내 위치 정보를 가져오는데 실패했습니다.');
     }
 
     // 2. 중요: 두 가지 위치 공유 상태를 별도로 확인
@@ -548,7 +546,7 @@ class _RealTimeLocationSharingPageState
               ),
               mapType: NMapType.basic,
               contentPadding: EdgeInsets.zero,
-              locationButtonEnable: true, // 위치 버튼 활성화
+              locationButtonEnable: false, // 위치 버튼 활성화
             ),
             onMapReady: (controller) {
               setState(() {
@@ -556,8 +554,8 @@ class _RealTimeLocationSharingPageState
               });
               _updateMapMarkers();
 
-              // 맵이 준비되면 내 위치로 이동 (이미 위치가 있는 경우)
-              if (_myPosition != null && !_isInitialCameraSet) {
+              // 맵이 준비되면 즉시 내 위치로 이동
+              if (_myPosition != null) {
                 controller.updateCamera(
                   NCameraUpdate.withParams(target: _myPosition!, zoom: 15),
                 );
