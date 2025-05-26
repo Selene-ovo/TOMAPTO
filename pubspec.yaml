@@ -28,12 +28,19 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^5.0.0
   flutter_launcher_icons: ^0.13.1
+  flutter_native_splash: ^2.3.2
 flutter_launcher_icons:
   android: true
   ios: true
   image_path: 'assets/icons/tomapto.png'
   adaptive_icon_background: '#FFFFFF'
   remove_alpha_ios: true
+flutter_native_splash: # 여기가 최상위 레벨이어야 함
+  color: '#ffffff'
+  image: 'assets/icons/intro_logo.png'
+  android_12:
+    image: 'assets/icons/intro_logo.png'
+    color: '#ffffff'
 flutter:
   uses-material-design: true
   assets:
