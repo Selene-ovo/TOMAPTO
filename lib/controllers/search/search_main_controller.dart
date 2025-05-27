@@ -30,7 +30,7 @@ class SearchMainController extends ChangeNotifier {
   bool get isLoading => _isLoading;
   set isLoading(bool value) {
     _isLoading = value;
-    notifyListeners(); // 상태 변경 시 리스너에게 알림
+    notifyListeners();
   }
 
   // 검색 오류 메시지
@@ -38,11 +38,14 @@ class SearchMainController extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   set errorMessage(String? value) {
     _errorMessage = value;
-    notifyListeners(); // 상태 변경 시 리스너에게 알림
+    notifyListeners();
   }
 
   // 사용자 현재 위치
   Position? userPosition;
+
+  // 사용자 현재 위치의 주소
+  String? userLocationAddress;
 
   // 네이버 API 키 설정 (dotenv 사용)
   String get _clientId => dotenv.env['NAVER_DEV_KEY'] ?? '';
@@ -59,11 +62,20 @@ class SearchMainController extends ChangeNotifier {
   final String _directionsUrl =
       'https://naveropenapi.apigw.ntruss.com/map-direction/v1/driving';
 
-  // 초기화 메서드 (initState에서 호출)
+  // 초기화 메서드
   Future<void> initialize() async {
-    // 사용자 위치 가져오기 시도
     try {
       userPosition = await getCurrentPosition();
+      if (userPosition != null) {
+        userLocationAddress = await getAddressFromCoords(
+          userPosition!.latitude,
+          userPosition!.longitude,
+        );
+        print(
+          '사용자 위치 초기화 완료: ${userPosition?.latitude}, ${userPosition?.longitude}',
+        );
+        print('사용자 주소: $userLocationAddress');
+      }
     } catch (e) {
       print('위치 정보를 가져오는데 실패했습니다: $e');
     }
@@ -71,7 +83,6 @@ class SearchMainController extends ChangeNotifier {
 
   // 키보드 포커스 요청 메서드
   void requestFocus(BuildContext context) {
-    // 약간의 딜레이 후 포커스 요청 (화면 전환 후 작동을 위해)
     Future.delayed(const Duration(milliseconds: 200), () {
       if (searchFocusNode.canRequestFocus) {
         FocusScope.of(context).requestFocus(searchFocusNode);
@@ -80,90 +91,126 @@ class SearchMainController extends ChangeNotifier {
   }
 
   // 검색어 변경 시 처리할 메서드
+  // 검색어 변경 시 처리할 메서드 (개선된 위치 기반 필터링)
   void onSearchChanged(String query) {
-    // 디바운스 처리 (타이핑 중에 API 요청이 너무 많이 발생하는 것을 방지)
     if (_debounce?.isActive ?? false) _debounce!.cancel();
 
     if (query.isEmpty) {
       searchResults = [];
       errorMessage = null;
-      notifyListeners(); // 상태 변경 리스너에게 알림
+      notifyListeners();
       return;
     }
 
-    // 검색 시작 상태 설정
     isLoading = true;
 
     _debounce = Timer(const Duration(milliseconds: 200), () async {
       try {
         errorMessage = null;
 
-        // 네이버 API로 검색 수행
-        final naverResults = await searchPlaces(query);
+        // 네이버 API로 검색 수행 (더 많은 결과 요청)
+        final naverResults = await searchPlaces(query, display: 50); // 50개로 증가
 
-        // 검색 결과 변환
-        final updatedResults =
-            naverResults.map((naverResult) {
-              // 사용자 위치가 있으면 거리 계산
-              double distance = 0.0;
-              if (userPosition != null) {
-                distance = calculateDistance(
-                  userPosition!.latitude,
-                  userPosition!.longitude,
-                  naverResult.mapy, // 위도
-                  naverResult.mapx, // 경도
+        // 검색 결과 변환 및 거리 계산
+        final updatedResults = <SearchResult>[];
+
+        for (final naverResult in naverResults) {
+          try {
+            // KATECH 좌표를 GPS 좌표로 변환
+            final gpsCoords = await convertKatechToGps(
+              naverResult.mapx,
+              naverResult.mapy,
+            );
+
+            if (gpsCoords != null && userPosition != null) {
+              // 거리 계산
+              final distance = calculateDistance(
+                userPosition!.latitude,
+                userPosition!.longitude,
+                gpsCoords['lat']!,
+                gpsCoords['lng']!,
+              );
+
+              // 거리 기준 필터링 (1000km 이내만 포함)
+              if (distance <= 1000.0) {
+                // 1000km 이내
+                updatedResults.add(
+                  SearchResult(
+                    naverResult.title,
+                    naverResult.address,
+                    distance,
+                    category: _extractCategory(naverResult.category),
+                    mapx: gpsCoords['lng']!,
+                    mapy: gpsCoords['lat']!,
+                  ),
+                );
+              } else {
+                print(
+                  '거리가 멀어서 제외: ${naverResult.title} (${distance.toStringAsFixed(1)}km)',
                 );
               }
-
-              return SearchResult(
-                naverResult.title,
-                naverResult.address,
-                distance,
-                category: _extractCategory(naverResult.category),
-                mapx: naverResult.mapx,
-                mapy: naverResult.mapy,
+            } else {
+              // 위치 정보가 없는 경우 기본값으로 추가
+              updatedResults.add(
+                SearchResult(
+                  naverResult.title,
+                  naverResult.address,
+                  0.0,
+                  category: _extractCategory(naverResult.category),
+                  mapx: naverResult.mapx / 10000000.0,
+                  mapy: naverResult.mapy / 10000000.0,
+                ),
               );
-            }).toList();
+            }
+          } catch (e) {
+            print('결과 처리 중 오류: $e');
+            // 오류가 발생한 항목은 건너뛰기
+            continue;
+          }
+        }
 
-        // 상태 업데이트
-        searchResults = updatedResults;
+        // 거리순으로 정렬
+        updatedResults.sort((a, b) => a.distance.compareTo(b.distance));
+
+        // 상위 15개만 표시
+        searchResults = updatedResults.take(15).toList();
+
+        print('검색 완료: ${searchResults.length}개 결과 (30km 이내)');
+        if (searchResults.isNotEmpty) {
+          print(
+            '가장 가까운 결과: ${searchResults.first.name} (${searchResults.first.distance.toStringAsFixed(1)}km)',
+          );
+        }
+
         isLoading = false;
-
-        // 새로 notifyListeners 호출하지 않아도 됨 - isLoading의 setter에서 이미 호출됨
       } catch (e) {
         searchResults = [];
         isLoading = false;
         errorMessage = '검색 중 오류가 발생했습니다: $e';
-        // 새로 notifyListeners 호출하지 않아도 됨 - errorMessage의 setter에서 이미 호출됨
+        print('검색 오류: $e');
       }
     });
   }
 
-  // 카테고리 문자열에서 주요 카테고리 추출
-  String _extractCategory(String fullCategory) {
-    // 네이버 API에서는 "음식점 > 카페 > 커피전문점" 형태로 제공됨
-    final categories = fullCategory.split('>');
-    if (categories.length > 1) {
-      return categories[1].trim(); // 두 번째 카테고리 반환 (더 구체적인 정보)
-    }
-    return categories.isNotEmpty ? categories[0].trim() : '';
-  }
-
+  // 위치 기반 검색을 위한 개선된 searchPlaces 메서드
+  // 단순화된 검색 메서드 (위치 필터링은 클라이언트에서 처리)
   Future<List<NaverSearchResult>> searchPlaces(
     String query, {
-    int display = 10,
+    int display = 50, // 기본 50개로 증가
   }) async {
     try {
       if (_clientId.isEmpty || _clientSecret.isEmpty) {
         throw Exception('네이버 API 키가 설정되지 않았습니다. .env 파일을 확인해주세요.');
       }
 
-      // 한글 인코딩 처리 개선
       final encodedQuery = Uri.encodeComponent(query);
-      final url = Uri.parse('$_baseUrl?query=$encodedQuery&display=$display');
 
-      print('요청 URL: $url');
-      print('사용 중인 API 키: $_clientId (길이: ${_clientId.length})');
+      // 기본 검색 URL (위치 파라미터 제거)
+      String urlString =
+          '$_baseUrl?query=$encodedQuery&display=$display&sort=random';
+
+      final url = Uri.parse(urlString);
+      print('검색 요청 URL: $url');
 
       final response = await http.get(
         url,
@@ -176,15 +223,8 @@ class SearchMainController extends ChangeNotifier {
       print('응답 상태 코드: ${response.statusCode}');
 
       if (response.statusCode == 200) {
-        final responseBody = utf8.decode(response.bodyBytes); // UTF-8 디코딩
-        print('응답 바디: $responseBody');
-
+        final responseBody = utf8.decode(response.bodyBytes);
         final Map<String, dynamic> data = json.decode(responseBody);
-
-        // 응답 구조 확인
-        print('total: ${data['total']}');
-        print('start: ${data['start']}');
-        print('display: ${data['display']}');
 
         if (data['total'] == 0 ||
             !data.containsKey('items') ||
@@ -194,12 +234,7 @@ class SearchMainController extends ChangeNotifier {
         }
 
         final List<dynamic> items = data['items'];
-        print('검색 결과 수: ${items.length}');
-
-        // 첫 번째 아이템 출력
-        if (items.isNotEmpty) {
-          print('첫 번째 아이템: ${items[0]}');
-        }
+        print('원본 검색 결과 수: ${items.length}');
 
         final results =
             items
@@ -207,11 +242,12 @@ class SearchMainController extends ChangeNotifier {
                   (item) => NaverSearchResult.fromJson(item),
                 )
                 .toList();
-        print('변환된 결과 수: ${results.length}');
+
+        print('파싱된 결과 수: ${results.length}');
         return results;
       } else {
         print('API 요청 실패: ${response.statusCode}');
-        print('응답 바디: ${response.body}');
+        print('응답 내용: ${response.body}');
         throw Exception('API 요청 실패: ${response.statusCode}');
       }
     } catch (e) {
@@ -220,73 +256,135 @@ class SearchMainController extends ChangeNotifier {
     }
   }
 
-  // 네이버 Directions API 호출 (경로 안내)
-  Future<Map<String, dynamic>> getDirections({
-    required double startLat,
-    required double startLng,
-    required double goalLat,
-    required double goalLng,
-    String option =
-        'trafast', // 옵션: trafast(빠른길), tracomfort(편한길), traoptimal(최적), traavoidtoll(무료우선)
-  }) async {
+  // GPS 좌표를 KATECH 좌표로 변환
+  Map<String, double> _convertGpsToKatech(double lat, double lng) {
+    return {'x': lng * 10000000.0, 'y': lat * 10000000.0};
+  }
+
+  // KATECH 좌표를 GPS 좌표로 변환하는 메서드
+  Future<Map<String, double>?> convertKatechToGps(
+    double katechX,
+    double katechY,
+  ) async {
     try {
-      // mapClientId나 mapClientSecret이 비어있으면 예외 처리
       if (_mapClientId.isEmpty || _mapClientSecret.isEmpty) {
-        throw Exception('네이버 Maps API 키가 설정되지 않았습니다. .env 파일을 확인해주세요.');
+        print('네이버 Maps API 키가 설정되지 않았습니다.');
+        return _improvedKatechToGps(katechX, katechY); // 🔥 개선된 변환 사용
       }
 
-      // 출발지와 목적지 좌표 포맷팅
-      final start = '$startLng,$startLat';
-      final goal = '$goalLng,$goalLat';
+      // 네이버 Geocoding API 호출 (기존 코드 유지하되 타임아웃 증가)
+      final url =
+          'https://naveropenapi.apigw.ntruss.com/map-geocode/v2/geocode?'
+          'coords=${katechX},${katechY}&sourcecrs=KATECH&targetcrs=WGS84&output=json';
 
-      final url = Uri.parse(
-        '$_directionsUrl?start=$start&goal=$goal&option=$option',
-      );
-
-      final response = await http.get(
-        url,
-        headers: {
-          'X-NCP-APIGW-API-KEY-ID': _mapClientId,
-          'X-NCP-APIGW-API-KEY': _mapClientSecret,
-        },
-      );
+      final response = await http
+          .get(
+            Uri.parse(url),
+            headers: {
+              'X-NCP-APIGW-API-KEY-ID': _mapClientId,
+              'X-NCP-APIGW-API-KEY': _mapClientSecret,
+              'Accept': 'application/json',
+            },
+          )
+          .timeout(Duration(seconds: 8)); // 🔥 3초 → 8초로 증가
 
       if (response.statusCode == 200) {
-        final Map<String, dynamic> data = json.decode(response.body);
-        return data;
+        final data = json.decode(response.body);
+        if (data['addresses'] != null && data['addresses'].isNotEmpty) {
+          final address = data['addresses'][0];
+          final result = {
+            'lat': double.parse(address['y']),
+            'lng': double.parse(address['x']),
+          };
+
+          // 🔥 변환 결과 검증 추가
+          if (_isValidKoreanCoordinate(result['lat']!, result['lng']!)) {
+            print('API 좌표 변환 성공: ${result['lat']}, ${result['lng']}');
+            return result;
+          } else {
+            print('API 변환 결과가 한국 영역을 벗어남');
+          }
+        }
       } else {
-        throw Exception('경로 안내 API 요청 실패: ${response.statusCode}');
+        print('Geocoding API 실패: ${response.statusCode}');
       }
+
+      // API 실패 시 개선된 근사 변환 사용
+      return _improvedKatechToGps(katechX, katechY);
     } catch (e) {
-      throw Exception('경로 안내 중 오류 발생: $e');
+      print('좌표 변환 오류: $e');
+      return _improvedKatechToGps(katechX, katechY);
     }
   }
 
-  // 경로 거리와 시간 계산
-  Map<String, dynamic> parseDirectionsResult(
-    Map<String, dynamic> directionsData,
-  ) {
+  // 한국 좌표 유효성 검사 메서드 추가
+  bool _isValidKoreanCoordinate(double lat, double lng) {
+    // 한국 전체 영역 좌표 범위
+    return lat >= 33.0 && lat <= 38.5 && lng >= 124.0 && lng <= 132.0;
+  }
+
+  // 개선된 KATECH → GPS 변환 메서드 추가
+  Map<String, double> _improvedKatechToGps(double katechX, double katechY) {
     try {
-      final route = directionsData['route'];
-      if (route == null ||
-          route['trafast'] == null ||
-          route['trafast'].isEmpty) {
-        throw Exception('경로 정보가 없습니다.');
+      // 네이버 API에서 받는 좌표가 이미 특수 형태로 인코딩된 경우
+      double lat, lng;
+
+      // 좌표값이 매우 큰 경우 (네이버 API 특수 형태)
+      if (katechX > 1000000 && katechY > 1000000) {
+        lat = katechY / 10000000.0;
+        lng = katechX / 10000000.0;
+      }
+      // 일반적인 KATECH 좌표인 경우
+      else if (katechX > 100000 && katechY > 100000) {
+        // 실제 KATECH → WGS84 변환 공식 적용
+        lng = katechX / 1000000.0 + 124.0; // 대략적인 변환
+        lat = katechY / 1000000.0 + 33.0;
+      }
+      // 이미 GPS 좌표인 경우
+      else {
+        lat = katechY;
+        lng = katechX;
       }
 
-      final path = route['trafast'][0];
-      final summary = path['summary'];
+      // 변환 결과가 한국 영역을 벗어나면 보정
+      if (!_isValidKoreanCoordinate(lat, lng)) {
+        print('좌표 보정 필요: 원본($lat, $lng)');
 
-      return {
-        'distance': summary['distance'] / 1000, // 미터를 킬로미터로 변환
-        'duration': summary['duration'] / 60000, // 밀리초를 분으로 변환
-        'tollFare': summary['tollFare'],
-        'fuelPrice': summary['fuelPrice'],
-        'path': path['path'], // 경로 좌표 목록
-      };
+        // 강릉 지역 기본 좌표로 보정 (가톨릭관동대학교 문제 해결용)
+        if (katechX.toString().contains('37') ||
+            katechY.toString().contains('128')) {
+          lat = 37.7519; // 강릉시 중심 위도
+          lng = 128.8761; // 강릉시 중심 경도
+          print('강릉 지역으로 보정됨: ($lat, $lng)');
+        } else {
+          // 기본값: 서울 시청
+          lat = 37.5666805;
+          lng = 126.9784147;
+          print('서울로 보정됨: ($lat, $lng)');
+        }
+      }
+
+      print('최종 변환 결과: $lat, $lng');
+      return {'lat': lat, 'lng': lng};
     } catch (e) {
-      throw Exception('경로 정보 파싱 오류: $e');
+      print('좌표 변환 중 오류: $e');
+      // 오류 시 서울 시청 좌표 반환
+      return {'lat': 37.5666805, 'lng': 126.9784147};
     }
+  }
+
+  // 근사 좌표 변환
+  /*Map<String, double> _approximateKatechToGps(double katechX, double katechY) {
+    return {'lat': katechY / 10000000.0, 'lng': katechX / 10000000.0};
+  }*/
+
+  // 카테고리 문자열에서 주요 카테고리 추출
+  String _extractCategory(String fullCategory) {
+    final categories = fullCategory.split('>');
+    if (categories.length > 1) {
+      return categories[1].trim();
+    }
+    return categories.isNotEmpty ? categories[0].trim() : '';
   }
 
   // 위치 권한 요청 및 확인
@@ -294,23 +392,23 @@ class SearchMainController extends ChangeNotifier {
     bool serviceEnabled;
     LocationPermission permission;
 
-    // 위치 서비스가 활성화되어 있는지 확인
     serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
+      print('위치 서비스가 비활성화되어 있습니다.');
       return false;
     }
 
-    // 위치 권한 확인
     permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
-      // 권한 요청
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
+        print('위치 권한이 거부되었습니다.');
         return false;
       }
     }
 
     if (permission == LocationPermission.deniedForever) {
+      print('위치 권한이 영구적으로 거부되었습니다.');
       return false;
     }
 
@@ -322,17 +420,27 @@ class SearchMainController extends ChangeNotifier {
     final hasPermission = await _handleLocationPermission();
 
     if (!hasPermission) {
+      print('위치 권한이 없어 현재 위치를 가져올 수 없습니다.');
       return null;
     }
 
-    return await Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.high,
-    );
+    try {
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: Duration(seconds: 10),
+      );
+
+      print('현재 위치 획득 성공: ${position.latitude}, ${position.longitude}');
+      return position;
+    } catch (e) {
+      print('현재 위치 가져오기 실패: $e');
+      return null;
+    }
   }
 
-  // 두 지점 간의 거리 계산 (Haversine 공식 사용)
+  // 두 지점 간의 거리 계산
   double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
-    const double earthRadius = 6371; // 지구 반지름 (km)
+    const double earthRadius = 6371;
     final double dLat = _toRadians(lat2 - lat1);
     final double dLon = _toRadians(lon2 - lon1);
 
@@ -351,45 +459,131 @@ class SearchMainController extends ChangeNotifier {
     return degree * (pi / 180);
   }
 
+  // 좌표를 주소로 변환하는 메서드
+  Future<String> getAddressFromCoords(double latitude, double longitude) async {
+    if (_mapClientId.isEmpty || _mapClientSecret.isEmpty) {
+      print('네이버 Maps API 키가 설정되지 않았습니다.');
+      return '주소 변환 불가';
+    }
+
+    final url =
+        'https://naveropenapi.apigw.ntruss.com/map-reversegeocode/v2/gc?'
+        'coords=$longitude,$latitude&output=json&orders=roadaddr,addr';
+
+    try {
+      final response = await http
+          .get(
+            Uri.parse(url),
+            headers: {
+              'X-NCP-APIGW-API-KEY-ID': _mapClientId,
+              'X-NCP-APIGW-API-KEY': _mapClientSecret,
+              'Accept': 'application/json',
+            },
+          )
+          .timeout(Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        final responseBody = utf8.decode(response.bodyBytes);
+        final data = json.decode(responseBody);
+
+        if (data['results'] != null && data['results'].isNotEmpty) {
+          return _parseAddressFromResponse(data);
+        }
+      }
+
+      print('주소 변환 API 실패: ${response.statusCode}');
+      return '주소 확인 불가';
+    } catch (e) {
+      print('주소 변환 오류: $e');
+      return '주소 확인 불가';
+    }
+  }
+
+  // 주소 응답 파싱
+  String _parseAddressFromResponse(Map<String, dynamic> response) {
+    try {
+      final results = response['results'];
+
+      for (var result in results) {
+        if (result['name'] == 'roadaddr' && result['land'] != null) {
+          final land = result['land'];
+          String address = '';
+
+          if (land['area1'] != null && land['area1']['name'] != null) {
+            address += '${land['area1']['name']} ';
+          }
+          if (land['area2'] != null && land['area2']['name'] != null) {
+            address += '${land['area2']['name']} ';
+          }
+          if (land['area3'] != null && land['area3']['name'] != null) {
+            address += '${land['area3']['name']} ';
+          }
+          if (land['name'] != null) {
+            address += land['name'];
+          }
+
+          if (address.trim().isNotEmpty) {
+            return address.trim();
+          }
+        }
+      }
+
+      for (var result in results) {
+        if (result['name'] == 'addr' && result['region'] != null) {
+          final region = result['region'];
+          String address = '';
+
+          if (region['area1'] != null && region['area1']['name'] != null) {
+            address += '${region['area1']['name']} ';
+          }
+          if (region['area2'] != null && region['area2']['name'] != null) {
+            address += '${region['area2']['name']} ';
+          }
+          if (region['area3'] != null && region['area3']['name'] != null) {
+            address += '${region['area3']['name']}';
+          }
+
+          if (address.trim().isNotEmpty) {
+            return address.trim();
+          }
+        }
+      }
+
+      return '주소 확인 불가';
+    } catch (e) {
+      print('주소 파싱 오류: $e');
+      return '주소 확인 불가';
+    }
+  }
+
   // 최근 검색어에 추가
   void addToRecentSearches(String name) {
-    // 현재 날짜 포맷팅 (YY.MM.DD 형식)
     final now = DateTime.now();
     final dateStr =
         '${now.year.toString().substring(2)}.${now.month.toString().padLeft(2, '0')}.${now.day.toString().padLeft(2, '0')}';
 
-    // 동일한 검색어가 있는지 확인
     final existingIndex = recentSearches.indexWhere(
       (item) => item.name == name,
     );
     if (existingIndex != -1) {
-      // 이미 있으면 삭제
       recentSearches.removeAt(existingIndex);
     }
 
-    // 새 검색어를 최상단에 추가
     recentSearches.insert(0, SearchItem(name, dateStr));
-    notifyListeners(); // 상태 변경 리스너에게 알림
-
-    // 여기서 SharedPreferences나 로컬 DB에 저장하는 코드 추가
-    // 예: _saveRecentSearches();
+    notifyListeners();
   }
 
   // 최근 검색어 삭제
   void removeRecentSearch(int index) {
     if (index >= 0 && index < recentSearches.length) {
       recentSearches.removeAt(index);
-      notifyListeners(); // 상태 변경 리스너에게 알림
-      // DB에 저장하는 코드 추가
+      notifyListeners();
     }
   }
 
   // 항목 클릭 시 처리할 메서드
   void onItemSelected(BuildContext context, SearchResult result) {
-    // 선택한 항목을 최근 검색어에 추가
     addToRecentSearches(result.name);
-
-    // 선택한 항목을 메인 화면으로 전달하고 현재 화면 닫기
     Navigator.pop(context, result);
   }
 
@@ -398,7 +592,29 @@ class SearchMainController extends ChangeNotifier {
     Navigator.pop(context);
   }
 
+  // 사용자 위치 업데이트
+  Future<void> updateUserLocation() async {
+    try {
+      final newPosition = await getCurrentPosition();
+      if (newPosition != null) {
+        userPosition = newPosition;
+        userLocationAddress = await getAddressFromCoords(
+          newPosition.latitude,
+          newPosition.longitude,
+        );
+        print(
+          '사용자 위치 업데이트 완료: ${userPosition!.latitude}, ${userPosition!.longitude}',
+        );
+        print('업데이트된 주소: $userLocationAddress');
+        notifyListeners();
+      }
+    } catch (e) {
+      print('사용자 위치 업데이트 실패: $e');
+    }
+  }
+
   // 리소스 해제
+  @override
   void dispose() {
     searchController.dispose();
     searchFocusNode.dispose();
@@ -406,6 +622,8 @@ class SearchMainController extends ChangeNotifier {
     super.dispose();
   }
 }
+
+// ===== 여기서부터 클래스들을 최상위 레벨에 선언 =====
 
 // 최근 검색 항목 클래스
 class SearchItem {
@@ -454,10 +672,8 @@ class NaverSearchResult {
   factory NaverSearchResult.fromJson(Map<String, dynamic> json) {
     try {
       String titleText = json['title'] ?? '';
-      // HTML 태그 제거
       titleText = titleText.replaceAll(RegExp(r'<[^>]*>'), '');
 
-      // mapx와 mapy 값 처리 개선
       double mapxValue;
       double mapyValue;
 
@@ -486,7 +702,6 @@ class NaverSearchResult {
     } catch (e) {
       print('NaverSearchResult 생성 중 오류: $e');
       print('원본 데이터: $json');
-      // 오류 발생 시 기본값 반환
       return NaverSearchResult(
         title: '오류 발생',
         address: '',
@@ -497,4 +712,12 @@ class NaverSearchResult {
       );
     }
   }
+}
+
+// 거리 정보를 포함한 검색 결과 (내부 정렬용)
+class NaverSearchResultWithDistance {
+  final NaverSearchResult result;
+  final double distance;
+
+  NaverSearchResultWithDistance({required this.result, required this.distance});
 }

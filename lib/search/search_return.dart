@@ -40,8 +40,11 @@ class _SearchResultPageState extends State<SearchResultPage> {
 
   Future<void> _initializeAndSearch() async {
     try {
-      // 컨트롤러 초기화 (위치 정보 등)
+      // 컨트롤러 초기화 (위치 정보 등) - 중요: 검색 전에 반드시 실행
       await _controller.initialize();
+      print(
+        '위치 초기화 완료: ${_controller.userPosition?.latitude}, ${_controller.userPosition?.longitude}',
+      );
 
       // 검색 수행
       await _performSearch(widget.searchTerm);
@@ -87,9 +90,9 @@ class _SearchResultPageState extends State<SearchResultPage> {
         errorMessage = _controller.errorMessage;
       });
 
-      // 검색 완료되고 결과가 있으면 거리 순으로 정렬
+      // 검색 완료되고 결과가 있으면 거리 순으로 정렬 (이미 controller에서 정렬됨)
       if (!isLoading && searchResults.isNotEmpty) {
-        _sortByDistance();
+        print('검색 결과 ${searchResults.length}개, 이미 거리순으로 정렬됨');
       }
     }
   }
@@ -110,7 +113,7 @@ class _SearchResultPageState extends State<SearchResultPage> {
     });
   }
 
-  // 현재 내 위치 버튼 클릭 처리
+  // 현재 내 위치 버튼 클릭 처리 - 위치 갱신 추가
   void _onCurrentLocationPressed() async {
     try {
       // 로딩 상태 표시
@@ -119,6 +122,9 @@ class _SearchResultPageState extends State<SearchResultPage> {
         barrierDismissible: false,
         builder: (context) => const Center(child: CircularProgressIndicator()),
       );
+
+      // 최신 위치 정보로 업데이트
+      await _controller.updateUserLocation();
 
       // 현재 위치 가져오기
       final position = await _controller.getCurrentPosition();
@@ -202,26 +208,46 @@ class _SearchResultPageState extends State<SearchResultPage> {
 
   // 출발지로 설정하고 길찾기 페이지로 바로 이동하는 메서드
   void _setAsOrigin(SearchResult result) {
-    // 기존 도착지 정보를 유지하면서 새로운 출발지 설정
+    print('🎯 선택된 출발지:');
+    print('   이름: ${result.name}');
+    print('   주소: ${result.address}');
+    print('   원본 좌표: mapx=${result.mapx}, mapy=${result.mapy}');
+
+    final originCoords = NLatLng(result.mapy, result.mapx);
+
+    print('   전달할 GPS 좌표: ${originCoords.latitude}, ${originCoords.longitude}');
+
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(
         builder:
             (context) => TransitApp(
               initialOriginPlace: result.name,
+              initialOriginCoords: originCoords, // ✅ 선택한 결과의 정확한 좌표 전달
               initialDestinationPlace:
                   widget.currentDestinationPlace != '도착지 입력'
                       ? widget.currentDestinationPlace
                       : null,
             ),
       ),
-      (route) => false, // 모든 이전 라우트 제거
+      (route) => false,
     );
   }
 
   // 도착지로 설정하고 길찾기 페이지로 바로 이동하는 메서드
   void _setAsDestination(SearchResult result) {
-    // 기존 출발지 정보를 유지하면서 새로운 도착지 설정
+    print('🎯 선택된 목적지:');
+    print('   이름: ${result.name}');
+    print('   주소: ${result.address}');
+    print('   원본 좌표: mapx=${result.mapx}, mapy=${result.mapy}');
+
+    // GPS 좌표로 변환 (이미 변환되어 있다면 그대로 사용)
+    final destinationCoords = NLatLng(result.mapy, result.mapx);
+
+    print(
+      '   전달할 GPS 좌표: ${destinationCoords.latitude}, ${destinationCoords.longitude}',
+    );
+
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(
@@ -234,9 +260,11 @@ class _SearchResultPageState extends State<SearchResultPage> {
                       ? widget.currentOriginPlace
                       : null,
               initialDestinationPlace: result.name,
+              initialDestinationCoords:
+                  destinationCoords, // ✅ 선택한 결과의 정확한 좌표 전달
             ),
       ),
-      (route) => false, // 모든 이전 라우트 제거
+      (route) => false,
     );
   }
 
@@ -329,15 +357,58 @@ class _SearchResultPageState extends State<SearchResultPage> {
               size: 24,
             ),
             const SizedBox(width: 18),
-            const Expanded(
-              child: Text(
-                '현재 위치',
-                style: TextStyle(
-                  fontFamily: "Pretendard",
-                  color: Color(0xFF0771EB),
-                  fontWeight: FontWeight.w500,
-                  fontSize: 18,
-                ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '현재 위치',
+                    style: TextStyle(
+                      fontFamily: "Pretendard",
+                      color: Color(0xFF0771EB),
+                      fontWeight: FontWeight.w500,
+                      fontSize: 18,
+                    ),
+                  ),
+                  Consumer<SearchMainController>(
+                    builder: (context, controller, child) {
+                      if (controller.userPosition != null) {
+                        if (controller.userLocationAddress != null &&
+                            controller.userLocationAddress!.isNotEmpty &&
+                            controller.userLocationAddress != '주소 확인 불가') {
+                          return Text(
+                            controller.userLocationAddress!,
+                            style: const TextStyle(
+                              fontFamily: "Pretendard",
+                              color: Color(0xFF727272),
+                              fontWeight: FontWeight.w400,
+                              fontSize: 12,
+                            ),
+                          );
+                        } else {
+                          return Text(
+                            '위치: ${controller.userPosition!.latitude.toStringAsFixed(4)}, ${controller.userPosition!.longitude.toStringAsFixed(4)}',
+                            style: const TextStyle(
+                              fontFamily: "Pretendard",
+                              color: Color(0xFF727272),
+                              fontWeight: FontWeight.w400,
+                              fontSize: 12,
+                            ),
+                          );
+                        }
+                      }
+                      return const Text(
+                        '위치 정보 없음',
+                        style: TextStyle(
+                          fontFamily: "Pretendard",
+                          color: Color(0xFF727272),
+                          fontWeight: FontWeight.w400,
+                          fontSize: 12,
+                        ),
+                      );
+                    },
+                  ),
+                ],
               ),
             ),
             Text(
@@ -427,6 +498,9 @@ class _SearchResultPageState extends State<SearchResultPage> {
       onTap: () {
         setState(() {
           sortOption = text;
+          if (text == '거리순') {
+            _sortByDistance();
+          }
         });
       },
       child: Container(
@@ -519,13 +593,27 @@ class _SearchResultPageState extends State<SearchResultPage> {
                             const SizedBox(height: 4),
                             Row(
                               children: [
-                                Text(
-                                  '${result.distance.toStringAsFixed(1)}km',
-                                  style: const TextStyle(
-                                    fontFamily: "Pretendard",
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 14,
-                                    color: Color(0xFF363636),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF0F8FF),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: const Color(0xFF4C9EFC),
+                                      width: 0.5,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    '${result.distance.toStringAsFixed(1)}km',
+                                    style: const TextStyle(
+                                      fontFamily: "Pretendard",
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 12,
+                                      color: Color(0xFF4C9EFC),
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(width: 8),
