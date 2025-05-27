@@ -56,23 +56,51 @@ class _TransitAppState extends State<TransitApp> {
 
   // 초기 출발지/도착지 설정 메서드
   void _applyInitialPlaces() async {
+    print('🔍🔍🔍 _applyInitialPlaces 시작 🔍🔍🔍');
+    print('전달받은 초기값들:');
+    print('  initialOriginPlace: ${widget.initialOriginPlace}');
+    print('  initialOriginCoords: ${widget.initialOriginCoords}');
+    print('  initialDestinationPlace: ${widget.initialDestinationPlace}');
+    print('  initialDestinationCoords: ${widget.initialDestinationCoords}');
+
     // 기존 마커 초기화
     _transitMapController.clearAllMarkersAndRoutes();
 
     bool shouldUpdateState = false;
 
-    // 출발지 처리
+    // 🎯 출발지 처리 (매우 강력한 수정)
     if (widget.initialOriginPlace != null) {
-      if (widget.initialOriginPlace == "현재 위치" &&
-          widget.initialOriginCoords != null) {
-        // 현재 위치 좌표가 직접 전달된 경우
-        print('현재 위치 좌표 직접 설정: ${widget.initialOriginCoords}');
-        _originPlace = "현재 위치";
-        _originCoords = widget.initialOriginCoords;
+      print('📍 출발지 처리 시작...');
+
+      // ✨ 1순위: 좌표가 직접 전달된 경우 - 무조건 이것 사용!
+      if (widget.initialOriginCoords != null) {
+        print('🔥🔥🔥 출발지 좌표 직접 전달됨! 🔥🔥🔥');
+        print('   상가명: ${widget.initialOriginPlace}');
+        print('   위도: ${widget.initialOriginCoords!.latitude}');
+        print('   경도: ${widget.initialOriginCoords!.longitude}');
+        print('🚨 중요: 주소 검색을 절대 하지 않고 이 좌표만 사용합니다!');
+
+        _originPlace = widget.initialOriginPlace!;
+        _originCoords = widget.initialOriginCoords!; // 정확한 좌표 직접 사용 ✨
         _transitMapController.setCurrentPosition(_originCoords!);
         shouldUpdateState = true;
-      } else {
-        // 일반적인 주소 검색
+
+        print('✅ 출발지 좌표 설정 완료: $_originCoords');
+        print('🎯 이제 이 좌표로 경로를 계산합니다!');
+      }
+      // 2순위: "현재 위치"인 경우
+      else if (widget.initialOriginPlace == "현재 위치") {
+        print('📱 출발지가 "현재 위치"입니다 - GPS 좌표 사용');
+        _originPlace = "현재 위치";
+        _routeController.invalidateCache();
+        await _getOriginCoordinates(); // GPS 좌표 가져오기
+        shouldUpdateState = true;
+      }
+      // 3순위: 일반적인 주소 검색 (최후의 수단)
+      else {
+        print('⚠️⚠️⚠️ 경고: 좌표가 전달되지 않아 주소 검색을 수행합니다 ⚠️⚠️⚠️');
+        print('   검색어: ${widget.initialOriginPlace}');
+        print('   이는 정확하지 않을 수 있습니다!');
         _originPlace = widget.initialOriginPlace!;
         _routeController.invalidateCache();
         await _getOriginCoordinates();
@@ -80,19 +108,24 @@ class _TransitAppState extends State<TransitApp> {
       }
     }
 
-    // 도착지 처리
+    // 🎯 도착지 처리 (기존 로직 유지)
     if (widget.initialDestinationPlace != null &&
         widget.initialDestinationPlace != '도착지 입력') {
-      if (widget.initialDestinationPlace == "현재 위치" &&
-          widget.initialDestinationCoords != null) {
-        // 현재 위치 좌표가 직접 전달된 경우
-        print('현재 위치 좌표 직접 설정 (도착지): ${widget.initialDestinationCoords}');
-        _destinationPlace = "현재 위치";
-        _destinationCoords = widget.initialDestinationCoords;
+      print('📍 도착지 처리 시작...');
+
+      if (widget.initialDestinationCoords != null) {
+        print('🔥 도착지 좌표 직접 전달됨!');
+        print('   상가명: ${widget.initialDestinationPlace}');
+        print('   좌표: ${widget.initialDestinationCoords}');
+
+        _destinationPlace = widget.initialDestinationPlace!;
+        _destinationCoords = widget.initialDestinationCoords!;
         _transitMapController.setDestinationPosition(_destinationCoords!);
         shouldUpdateState = true;
+
+        print('✅ 도착지 좌표 설정 완료: $_destinationCoords');
       } else {
-        // 일반적인 주소 검색
+        print('📍 도착지 주소 검색 수행: ${widget.initialDestinationPlace}');
         _destinationPlace = widget.initialDestinationPlace!;
         _routeController.invalidateCache();
         await _getDestinationCoordinates();
@@ -103,23 +136,54 @@ class _TransitAppState extends State<TransitApp> {
     // 변경사항이 있을 때만 setState 호출
     if (shouldUpdateState) {
       setState(() {
-        print('초기값 설정 완료 - 출발지: $_originPlace, 도착지: $_destinationPlace');
+        print('✅✅✅ 초기값 설정 완료 ✅✅✅');
+        print('   출발지: $_originPlace');
+        print('   출발지 좌표: $_originCoords');
+        print('   도착지: $_destinationPlace');
+        print('   도착지 좌표: $_destinationCoords');
+
+        if (_originCoords != null && _destinationCoords != null) {
+          print('🎯 출발지와 도착지 모두 설정되었습니다. 경로 계산 준비 완료!');
+        }
       });
     }
   }
 
   // 출발지 주소를 좌표로 변환하는 메서드 - route_controller 사용
   Future<void> _getOriginCoordinates() async {
-    print('_getOriginCoordinates 시작: $_originPlace');
+    print('🔍 _getOriginCoordinates 시작: $_originPlace');
 
+    // 🚨 1순위: 좌표가 이미 설정되어 있으면 절대 검색하지 않음
+    if (_originCoords != null) {
+      print('🔥🔥🔥 출발지 좌표가 이미 설정되어 있습니다 🔥🔥🔥');
+      print('   좌표: $_originCoords');
+      print('🚨 주소 검색을 완전히 건너뛰고 기존 좌표를 사용합니다!');
+
+      _transitMapController.setCurrentPosition(_originCoords!);
+
+      if (_destinationPlace == '도착지 입력' || _destinationCoords == null) {
+        print('도착지가 없으므로 출발지로 카메라 이동');
+        _transitMapController.moveCamera(
+          _selectedIndex == 0 ? TransitMode.car : TransitMode.walk,
+          _originCoords!,
+          17,
+        );
+      }
+      print('✅ 기존 좌표 사용 완료 - 메서드 종료');
+      return; // 여기서 완전히 종료 - 아래 코드는 실행되지 않음
+    }
+
+    // 상태 체크
     if (_originPlace == '위치 확인 중...' ||
         _originPlace == '위치 권한 없음' ||
         _originPlace == '위치 확인 실패') {
+      print('⚠️ 위치 상태가 불완전합니다: $_originPlace');
       return;
     }
 
-    // "현재 위치"인 경우 실제 GPS 좌표 사용
+    // 🚨 2순위: "현재 위치"인 경우 GPS 좌표 사용
     if (_originPlace == "현재 위치") {
+      print('📱 현재 위치 GPS 좌표 가져오기 시작...');
       try {
         final position = await _locationController.getCurrentLocation();
         if (position != null) {
@@ -127,21 +191,26 @@ class _TransitAppState extends State<TransitApp> {
             _originCoords = position;
           });
           _transitMapController.setCurrentPosition(_originCoords!);
-          print('현재 위치 좌표 설정 완료: $_originCoords');
+          print('✅ 현재 위치 좌표 설정 완료: $_originCoords');
           return;
         } else {
-          print('현재 위치를 가져올 수 없습니다');
+          print('❌ 현재 위치를 가져올 수 없습니다');
           return;
         }
       } catch (e) {
-        print('현재 위치 가져오기 오류: $e');
+        print('❌ 현재 위치 가져오기 오류: $e');
         return;
       }
     }
 
-    // 일반적인 주소 검색 로직 (기존 코드 유지)
+    // 🚨 3순위: 최후의 수단 - 주소 검색 (경고와 함께)
+    print('⚠️⚠️⚠️ 경고: 좌표가 설정되지 않아 주소 검색을 수행합니다 ⚠️⚠️⚠️');
+    print('   검색어: $_originPlace');
+    print('   이는 POI에서 좌표가 제대로 전달되지 않았다는 의미입니다!');
+    print('   검색 결과는 원래 위치와 다를 수 있습니다!');
+
     try {
-      print('출발지 주소 검색: $_originPlace');
+      print('🔍 주소 검색 시작...');
       final results = await _routeController.searchAddressByKeyword(
         _originPlace,
       );
@@ -151,7 +220,7 @@ class _TransitAppState extends State<TransitApp> {
       if (results.isNotEmpty) {
         final firstResult = results[0];
 
-        print('첫 번째 검색 결과:');
+        print('🚨 주의: 검색으로 찾은 첫 번째 결과를 사용합니다');
         print('  name: ${firstResult['name']}');
         print('  address: ${firstResult['address']}');
         print('  x (mapx): ${firstResult['x']}');
@@ -160,31 +229,33 @@ class _TransitAppState extends State<TransitApp> {
         if (firstResult['x'] != null && firstResult['y'] != null) {
           final coords = _routeController.convertAddressToCoords(firstResult);
 
-          print('변환된 좌표: $coords');
+          print('🚨🚨🚨 경고: 검색으로 변환된 좌표 사용 🚨🚨🚨');
+          print('   변환된 좌표: $coords');
+          print('   이 좌표는 원래 터치한 위치와 다를 수 있습니다!');
 
           setState(() {
             _originCoords = coords;
           });
 
-          print('출발지 좌표 설정 완료: $_originCoords');
           _transitMapController.setCurrentPosition(_originCoords!);
 
           if (_destinationPlace == '도착지 입력' || _destinationCoords == null) {
-            print('도착지가 없으므로 출발지로 카메라 이동');
             _transitMapController.moveCamera(
               _selectedIndex == 0 ? TransitMode.car : TransitMode.walk,
               coords,
               17,
             );
           }
+
+          print('⚠️ 검색 기반 출발지 설정 완료: $_originCoords');
         } else {
-          print('좌표값이 null입니다. x: ${firstResult['x']}, y: ${firstResult['y']}');
+          print('❌ 좌표값이 null입니다');
         }
       } else {
-        print('검색 결과가 없습니다.');
+        print('❌ 검색 결과가 없습니다');
       }
     } catch (e) {
-      print('출발지 좌표 변환 오류: $e');
+      print('❌ 출발지 좌표 변환 오류: $e');
     }
   }
 
@@ -221,6 +292,8 @@ class _TransitAppState extends State<TransitApp> {
         return;
       }
     }
+
+    // 일반적인 주소 검색 로직
     try {
       print('도착지 주소 검색: $_destinationPlace');
       final results = await _routeController.searchAddressByKeyword(
@@ -240,10 +313,10 @@ class _TransitAppState extends State<TransitApp> {
           _transitMapController.setDestinationPosition(_destinationCoords!);
         }
       } else {
-        print('도착지 검색 결과 없음: $_destinationPlace');
+        print('❌ 도착지 검색 결과 없음: $_destinationPlace');
       }
     } catch (e) {
-      print('도착지 좌표 변환 오류: $e');
+      print('❌ 도착지 좌표 변환 오류: $e');
     }
   }
 

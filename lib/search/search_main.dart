@@ -36,14 +36,11 @@ class _SearchMainPageState extends State<SearchMainPage>
   void initState() {
     super.initState();
     _controller = SearchMainController();
-    _controller.initialize(); // 위치 정보 초기화
-    _tabController = TabController(length: 2, vsync: this);
 
-    if (widget.initialSearchTerm.isNotEmpty) {
-      _controller.searchController.text = widget.initialSearchTerm;
-      _controller.onSearchChanged(widget.initialSearchTerm);
-      _isSearching = true;
-    }
+    // 위치 정보를 먼저 초기화하고 검색 수행
+    _initializeController();
+
+    _tabController = TabController(length: 2, vsync: this);
 
     _controller.searchController.addListener(_onSearchChanged);
 
@@ -59,6 +56,21 @@ class _SearchMainPageState extends State<SearchMainPage>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _controller.requestFocus(context);
     });
+  }
+
+  // 컨트롤러 초기화 및 초기 검색어 처리
+  Future<void> _initializeController() async {
+    // 위치 정보 초기화 (중요: 검색 전에 반드시 실행)
+    await _controller.initialize();
+
+    // 초기 검색어가 있는 경우 검색 수행
+    if (widget.initialSearchTerm.isNotEmpty) {
+      _controller.searchController.text = widget.initialSearchTerm;
+      _controller.onSearchChanged(widget.initialSearchTerm);
+      setState(() {
+        _isSearching = true;
+      });
+    }
   }
 
   void _onSearchChanged() {
@@ -94,7 +106,7 @@ class _SearchMainPageState extends State<SearchMainPage>
     }
   }
 
-  // 현재 내 위치 버튼 클릭 처리
+  // 현재 내 위치 버튼 클릭 처리 - 위치 갱신 추가
   void _onCurrentLocationPressed() async {
     try {
       // 로딩 상태 표시
@@ -103,6 +115,9 @@ class _SearchMainPageState extends State<SearchMainPage>
         barrierDismissible: false,
         builder: (context) => const Center(child: CircularProgressIndicator()),
       );
+
+      // 최신 위치 정보로 업데이트
+      await _controller.updateUserLocation();
 
       // 현재 위치 가져오기
       final position = await _controller.getCurrentPosition();
@@ -294,14 +309,10 @@ class _SearchMainPageState extends State<SearchMainPage>
             children: [
               Container(
                 padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF4C9EFC),
-                  borderRadius: BorderRadius.circular(20),
-                ),
                 child: const Icon(
                   Icons.my_location_rounded,
-                  color: Colors.white,
-                  size: 20,
+                  color: Color(0xFF4C9EFC),
+                  size: 22,
                 ),
               ),
               const SizedBox(width: 12),
@@ -319,14 +330,36 @@ class _SearchMainPageState extends State<SearchMainPage>
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      widget.isSearchingOrigin ? '출발지로 설정' : '도착지로 설정',
-                      style: TextStyle(
-                        fontFamily: "Pretendard",
-                        fontSize: 14,
-                        fontWeight: FontWeight.w400,
-                        color: const Color(0xFF727272),
-                      ),
+                    Consumer<SearchMainController>(
+                      builder: (context, controller, child) {
+                        String locationText = '';
+                        if (controller.userPosition != null) {
+                          if (controller.userLocationAddress != null &&
+                              controller.userLocationAddress!.isNotEmpty &&
+                              controller.userLocationAddress != '주소 확인 불가') {
+                            locationText =
+                                '${widget.isSearchingOrigin ? '출발지로 설정' : '도착지로 설정'} (${controller.userLocationAddress})';
+                          } else {
+                            locationText =
+                                '${widget.isSearchingOrigin ? '출발지로 설정' : '도착지로 설정'} (${controller.userPosition!.latitude.toStringAsFixed(4)}, ${controller.userPosition!.longitude.toStringAsFixed(4)})';
+                          }
+                        } else {
+                          locationText =
+                              '${widget.isSearchingOrigin ? '출발지로 설정' : '도착지로 설정'} (위치 정보 없음)';
+                        }
+
+                        return Text(
+                          locationText,
+                          style: TextStyle(
+                            fontFamily: "Pretendard",
+                            fontSize: 14,
+                            fontWeight: FontWeight.w400,
+                            color: const Color(0xFF727272),
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -539,7 +572,8 @@ class _SearchMainPageState extends State<SearchMainPage>
     );
   }
 
-  // 검색 결과 표시 - 오류 수정
+  // 검색 결과 표시 - 사용자 위치 기준으로 정렬됨
+  // 검색 결과 표시 - 사용자 위치 기준으로 정렬됨
   Widget _buildSearchResults() {
     return Consumer<SearchMainController>(
       builder: (context, controller, child) {
@@ -675,9 +709,9 @@ class _SearchMainPageState extends State<SearchMainPage>
                   Text(
                     '${result.distance.toStringAsFixed(1)}km',
                     style: const TextStyle(
-                      color: Color(0xFF727272),
+                      color: Color(0xFF727272), // 거리는 파란색으로 강조
                       fontFamily: "Pretendard",
-                      fontWeight: FontWeight.w500,
+                      fontWeight: FontWeight.w600,
                       fontSize: 12,
                     ),
                   ),
