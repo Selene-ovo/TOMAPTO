@@ -638,7 +638,7 @@ class _FriendScreenState extends State<FriendScreen> {
       return;
     }
 
-    // 현재 친구 목록에서 닉네임/이름으로 검색
+    // 현재 친구 목록에서 닉네임/이름/아이디로 검색 - 수정된 부분
     setState(() {
       final allFriends = List<Map<String, dynamic>>.from(
         friends,
@@ -647,9 +647,14 @@ class _FriendScreenState extends State<FriendScreen> {
           allFriends.where((friend) {
             final nickname = friend['nickname']?.toString().toLowerCase() ?? '';
             final name = friend['name']?.toString().toLowerCase() ?? '';
+            final friendId =
+                friend['id']?.toString().toLowerCase() ?? ''; // 아이디 검색 추가
             final searchLower = query.toLowerCase();
 
-            return nickname.contains(searchLower) || name.contains(searchLower);
+            // 닉네임, 이름, 아이디 모두에서 검색
+            return nickname.contains(searchLower) ||
+                name.contains(searchLower) ||
+                friendId.contains(searchLower);
           }).toList();
 
       friends = filteredFriends; // 필터링된 결과로 업데이트
