@@ -19,6 +19,18 @@ class _BlacklistFriendsState extends State<BlacklistFriends> {
   List<Map<String, dynamic>> _filteredBlockedUsers = [];
   String _errorMessage = '';
 
+  // 아이디 마스킹 함수 추가
+  String _maskUserId(String userId) {
+    if (userId.length < 5) {
+      return userId; // 기존 사용자 대응
+    }
+
+    String visiblePart = userId.substring(0, userId.length - 4);
+    String maskedPart = '****';
+
+    return '$visiblePart$maskedPart';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -428,15 +440,32 @@ class _BlacklistFriendsState extends State<BlacklistFriends> {
                                     size: 30,
                                   ),
                                 ),
-                                title: Text(
-                                  user['nickname'] ??
-                                      user['name'] ??
-                                      user['id'] ??
-                                      '알 수 없음',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w500,
-                                    fontSize: 15,
-                                  ),
+                                title: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // 닉네임 (메인 표시)
+                                    Text(
+                                      user['nickname'] ??
+                                          user['name'] ??
+                                          '닉네임 없음',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w500,
+                                        fontSize: 15,
+                                      ),
+                                    ),
+                                    // 마스킹된 아이디 (항상 표시)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 2.0),
+                                      child: Text(
+                                        '@${_maskUserId(user['id'] ?? 'unknown')}',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey[600],
+                                          fontWeight: FontWeight.w400,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                                 trailing: IconButton(
                                   icon: Icon(

@@ -26,6 +26,7 @@ class _DrawerWidgetState extends State<DrawerWidget> {
   // 사용자 정보를 저장할 변수
   String _userName = '사용자'; // 기본값 설정
   String _userNickname = '';
+  String _userId = ''; // 사용자 ID 추가
   bool _isLoading = true;
 
   @override
@@ -35,6 +36,18 @@ class _DrawerWidgetState extends State<DrawerWidget> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadUserProfile();
     });
+  }
+
+  // 아이디 마스킹 함수 추가
+  String _maskUserId(String userId) {
+    if (userId.length < 5) {
+      return userId; // 기존 사용자 대응
+    }
+
+    String visiblePart = userId.substring(0, userId.length - 4);
+    String maskedPart = '****';
+
+    return '$visiblePart$maskedPart';
   }
 
   // API 서버 기본 URL 가져오기
@@ -89,6 +102,7 @@ class _DrawerWidgetState extends State<DrawerWidget> {
           setState(() {
             _userName = userData['user_name'] ?? '사용자';
             _userNickname = userData['user_nickname'] ?? '';
+            _userId = userData['user_id'] ?? ''; // 사용자 ID 저장
             _isLoading = false;
           });
         } else {
@@ -182,21 +196,54 @@ class _DrawerWidgetState extends State<DrawerWidget> {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  // 사용자 닉네임 또는 이름 표시
+                  // 사용자 정보 표시 - 닉네임과 마스킹된 아이디로 변경
                   Expanded(
-                    child: Text(
-                      _isLoading
-                          ? '로드 중...'
-                          : (_userNickname.isNotEmpty
-                              ? _userNickname
-                              : _userName),
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    child:
+                        _isLoading
+                            ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '로드 중...',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            )
+                            : Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // 닉네임 (메인 표시)
+                                Text(
+                                  _userNickname.isNotEmpty
+                                      ? _userNickname
+                                      : _userName,
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                // 마스킹된 아이디 (아래에 작게 표시)
+                                if (_userId.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 2.0),
+                                    child: Text(
+                                      '@${_maskUserId(_userId)}',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey[600],
+                                        fontWeight: FontWeight.w400,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
                   ),
                   const Icon(Icons.chevron_right, color: Colors.black),
                 ],

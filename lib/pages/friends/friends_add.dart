@@ -41,6 +41,18 @@ class _FriendsAddPageState extends State<FriendsAddPage>
   // 탭 컨트롤러
   late TabController _tabController;
 
+  // 아이디 마스킹 함수 (5자 이상 전제)
+  String _maskUserId(String userId) {
+    if (userId.length < 5) {
+      return userId; // 기존 사용자 대응
+    }
+
+    String visiblePart = userId.substring(0, userId.length - 4);
+    String maskedPart = '****';
+
+    return '$visiblePart$maskedPart';
+  }
+
   // API 토큰 가져오기
   Future<String?> getToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -578,6 +590,205 @@ class _FriendsAddPageState extends State<FriendsAddPage>
     );
   }
 
+  // 검색 결과 탭 위젯
+  Widget _buildSearchResultsTab() {
+    if (_isLoading) {
+      return Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFB233B)),
+        ),
+      );
+    }
+
+    if (_errorMessage.isNotEmpty) {
+      return Center(child: Text(_errorMessage));
+    }
+
+    if (_searchResults.isEmpty) {
+      return Center(child: Text('검색 결과가 없습니다'));
+    }
+
+    return ListView.builder(
+      itemCount: _searchResults.length,
+      itemBuilder: (context, index) {
+        final user = _searchResults[index];
+
+        return Column(
+          children: [
+            ListTile(
+              contentPadding: EdgeInsets.symmetric(horizontal: 25, vertical: 4),
+              leading: Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border.all(color: Colors.grey[300]!, width: 0.5),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(Icons.person, color: Colors.black, size: 30),
+              ),
+              title: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 닉네임 (메인 표시)
+                  Text(
+                    user['user_nickname'] ?? '닉네임 없음',
+                    style: TextStyle(fontWeight: FontWeight.w500, fontSize: 15),
+                  ),
+                  // 마스킹된 아이디 (항상 표시)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2.0),
+                    child: Text(
+                      '@${_maskUserId(user['user_id'])}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[600],
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              trailing: IconButton(
+                icon: Icon(Icons.more_vert, color: Colors.black),
+                onPressed: () => _showUserOptions(user),
+              ),
+            ),
+            Divider(height: 1, thickness: 0.5, color: Colors.grey[300]),
+          ],
+        );
+      },
+    );
+  }
+
+  // 요청 알림 탭 위젯
+  Widget _buildRequestsTab() {
+    if (_isLoading) {
+      return Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFB233B)),
+        ),
+      );
+    }
+
+    if (_friendRequests.isEmpty) {
+      return Center(child: Text('받은 친구 요청이 없습니다'));
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadFriendRequests,
+      child: ListView.builder(
+        itemCount: _friendRequests.length,
+        itemBuilder: (context, index) {
+          final request = _friendRequests[index];
+
+          return Column(
+            children: [
+              ListTile(
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 25,
+                  vertical: 4,
+                ),
+                leading: Container(
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    border: Border.all(color: Colors.grey[300]!, width: 0.5),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.person, color: Colors.black, size: 30),
+                ),
+                title: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 닉네임 (메인 표시)
+                    Text(
+                      request['sender_nickname'] ?? '닉네임 없음',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w500,
+                        fontSize: 15,
+                      ),
+                    ),
+                    // 마스킹된 아이디 (항상 표시)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2.0),
+                      child: Text(
+                        '@${_maskUserId(request['sender_id'])}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                subtitle: Padding(
+                  padding: const EdgeInsets.only(top: 6.0),
+                  child: Text(
+                    '친구 요청을 보냈습니다',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                  ),
+                ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // 거절 버튼 (테두리만 있는 버튼) - 크기 축소
+                    Container(
+                      width: 36, // 크기 축소
+                      height: 36, // 크기 축소
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey[300]!),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: IconButton(
+                        padding: EdgeInsets.zero, // 패딩 제거로 아이콘 위치 조정
+                        icon: Icon(
+                          Icons.close,
+                          color: Colors.red,
+                          size: 20,
+                        ), // 아이콘 크기 유지
+                        onPressed: () {
+                          if (request.containsKey('request_id')) {
+                            _rejectFriendRequest(request['request_id']);
+                          }
+                        },
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    // 수락 버튼 - 사람 + 아이콘 이미지로 변경 - 크기 축소
+                    Container(
+                      width: 36, // 크기 축소
+                      height: 36, // 크기 축소
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey[300]!),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: IconButton(
+                        padding: EdgeInsets.zero, // 패딩 제거
+                        icon: Image.asset(
+                          'assets/icons/person_add.png',
+                          width: 24, // 아이콘 크기 유지
+                          height: 24, // 아이콘 크기 유지
+                        ),
+                        onPressed: () {
+                          if (request.containsKey('request_id')) {
+                            _acceptFriendRequest(request['request_id']);
+                          }
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -618,11 +829,10 @@ class _FriendsAddPageState extends State<FriendsAddPage>
                       borderRadius: BorderRadius.circular(24),
                     ),
                     child: Center(
-                      // 여기에 Center 위젯 추가
                       child: TextField(
                         controller: _searchController,
                         style: TextStyle(fontSize: 14),
-                        textAlignVertical: TextAlignVertical.center, // 수직 중앙 정렬
+                        textAlignVertical: TextAlignVertical.center,
                         decoration: InputDecoration(
                           hintText: '닉네임을 입력해주세요.',
                           hintStyle: TextStyle(
@@ -630,10 +840,10 @@ class _FriendsAddPageState extends State<FriendsAddPage>
                             color: Colors.grey[500],
                           ),
                           border: InputBorder.none,
-                          isDense: true, // 보다 조밀한 레이아웃
+                          isDense: true,
                           contentPadding: EdgeInsets.symmetric(
                             horizontal: 20,
-                            vertical: 0, // 수직 패딩 제거
+                            vertical: 0,
                           ),
                         ),
                         onSubmitted: (_) => _searchUsers(),
@@ -715,155 +925,6 @@ class _FriendsAddPageState extends State<FriendsAddPage>
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  // 검색 결과 탭 위젯
-  Widget _buildSearchResultsTab() {
-    if (_isLoading) {
-      return Center(child: CircularProgressIndicator());
-    }
-
-    if (_errorMessage.isNotEmpty) {
-      return Center(child: Text(_errorMessage));
-    }
-
-    if (_searchResults.isEmpty) {
-      return Center(child: Text('검색 결과가 없습니다'));
-    }
-
-    return ListView.builder(
-      itemCount: _searchResults.length,
-      itemBuilder: (context, index) {
-        final user = _searchResults[index];
-
-        return Column(
-          children: [
-            ListTile(
-              contentPadding: EdgeInsets.symmetric(horizontal: 25, vertical: 4),
-              leading: Container(
-                width: 50,
-                height: 50,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  border: Border.all(color: Colors.grey[300]!, width: 0.5),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(Icons.person, color: Colors.black, size: 30),
-              ),
-              title: Text(
-                user['user_nickname'] ?? user['user_id'],
-                style: TextStyle(fontWeight: FontWeight.w500, fontSize: 15),
-              ),
-              trailing: IconButton(
-                icon: Icon(Icons.more_vert),
-                onPressed: () => _showUserOptions(user),
-              ),
-            ),
-            Divider(height: 1, thickness: 0.5, color: Colors.grey[300]),
-          ],
-        );
-      },
-    );
-  }
-
-  // 요청 알림 탭 위젯
-  Widget _buildRequestsTab() {
-    if (_isLoading) {
-      return Center(child: CircularProgressIndicator());
-    }
-
-    if (_friendRequests.isEmpty) {
-      return Center(child: Text('받은 친구 요청이 없습니다'));
-    }
-
-    return RefreshIndicator(
-      onRefresh: _loadFriendRequests,
-      child: ListView.builder(
-        itemCount: _friendRequests.length,
-        itemBuilder: (context, index) {
-          final request = _friendRequests[index];
-
-          return Column(
-            children: [
-              ListTile(
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: 25,
-                  vertical: 4,
-                ),
-                leading: Container(
-                  width: 50,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    border: Border.all(color: Colors.grey[300]!, width: 0.5),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(Icons.person, color: Colors.black, size: 30),
-                ),
-                title: Text(
-                  request['sender_nickname'] ?? request['sender_id'],
-                  style: TextStyle(fontWeight: FontWeight.w500, fontSize: 15),
-                ),
-                subtitle: Text(
-                  '친구 요청을 보냈습니다',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // 거절 버튼 (테두리만 있는 버튼) - 크기 축소
-                    Container(
-                      width: 36, // 크기 축소
-                      height: 36, // 크기 축소
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey[300]!),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: IconButton(
-                        padding: EdgeInsets.zero, // 패딩 제거로 아이콘 위치 조정
-                        icon: Icon(
-                          Icons.close,
-                          color: Colors.red,
-                          size: 20,
-                        ), // 아이콘 크기 유지
-                        onPressed: () {
-                          if (request.containsKey('request_id')) {
-                            _rejectFriendRequest(request['request_id']);
-                          }
-                        },
-                      ),
-                    ),
-                    SizedBox(width: 8),
-                    // 수락 버튼 - 사람 + 아이콘 이미지로 변경 - 크기 축소
-                    Container(
-                      width: 36, // 크기 축소
-                      height: 36, // 크기 축소
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey[300]!),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: IconButton(
-                        padding: EdgeInsets.zero, // 패딩 제거
-                        icon: Image.asset(
-                          'assets/icons/person_add.png',
-                          width: 24, // 아이콘 크기 유지
-                          height: 24, // 아이콘 크기 유지
-                        ),
-                        onPressed: () {
-                          if (request.containsKey('request_id')) {
-                            _acceptFriendRequest(request['request_id']);
-                          }
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          );
-        },
       ),
     );
   }
