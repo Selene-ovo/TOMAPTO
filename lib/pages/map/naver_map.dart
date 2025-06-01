@@ -489,39 +489,8 @@ class _NaverMapPageState extends State<NaverMapPage> {
               },
               child: SvgPicture.asset(
                 'assets/icons/gps_B.svg',
-                width: iconSize,
-                height: iconSize,
-              ),
-            ),
-          ),
-
-          // 5. 길찾기 버튼 (GPS 버튼 위)
-          Positioned(
-            bottom: bottomPadding + iconSize + 16,
-            right: rightPadding,
-            child: Container(
-              width: iconSize,
-              height: iconSize,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
-                    blurRadius: 5,
-                    offset: Offset(0, 2),
-                    spreadRadius: 0,
-                  ),
-                ],
-              ),
-              child: IconButton(
-                icon: Icon(
-                  Icons.directions,
-                  color: Color(0xFFFB233B),
-                  size: iconSize * 0.6,
-                ),
-                onPressed: _navigateToTransitPage,
-                tooltip: '길찾기',
+                width: 60,
+                height: 60,
               ),
             ),
           ),

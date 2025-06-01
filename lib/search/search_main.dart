@@ -63,12 +63,26 @@ class _SearchMainPageState extends State<SearchMainPage>
     // 위치 정보 초기화 (중요: 검색 전에 반드시 실행)
     await _controller.initialize();
 
-    // 초기 검색어가 있는 경우 검색 수행
-    if (widget.initialSearchTerm.isNotEmpty) {
+    bool _isDefaultText(String text) {
+      return text == '출발지 입력' ||
+          text == '도착지 입력' ||
+          text == '위치 확인 중...' ||
+          text == '위치 권한 없음' ||
+          text == '위치 확인 실패';
+    }
+
+    // 초기 검색어가 있고 기본 텍스트가 아닌 경우에만 검색 수행
+    if (widget.initialSearchTerm.isNotEmpty &&
+        !_isDefaultText(widget.initialSearchTerm)) {
       _controller.searchController.text = widget.initialSearchTerm;
       _controller.onSearchChanged(widget.initialSearchTerm);
       setState(() {
         _isSearching = true;
+      });
+    } else {
+      _controller.searchController.text = '';
+      setState(() {
+        _isSearching = false;
       });
     }
   }

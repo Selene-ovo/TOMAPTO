@@ -124,16 +124,6 @@ class LocationInfoWidget extends StatelessWidget {
                       ),
                     ),
                     SizedBox(height: 4),
-                    // 좌표 정보 (디버깅용)
-                    Text(
-                      '위도: ${locationInfo.position.latitude.toStringAsFixed(6)}, 경도: ${locationInfo.position.longitude.toStringAsFixed(6)}',
-                      style: TextStyle(
-                        fontFamily: "Pretendard",
-                        fontSize: 10,
-                        fontWeight: FontWeight.w400,
-                        color: Colors.grey[500],
-                      ),
-                    ),
                   ],
                 ),
               ],

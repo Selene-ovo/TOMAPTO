@@ -3,6 +3,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:async';
+import 'dart:math';
 
 class RouteData {
   final String totalTime;
@@ -17,6 +18,21 @@ class RouteData {
     required this.price,
     required this.busNumber,
     required this.stationName,
+  });
+}
+
+// 도로 정보를 담는 새로운 클래스 추가
+class RoadSegment {
+  final String roadName;
+  final int distance;
+  final int duration;
+  final List<NLatLng> coordinates;
+
+  RoadSegment({
+    required this.roadName,
+    required this.distance,
+    required this.duration,
+    required this.coordinates,
   });
 }
 
@@ -525,6 +541,76 @@ class RouteController {
     }
   }
 
+  // 네이버 API 응답에서 도로명 정보를 추출하는 메서드 추가
+  List<RoadSegment> _parseRoadSegments(Map<String, dynamic> routeData) {
+    List<RoadSegment> segments = [];
+
+    try {
+      if (routeData['route'] != null && routeData['route']['trafast'] != null) {
+        final route = routeData['route']['trafast'][0];
+
+        // 네이버 API의 guides 정보에서 도로명 추출
+        if (route['guide'] != null) {
+          final guides = route['guide'] as List;
+
+          for (var guide in guides) {
+            if (guide['name'] != null && guide['distance'] != null) {
+              String roadName = guide['name'].toString();
+              int distance = (guide['distance'] as num).toInt();
+              int duration = (guide['duration'] as num?)?.toInt() ?? 0;
+
+              // 빈 도로명이나 의미없는 데이터 필터링
+              if (roadName.isNotEmpty && roadName != '0' && distance > 0) {
+                segments.add(
+                  RoadSegment(
+                    roadName: roadName,
+                    distance: distance,
+                    duration: duration,
+                    coordinates: [], // 상세 좌표는 필요시 추가
+                  ),
+                );
+              }
+            }
+          }
+        }
+
+        // guides가 없거나 부족한 경우 section 정보 활용
+        if (segments.isEmpty && route['section'] != null) {
+          final sections = route['section'] as List;
+
+          for (var section in sections) {
+            if (section['name'] != null) {
+              String roadName = section['name'].toString();
+              int distance = (section['distance'] as num?)?.toInt() ?? 0;
+              int duration = (section['duration'] as num?)?.toInt() ?? 0;
+
+              if (roadName.isNotEmpty && distance > 0) {
+                segments.add(
+                  RoadSegment(
+                    roadName: roadName,
+                    distance: distance,
+                    duration: duration,
+                    coordinates: [],
+                  ),
+                );
+              }
+            }
+          }
+        }
+      }
+
+      print('추출된 도로 구간 수: ${segments.length}');
+      for (var segment in segments) {
+        print('도로명: ${segment.roadName}, 거리: ${segment.distance}m');
+      }
+    } catch (e) {
+      print('도로 구간 파싱 오류: $e');
+    }
+
+    return segments;
+  }
+
+  // 자동차 경로 검색 메서드 수정 - 도로명 정보 포함
   Future<Map<String, dynamic>> searchCarRoute(
     NLatLng start,
     NLatLng end,
@@ -591,13 +677,21 @@ class RouteController {
             }
           }
 
+          // 도로명 정보 추출
+          final roadSegments = _parseRoadSegments(data);
+
           final routeData = {
             'routes': [
-              {'path': pathCoordinates, 'summary': route['summary']},
+              {
+                'path': pathCoordinates,
+                'summary': route['summary'],
+                'roadSegments': roadSegments, // 도로명 정보 추가
+              },
             ],
             'distance': route['summary']?['distance'] ?? 0,
             'duration': (route['summary']?['duration'] ?? 0) ~/ 1000,
             'toll': route['summary']?['tollFare'] ?? 0,
+            'roadSegments': roadSegments, // 최상위에도 추가
           };
 
           // 캐시에 저장
@@ -612,6 +706,30 @@ class RouteController {
     } catch (e) {
       print('경로 검색 오류: $e');
       return _getMockCarRouteData(start, end);
+    }
+  }
+
+  // 특정 좌표에서 가장 가까운 도로명을 반환하는 메서드 추가
+  String getRoadNameAtPosition(
+    NLatLng position,
+    Map<String, dynamic> routeData,
+  ) {
+    try {
+      if (routeData['roadSegments'] != null) {
+        final segments = routeData['roadSegments'] as List<RoadSegment>;
+
+        if (segments.isNotEmpty) {
+          // 현재는 간단하게 첫 번째 도로명을 반환
+          // 추후 좌표 기반으로 더 정확한 매칭 로직 구현 가능
+          return segments.first.roadName;
+        }
+      }
+
+      // 기본값 반환
+      return "도로";
+    } catch (e) {
+      print('도로명 조회 오류: $e');
+      return "도로";
     }
   }
 
@@ -650,6 +768,22 @@ class RouteController {
   }
 
   Map<String, dynamic> _getMockCarRouteData(NLatLng start, NLatLng end) {
+    // Mock 데이터에도 도로명 정보 추가
+    final mockRoadSegments = [
+      RoadSegment(
+        roadName: "강남대로",
+        distance: 2000,
+        duration: 360,
+        coordinates: [],
+      ),
+      RoadSegment(
+        roadName: "테헤란로",
+        distance: 3000,
+        duration: 540,
+        coordinates: [],
+      ),
+    ];
+
     return {
       'distance': 5000,
       'duration': 900,
@@ -663,12 +797,11 @@ class RouteController {
             NLatLng(start.latitude + 0.015, start.longitude + 0.012),
             end,
           ],
-          'segments': [
-            {'name': '강남대로', 'distance': 2000, 'duration': 360},
-            {'name': '테헤란로', 'distance': 3000, 'duration': 540},
-          ],
+          'segments': mockRoadSegments,
+          'roadSegments': mockRoadSegments,
         },
       ],
+      'roadSegments': mockRoadSegments,
     };
   }
 
@@ -683,5 +816,141 @@ class RouteController {
         {'path': _generateSimpleWalkPath(start, end)},
       ],
     };
+  }
+
+  Future<int> getSpeedLimitFromTmap(NLatLng position) async {
+    bool keysInitialized = await _initAllApiKeys();
+    if (!keysInitialized) {
+      return 30; // 기본값
+    }
+
+    try {
+      // TMAP 속도 제한 조회 API (실제 API 엔드포인트는 TMAP 문서 확인 필요)
+      final url = Uri.parse(
+        'https://apis.openapi.sk.com/tmap/road/speedlimit?version=1',
+      );
+
+      final requestBody = {
+        'coordX': position.longitude.toStringAsFixed(6),
+        'coordY': position.latitude.toStringAsFixed(6),
+        'coordType': 'WGS84GEO',
+      };
+
+      final response = await http
+          .post(
+            url,
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'appKey': _cachedTmapApiKey!,
+            },
+            body: Uri(queryParameters: requestBody).query,
+          )
+          .timeout(Duration(seconds: 3)); // 빠른 타임아웃
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+
+        // TMAP 응답에서 속도 제한 추출 (실제 응답 구조에 따라 수정 필요)
+        if (data['speedLimit'] != null) {
+          return (data['speedLimit'] as num).toInt();
+        }
+      }
+
+      // API 호출 실패 시 도로명 기반 추정
+      return _estimateSpeedLimitByRoadType(position);
+    } catch (e) {
+      print('TMAP 속도 제한 조회 오류: $e');
+      return _estimateSpeedLimitByRoadType(position);
+    }
+  }
+
+  // 도로 유형별 속도 제한 추정
+  int _estimateSpeedLimitByRoadType(NLatLng position) {
+    // 현재 위치의 도로명을 알 수 있다면 그것을 기반으로 추정
+    // 또는 지역별 일반적인 속도 제한 적용
+
+    // 한국의 일반적인 도로별 속도 제한
+    // - 고속도로: 100-110km/h
+    // - 자동차전용도로: 80-90km/h
+    // - 대로(간선도로): 60-70km/h
+    // - 일반도로: 50km/h
+    // - 주택가/이면도로: 30km/h
+
+    // 간단한 지역 기반 추정 (실제로는 더 정교한 로직 필요)
+    return 30; // 기본값
+  }
+
+  // 자동차 경로의 구간별 속도 제한 정보 가져오기
+  Future<Map<String, dynamic>> getCarRouteWithSpeedLimits(
+    NLatLng start,
+    NLatLng end,
+  ) async {
+    // 1. 네이버 API로 경로 가져오기
+    final routeData = await searchCarRoute(start, end);
+
+    // 2. 경로상의 주요 지점들의 속도 제한 조회
+    if (routeData['routes'] != null && routeData['routes'].isNotEmpty) {
+      final route = routeData['routes'][0];
+      final pathCoordinates = route['path'] as List<NLatLng>?;
+
+      if (pathCoordinates != null && pathCoordinates.isNotEmpty) {
+        List<Map<String, dynamic>> speedLimitSegments = [];
+
+        // 경로를 구간으로 나누어 속도 제한 조회 (너무 많은 API 호출 방지)
+        final sampleInterval = max(
+          1,
+          pathCoordinates.length ~/ 10,
+        ); // 최대 10개 구간
+
+        for (int i = 0; i < pathCoordinates.length; i += sampleInterval) {
+          final position = pathCoordinates[i];
+          final speedLimit = await getSpeedLimitFromTmap(position);
+
+          speedLimitSegments.add({
+            'position': position,
+            'speedLimit': speedLimit,
+            'index': i,
+          });
+
+          // API 호출 간격 조절 (너무 빠른 연속 호출 방지)
+          await Future.delayed(Duration(milliseconds: 100));
+        }
+
+        // 속도 제한 정보를 경로 데이터에 추가
+        routeData['speedLimitSegments'] = speedLimitSegments;
+      }
+    }
+
+    return routeData;
+  }
+
+  // 특정 위치에서 가장 가까운 속도 제한 정보 찾기
+  int getSpeedLimitAtPosition(
+    NLatLng position,
+    Map<String, dynamic> routeData,
+  ) {
+    if (routeData['speedLimitSegments'] == null) {
+      return 50; // 기본값
+    }
+
+    final segments = routeData['speedLimitSegments'] as List;
+    if (segments.isEmpty) return 50;
+
+    // 현재 위치에서 가장 가까운 구간의 속도 제한 반환
+    double minDistance = double.infinity;
+    int nearestSpeedLimit = 50;
+
+    for (var segment in segments) {
+      final segmentPosition = segment['position'] as NLatLng;
+      final distance = _calculateDistance(position, segmentPosition);
+
+      if (distance < minDistance) {
+        minDistance = distance;
+        nearestSpeedLimit = segment['speedLimit'] as int;
+      }
+    }
+
+    return nearestSpeedLimit;
   }
 }

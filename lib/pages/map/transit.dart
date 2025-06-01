@@ -540,6 +540,8 @@ class _TransitAppState extends State<TransitApp> {
     print('도착지 변경 완료 - 모달 업데이트 대기 중');
   }
 
+  // transit.dart의 _handleSwapLocations 메서드 수정
+
   void _handleSwapLocations() async {
     print('출발지/도착지 스왑 시작');
 
@@ -551,10 +553,24 @@ class _TransitAppState extends State<TransitApp> {
     final tempCoords = _originCoords;
 
     setState(() {
-      _originPlace = _destinationPlace;
-      _originCoords = _destinationCoords;
+      // 텍스트 교체 시 기본 텍스트 처리
+      if (_destinationPlace == '도착지 입력') {
+        _originPlace = '출발지 입력'; // 🔥 '도착지 입력' → '출발지 입력'으로 수정
+      } else {
+        _originPlace = _destinationPlace;
+      }
 
-      _destinationPlace = tempPlace;
+      if (tempPlace == '출발지 입력' ||
+          tempPlace == '위치 확인 중...' ||
+          tempPlace == '위치 권한 없음' ||
+          tempPlace == '위치 확인 실패') {
+        _destinationPlace = '도착지 입력'; // 🔥 출발지가 기본값이면 도착지도 기본값으로
+      } else {
+        _destinationPlace = tempPlace;
+      }
+
+      // 좌표 교체
+      _originCoords = _destinationCoords;
       _destinationCoords = tempCoords;
     });
 
