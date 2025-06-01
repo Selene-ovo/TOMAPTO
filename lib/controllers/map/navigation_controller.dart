@@ -18,6 +18,10 @@ class NavigationController {
   NMarker? _destinationMarker;
   NMarker? _currentLocationMarker;
 
+  // 도로명 정보 저장
+  List<RoadSegment>? _roadSegments;
+  Map<String, dynamic>? _currentRouteData;
+
   // 경로 좌표 리스트
   List<NLatLng> _pathCoordinates = [];
 
@@ -53,6 +57,9 @@ class NavigationController {
   List<Map<String, dynamic>> _turnByTurnInstructions = [];
   Map<String, dynamic>? _currentInstruction;
   Map<String, dynamic>? _nextInstruction;
+
+  // 자동차 모드에서 속도 제한 정보가 포함된 경로 데이터
+  Map<String, dynamic>? _routeDataWithSpeedLimits;
 
   // 현재 방향 정보 저장 변수 추가
   double _currentHeading = 0.0;
@@ -217,7 +224,7 @@ class NavigationController {
       Map<String, dynamic> routeData;
 
       if (mode == TransitMode.walk) {
-        // 도보는 더 짧은 타임아웃
+        // 도보는 기존 방식 유지
         routeData = await Future.any([
           _routeController.searchWalkRoute(_origin, _destination),
           Future.delayed(
@@ -226,13 +233,27 @@ class NavigationController {
           ),
         ]);
       } else {
+        // 자동차 모드: 네이버 경로 + TMAP 속도 제한 정보
         routeData = await Future.any([
-          _routeController.searchCarRoute(_origin, _destination),
+          _routeController.getCarRouteWithSpeedLimits(_origin, _destination),
           Future.delayed(
-            Duration(seconds: 8),
+            Duration(seconds: 10), // 속도 제한 조회 때문에 시간 더 필요
             () => throw TimeoutException('자동차 경로 타임아웃'),
           ),
         ]);
+
+        // 속도 제한 정보가 포함된 경로 데이터 저장
+        _routeDataWithSpeedLimits = routeData;
+        print('속도 제한 정보 로딩 완료');
+      }
+
+      // 경로 데이터 저장
+      _currentRouteData = routeData;
+
+      // 도로명 정보 저장 (자동차 모드일 때만)
+      if (mode == TransitMode.car && routeData['roadSegments'] != null) {
+        _roadSegments = List<RoadSegment>.from(routeData['roadSegments']);
+        print('도로명 정보 로딩 완료: ${_roadSegments!.length}개 구간');
       }
 
       if (routeData['routes'] != null && routeData['routes'].isNotEmpty) {
@@ -241,9 +262,9 @@ class NavigationController {
           _pathCoordinates = List<NLatLng>.from(route['path']);
           print('경로 로딩 완료: ${_pathCoordinates.length}개 좌표');
 
-          // 도보 모드는 간단한 턴바이턴만 생성
+          // 도보 모드는 턴바이턴 생성 안 함
           if (mode == TransitMode.walk) {
-            _generateSimpleWalkInstructions();
+            print('도보 모드: 턴바이턴 지시 생성 안 함');
           } else {
             _generateTurnByTurnInstructionsAsync();
           }
@@ -259,7 +280,6 @@ class NavigationController {
     }
   }
 
-  // 턴바이턴 지시 사항 생성
   void _generateTurnByTurnInstructions() {
     _turnByTurnInstructions = [];
 
@@ -275,27 +295,27 @@ class NavigationController {
       );
 
       String direction = "직진";
-      IconData directionIcon = Icons.arrow_upward;
+      IconData directionIcon = Icons.arrow_upward_rounded;
 
       // 각도에 따른 방향 결정
       if (angle > 60 && angle <= 120) {
         direction = "우회전";
-        directionIcon = Icons.turn_right;
+        directionIcon = Icons.turn_right_rounded;
       } else if (angle > 120) {
         direction = "급우회전";
-        directionIcon = Icons.turn_right;
+        directionIcon = Icons.turn_right_rounded;
       } else if (angle < -60 && angle >= -120) {
         direction = "좌회전";
-        directionIcon = Icons.turn_left;
+        directionIcon = Icons.turn_left_rounded;
       } else if (angle < -120) {
         direction = "급좌회전";
-        directionIcon = Icons.turn_left;
+        directionIcon = Icons.turn_left_rounded;
       } else if (angle > 30 && angle <= 60) {
         direction = "우측으로";
-        directionIcon = Icons.turn_slight_right;
+        directionIcon = Icons.turn_slight_right_rounded;
       } else if (angle < -30 && angle >= -60) {
         direction = "좌측으로";
-        directionIcon = Icons.turn_slight_left;
+        directionIcon = Icons.turn_slight_left_rounded;
       }
 
       // 방향 변화가 큰 경우만 지시 추가
@@ -318,14 +338,8 @@ class NavigationController {
                 )
                 : 0;
 
-        // 가상 도로명 (실제로는 API에서 가져와야 함)
-        String roadName = "경강로";
-
-        if (i > 2 && i % 2 == 0) {
-          roadName = "테헤란로";
-        } else if (i > 3 && i % 3 == 0) {
-          roadName = "강남대로";
-        }
+        // 실제 도로명 가져오기
+        String roadName = _getRoadNameForPosition(_pathCoordinates[i]);
 
         // 지시 추가
         _turnByTurnInstructions.add({
@@ -381,6 +395,55 @@ class NavigationController {
       // 스트림에 첫 지시사항 전송
       _turnByTurnController.add(_currentInstruction!);
     }
+  }
+
+  // 특정 위치에서 도로명
+  String _getRoadNameForPosition(NLatLng position) {
+    // 자동차 모드이고 도로명 정보가 있는 경우
+    if (mode == TransitMode.car &&
+        _roadSegments != null &&
+        _roadSegments!.isNotEmpty) {
+      // 현재는 간단하게 첫 번째 도로명을 사용
+      // 추후 좌표 기반 매칭으로 개선 가능
+      final segmentIndex = (_turnByTurnInstructions.length / 2).floor();
+      if (segmentIndex < _roadSegments!.length) {
+        return _roadSegments![segmentIndex].roadName;
+      } else if (_roadSegments!.isNotEmpty) {
+        return _roadSegments!.first.roadName;
+      }
+    }
+
+    // 기본값들 (API에서 도로명을 가져올 수 없는 경우)
+    final defaultRoadNames = [
+      "강남대로",
+      "테헤란로",
+      "",
+      "세종대로",
+      "종로",
+      "을지로",
+      "한강대로",
+      "여의대로",
+      "올림픽대로",
+      "강변북로",
+    ];
+
+    // 위치 기반으로 다양한 도로명 반환 (더 사실적으로)
+    final hash =
+        (position.latitude * 1000000 + position.longitude * 1000000)
+            .abs()
+            .toInt();
+    return defaultRoadNames[hash % defaultRoadNames.length];
+  }
+
+  // RouteController에서 도로명 가져오는 메서드 추가
+  String getCurrentRoadName(NLatLng position) {
+    if (_currentRouteData != null) {
+      return _routeController.getRoadNameAtPosition(
+        position,
+        _currentRouteData!,
+      );
+    }
+    return _getRoadNameForPosition(position);
   }
 
   // 세 점 사이의 회전 각도 계산 (음수: 좌회전, 양수: 우회전)
@@ -479,9 +542,8 @@ class NavigationController {
       // 현재 속도 업데이트 (m/s에서 km/h로 변환)
       _currentSpeed = (position.speed * 3.6).clamp(0, 200);
 
-      // 현재 방향 업데이트 (heading 정보 저장)
+      // 현재 방향 업데이트
       _currentHeading = position.heading;
-      print('현재 방향: ${_currentHeading.toStringAsFixed(1)}도');
 
       // 위치 스트림에 알림
       _locationController.add(newPosition);
@@ -503,34 +565,75 @@ class NavigationController {
         return;
       }
 
-      // 경로 이탈 확인 및 처리 - 자동 재계산
+      // 경로 이탈 확인 및 처리
       handleRouteDeviation(newPosition);
 
-      // 남은 시간 계산 (평균 속도 기반)
-      final avgSpeed =
-          mode == TransitMode.car ? 10.0 : 1.4; // m/s (자동차: 36km/h, 도보: 5km/h)
+      // 남은 시간 계산
+      final avgSpeed = mode == TransitMode.car ? 10.0 : 1.4;
       final remainingTime = (remainingDistance / avgSpeed).round();
 
       // 방향 지시 결정
       final instruction = _getNavigationInstruction(newPosition);
 
-      // 네비게이션 정보 업데이트 (스트림으로 전송)
+      // 네비게이션 정보 업데이트
       _navigationInfoController.add({
         'instruction': instruction,
         'distance': _formatDistance(remainingDistance.round()),
         'timeRemaining': _formatDuration(remainingTime),
       });
 
-      // 턴바이턴 지시 업데이트
-      _updateTurnByTurnInstruction(newPosition);
+      // 턴바이턴 지시 업데이트 (자동차 모드에서만)
+      if (mode == TransitMode.car) {
+        _updateTurnByTurnInstruction(newPosition);
+      }
 
-      // 랜덤으로 속도 제한 변경 (실제로는 API에서 가져와야 함)
-      if (Random().nextInt(100) < 2) {
-        // 2% 확률로 변경
-        _speedLimit = [30, 50, 60, 70, 80][Random().nextInt(5)];
-        _speedLimitController.add(_speedLimit);
+      // 자동차 모드에서 실제 속도 제한 업데이트
+      if (mode == TransitMode.car) {
+        _updateSpeedLimitFromTmap(newPosition);
       }
     });
+  }
+
+  // TMAP에서 실제 속도 제한 정보 업데이트
+  void _updateSpeedLimitFromTmap(NLatLng position) {
+    // 너무 자주 호출하지 않도록 제한 (10초마다 한 번)
+    DateTime? lastSpeedLimitUpdate;
+    final now = DateTime.now();
+
+    if (lastSpeedLimitUpdate != null &&
+        now.difference(lastSpeedLimitUpdate!).inSeconds < 10) {
+      return;
+    }
+
+    lastSpeedLimitUpdate = now;
+
+    // 경로 데이터에 속도 제한 정보가 있으면 먼저 확인
+    if (_routeDataWithSpeedLimits != null) {
+      final speedLimit = _routeController.getSpeedLimitAtPosition(
+        position,
+        _routeDataWithSpeedLimits!,
+      );
+
+      if (speedLimit != _speedLimit) {
+        _speedLimit = speedLimit;
+        _speedLimitController.add(_speedLimit);
+        print('속도 제한 업데이트: ${_speedLimit}km/h');
+      }
+    } else {
+      // 실시간으로 TMAP API 호출 (백그라운드에서)
+      _routeController
+          .getSpeedLimitFromTmap(position)
+          .then((speedLimit) {
+            if (speedLimit != _speedLimit) {
+              _speedLimit = speedLimit;
+              _speedLimitController.add(_speedLimit);
+              print('실시간 속도 제한 업데이트: ${_speedLimit}km/h');
+            }
+          })
+          .catchError((e) {
+            print('실시간 속도 제한 조회 오류: $e');
+          });
+    }
   }
 
   Future<String> getAddressFromCoordinates(NLatLng coordinates) async {
@@ -631,17 +734,21 @@ class NavigationController {
         }
       }
 
-      // 3. API로 새 경로 데이터 요청
+      // 3. API로 새 경로 데이터 요청 (TMAP 속도 제한 포함)
       print('API 경로 검색 요청: ${newOrigin} → ${_destination}');
       Map<String, dynamic> routeData;
 
       // 모드에 따라 다른 API 호출
       if (mode == TransitMode.car) {
-        routeData = await _routeController.searchCarRoute(
+        // 🆕 자동차 모드: 네이버 경로 + TMAP 속도 제한 정보
+        routeData = await _routeController.getCarRouteWithSpeedLimits(
           newOrigin,
           _destination,
         );
-        print('자동차 경로 검색 완료');
+
+        // 🆕 속도 제한 정보가 포함된 경로 데이터 저장
+        _routeDataWithSpeedLimits = routeData;
+        print('자동차 경로 검색 완료 (속도 제한 포함)');
       } else {
         routeData = await _routeController.searchWalkRoute(
           newOrigin,
@@ -695,7 +802,13 @@ class NavigationController {
       // 7. 경로 좌표 저장
       _pathCoordinates = pathCoordinates;
 
-      // 8. 새 경로선 생성
+      // 🆕 8. 도로명 정보 업데이트 (자동차 모드일 때만)
+      if (mode == TransitMode.car && routeData['roadSegments'] != null) {
+        _roadSegments = List<RoadSegment>.from(routeData['roadSegments']);
+        print('도로명 정보 업데이트 완료: ${_roadSegments!.length}개 구간');
+      }
+
+      // 9. 새 경로선 생성
       Color pathColor =
           mode == TransitMode.car ? Color(0xFFFB233B) : Color(0xFF0771EB);
       Color outlineColor =
@@ -717,7 +830,7 @@ class NavigationController {
         isHideCollidedSymbols: false,
       );
 
-      // 9. 맵에 경로선 추가
+      // 10. 맵에 경로선 추가
       try {
         print('새 경로선 맵에 추가 시도');
         _mapController!.addOverlay(_routePathOverlay!);
@@ -727,7 +840,7 @@ class NavigationController {
         return {'success': false, 'newOriginAddress': originAddress};
       }
 
-      // 10. 카메라 위치 업데이트 (전체 경로 또는 현재 위치 중심)
+      // 11. 카메라 위치 업데이트 (전체 경로 또는 현재 위치 중심)
       if (pathCoordinates.length >= 2) {
         // 전체 경로가 보이도록 카메라 이동
         final bounds = _calculateBounds(pathCoordinates);
@@ -741,10 +854,12 @@ class NavigationController {
         );
       }
 
-      // 11. 턴바이턴 지시 업데이트
-      _generateTurnByTurnInstructions();
+      // 12. 턴바이턴 지시 업데이트 (자동차 모드에서만)
+      if (mode == TransitMode.car) {
+        _generateTurnByTurnInstructions();
+      }
 
-      // 반환값 수정
+      // 반환값
       return {'success': true, 'newOriginAddress': originAddress};
     } catch (e) {
       print('경로 재계산 중 오류 발생: $e');

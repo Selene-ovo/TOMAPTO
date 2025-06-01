@@ -41,11 +41,6 @@ class _NavigationPageState extends State<NavigationPage>
   // 도착 감지
   bool _hasArrived = false;
 
-  // 음성 안내 기능
-  bool _isVoiceGuidanceEnabled = true;
-  String _lastInstruction = "";
-  String _prevInstruction = ""; // 이전 지시 저장 변수
-
   // 현재 위치 변수
   NLatLng? _currentPosition;
 
@@ -99,7 +94,6 @@ class _NavigationPageState extends State<NavigationPage>
   void _showTemporaryWalkRoute() {
     setState(() {
       _isPathDisplayed = true;
-      _lastInstruction = "목적지로 걸어가는 중...";
 
       final distance = _calculateSimpleDistance(
         widget.origin,
@@ -137,6 +131,242 @@ class _NavigationPageState extends State<NavigationPage>
     final double c = 2 * atan2(sqrt(a), sqrt(1 - a));
 
     return earthRadius * c;
+  }
+
+  // 메뉴 모달창 표시 메서드 추가
+  void _showMenuModal() {
+    final Color mainColor =
+        widget.mode == TransitMode.car ? Color(0xFFFB233B) : Color(0xFF0771EB);
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (BuildContext context) {
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+            ),
+          ),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 모달 헤더
+                Container(
+                  padding: EdgeInsets.all(20),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '네비게이션 메뉴',
+                        style: TextStyle(
+                          fontFamily: "Pretendard",
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF363636),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: Icon(Icons.close, color: Colors.grey[600]),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // 구분선
+                Divider(height: 1, color: Colors.grey[200]),
+
+                // 메뉴 아이템들
+                Container(
+                  padding: EdgeInsets.all(20),
+                  child: Column(
+                    children: [
+                      // 경로 정보
+                      Container(
+                        padding: EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[50],
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '현재 경로',
+                              style: TextStyle(
+                                fontFamily: "Pretendard",
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                            SizedBox(height: 8),
+                            Text(
+                              '${widget.originName} → ${widget.destinationName}',
+                              style: TextStyle(
+                                fontFamily: "Pretendard",
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF363636),
+                              ),
+                            ),
+                            SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Text(
+                                  '남은 거리: $_remainingDistance',
+                                  style: TextStyle(
+                                    fontFamily: "Pretendard",
+                                    fontSize: 14,
+                                    color: mainColor,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                Text(
+                                  ' • ',
+                                  style: TextStyle(color: Colors.grey),
+                                ),
+                                Text(
+                                  '예상 시간: $_remainingTime',
+                                  style: TextStyle(
+                                    fontFamily: "Pretendard",
+                                    fontSize: 14,
+                                    color: Color(0xFF363636),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      SizedBox(height: 24),
+
+                      // 안내 종료 버튼
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.pop(context); // 모달 닫기
+                            _showExitConfirmationDialog(); // 종료 확인 다이얼로그 표시
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: mainColor,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.stop_circle_outlined, size: 20),
+                              SizedBox(width: 8),
+                              Text(
+                                '안내 종료',
+                                style: TextStyle(
+                                  fontFamily: "Pretendard",
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      SizedBox(height: 12),
+
+                      // 취소 버튼
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(context),
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(color: Colors.grey[300]!),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: Text(
+                            '취소',
+                            style: TextStyle(
+                              fontFamily: "Pretendard",
+                              fontWeight: FontWeight.w600,
+                              fontSize: 16,
+                              color: Color(0xFF363636),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // 안내 종료 확인 다이얼로그
+  void _showExitConfirmationDialog() {
+    final Color mainColor =
+        widget.mode == TransitMode.car ? Color(0xFFFB233B) : Color(0xFF0771EB);
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(
+            '안내 종료',
+            style: TextStyle(
+              fontFamily: "Pretendard",
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          content: Text(
+            '네비게이션 안내를 종료하시겠습니까?',
+            style: TextStyle(fontFamily: "Pretendard"),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(
+                '취소',
+                style: TextStyle(
+                  fontFamily: "Pretendard",
+                  color: Colors.grey[700],
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context); // 다이얼로그 닫기
+                Navigator.pop(context); // 네비게이션 페이지 닫기
+              },
+              child: Text(
+                '종료',
+                style: TextStyle(
+                  fontFamily: "Pretendard",
+                  color: mainColor,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   // 알림 초기화
@@ -343,19 +573,9 @@ class _NavigationPageState extends State<NavigationPage>
     if (!_showTemporaryRoute) {
       setState(() {
         _isPathDisplayed = true;
-        _lastInstruction = info['instruction'] as String;
         _remainingDistance = info['distance'] as String;
         _remainingTime = info['timeRemaining'] as String;
       });
-    }
-
-    // 음성 안내...
-    if (_isVoiceGuidanceEnabled && _lastInstruction != _prevInstruction) {
-      _prevInstruction = _lastInstruction;
-
-      if (!_isInForeground) {
-        _showNavigationNotification(_lastInstruction);
-      }
     }
   }
 
@@ -398,24 +618,6 @@ class _NavigationPageState extends State<NavigationPage>
 
       // === 원 크기 설정 ===
       locationOverlay.setCircleRadius(10.0); // 기본값보다 크게
-
-      // === 아이콘 커스터마이징 ===
-      // 모드에 따른 아이콘 설정
-      /*if (widget.mode == TransitMode.car) {
-        // 자동차 아이콘 사용
-        locationOverlay.setIcon(
-          NOverlayImage.fromAssetImage(
-            'assets/icons/car_location_icon.png', // 자동차 아이콘 (없으면 기본 아이콘 사용)
-          ),
-        );
-      } else {
-        // 도보 아이콘 사용 (기본 아이콘 또는 커스텀)
-        locationOverlay.setIcon(
-          NOverlayImage.fromAssetImage(
-            'assets/icons/walk_location_icon.png', // 도보 아이콘 (없으면 기본 아이콘 사용)
-          ),
-        );
-      }*/
 
       // === 아이콘 크기 설정 ===
       locationOverlay.setIconSize(Size(100, 100)); // 아이콘 크기
@@ -664,23 +866,6 @@ class _NavigationPageState extends State<NavigationPage>
     );
   }
 
-  // 음성 안내 토글
-  void _toggleVoiceGuidance() {
-    setState(() {
-      _isVoiceGuidanceEnabled = !_isVoiceGuidanceEnabled;
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          _isVoiceGuidanceEnabled ? '음성 안내가 켜졌습니다.' : '음성 안내가 꺼졌습니다.',
-          style: TextStyle(fontFamily: "Pretendard"),
-        ),
-        duration: Duration(seconds: 2),
-      ),
-    );
-  }
-
   // 내 위치로 이동하는 메서드
   void _moveToCurrentLocation() async {
     if (_mapController == null) return;
@@ -867,41 +1052,15 @@ class _NavigationPageState extends State<NavigationPage>
         widget.mode == TransitMode.car ? Color(0xFFFB233B) : Color(0xFF0771EB);
 
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: mainColor,
-        title: Text(
-          '${widget.originName} → ${widget.destinationName}',
-          style: TextStyle(
-            fontFamily: "Pretendard",
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
-          ),
-          overflow: TextOverflow.ellipsis,
-        ),
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_rounded, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
-        actions: [
-          // 음성 안내 토글 버튼
-          IconButton(
-            icon: Icon(
-              _isVoiceGuidanceEnabled ? Icons.volume_up : Icons.volume_off,
-              color: Colors.white,
-            ),
-            onPressed: _toggleVoiceGuidance,
-          ),
-        ],
-        elevation: 0,
-      ),
       body: Stack(
         children: [
+          // 지도 부분 - contentPadding을 줄여서 지도 화면을 더 넓게 가져감
           NaverMap(
             options: NaverMapViewOptions(
               logoClickEnable: false,
-              locationButtonEnable: false, // API 위치 버튼 비활성화
+              locationButtonEnable: false,
               nightModeEnable: true,
+              scaleBarEnable: false,
               initialCameraPosition: NCameraPosition(
                 target: widget.origin,
                 tilt: widget.mode == TransitMode.car ? 35.0 : 0.0,
@@ -912,7 +1071,7 @@ class _NavigationPageState extends State<NavigationPage>
                   widget.mode == TransitMode.car
                       ? NMapType.navi
                       : NMapType.basic,
-              contentPadding: EdgeInsets.only(bottom: 150),
+              contentPadding: EdgeInsets.only(bottom: 80), // 기존 150에서 80으로 줄임
               zoomGesturesEnable: widget.mode != TransitMode.car, // 줌 제스처 제한
               tiltGesturesEnable: widget.mode != TransitMode.car, // 틸트 제스처 제한
             ),
@@ -964,10 +1123,53 @@ class _NavigationPageState extends State<NavigationPage>
           if (_isLoading)
             Center(child: CircularProgressIndicator(color: mainColor)),
 
+          // 상단 출발지 → 도착지 표시 (앱바 대신)
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              child: Center(
+                child: Container(
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // 출발지 → 도착지 텍스트
+                      Text(
+                        '${widget.originName} → ${widget.destinationName}',
+                        style: TextStyle(
+                          fontFamily: "Pretendard",
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF363636),
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
           // 턴바이턴 방향 안내 (상단)
-          if (_currentTurnInstruction != null && !_hasArrived)
+          if (_currentTurnInstruction != null &&
+              !_hasArrived &&
+              widget.mode == TransitMode.car)
             Positioned(
-              top: 20,
+              top: 140,
               left: 20,
               child: Container(
                 decoration: BoxDecoration(
@@ -986,7 +1188,7 @@ class _NavigationPageState extends State<NavigationPage>
                   children: [
                     Icon(
                       _currentTurnInstruction!['directionIcon'] as IconData? ??
-                          Icons.arrow_upward,
+                          Icons.arrow_upward_rounded,
                       color: Colors.white,
                       size: 40,
                     ),
@@ -1007,7 +1209,8 @@ class _NavigationPageState extends State<NavigationPage>
                           '${_currentTurnInstruction!['roadName'] ?? ''}',
                           style: TextStyle(
                             fontFamily: 'Pretendard',
-                            fontSize: 20,
+                            fontSize: 24,
+                            fontWeight: FontWeight.w800,
                             color: Colors.white,
                           ),
                         ),
@@ -1023,7 +1226,7 @@ class _NavigationPageState extends State<NavigationPage>
               !_hasArrived &&
               _navigationController.getNextInstruction() != null)
             Positioned(
-              top: 110,
+              top: 245,
               left: 20,
               child: Container(
                 decoration: BoxDecoration(
@@ -1037,7 +1240,7 @@ class _NavigationPageState extends State<NavigationPage>
                       _navigationController
                                   .getNextInstruction()!['directionIcon']
                               as IconData? ??
-                          Icons.arrow_forward,
+                          Icons.arrow_forward_rounded,
                       color: Colors.white,
                       size: 24,
                     ),
@@ -1050,7 +1253,7 @@ class _NavigationPageState extends State<NavigationPage>
                           style: TextStyle(
                             fontFamily: 'Pretendard',
                             fontSize: 24,
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w600,
                             color: Colors.white,
                           ),
                         ),
@@ -1059,6 +1262,7 @@ class _NavigationPageState extends State<NavigationPage>
                           style: TextStyle(
                             fontFamily: 'Pretendard',
                             fontSize: 14,
+                            fontWeight: FontWeight.w800,
                             color: Colors.white,
                           ),
                         ),
@@ -1069,9 +1273,41 @@ class _NavigationPageState extends State<NavigationPage>
               ),
             ),
 
-          // 커스텀 현재 위치 버튼 (우측 하단) - 새로 추가
+          // 메뉴 버튼 (현재 위치 버튼 바로 위) - 새로 추가
           Positioned(
-            bottom: 170,
+            bottom: 110, // 현재 위치 버튼(bottom: 60) 위에 배치
+            right: 20,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 6,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: _showMenuModal, // 메뉴 모달 표시
+                  borderRadius: BorderRadius.circular(30),
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(shape: BoxShape.circle),
+                    child: Icon(Icons.menu_rounded, color: mainColor, size: 24),
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // 커스텀 현재 위치 버튼 (우측 하단)
+          Positioned(
+            bottom: 60, // 하단 여백 줄임
             right: 20,
             child: Container(
               decoration: BoxDecoration(
@@ -1091,10 +1327,14 @@ class _NavigationPageState extends State<NavigationPage>
                   onTap: _moveToCurrentLocation,
                   borderRadius: BorderRadius.circular(30),
                   child: Container(
-                    width: 50,
-                    height: 50,
+                    width: 40,
+                    height: 40,
                     decoration: BoxDecoration(shape: BoxShape.circle),
-                    child: Icon(Icons.my_location, color: mainColor, size: 24),
+                    child: Icon(
+                      Icons.my_location_rounded,
+                      color: mainColor,
+                      size: 24,
+                    ),
                   ),
                 ),
               ),
@@ -1104,38 +1344,53 @@ class _NavigationPageState extends State<NavigationPage>
           // 속도 제한 표시 (좌측 하단) - 자동차 모드에서만
           if (widget.mode == TransitMode.car && !_hasArrived)
             Positioned(
-              bottom: 170,
+              bottom: 220, // 위치 조정
               left: 20,
               child: Column(
                 children: [
                   // 속도 표시
                   Container(
-                    width: 80,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.7),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
+                    width: 100,
+                    height: 60,
                     alignment: Alignment.center,
-                    child: Text(
-                      '${_currentSpeed.toInt()} km/h',
-                      style: TextStyle(
-                        fontFamily: 'Pretendard',
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
+                    child: Stack(
+                      children: [
+                        // 텍스트 테두리
+                        Text(
+                          '${_currentSpeed.toInt()}',
+                          style: TextStyle(
+                            fontFamily: 'Pretendard',
+                            fontSize: 40,
+                            fontWeight: FontWeight.w700,
+                            foreground:
+                                Paint()
+                                  ..style = PaintingStyle.stroke
+                                  ..strokeWidth = 8
+                                  ..color = Colors.black,
+                          ),
+                        ),
+                        // 텍스트 내부
+                        Text(
+                          '${_currentSpeed.toInt()}',
+                          style: TextStyle(
+                            fontFamily: 'Pretendard',
+                            fontSize: 40,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  SizedBox(height: 10),
+                  SizedBox(height: 15),
                   // 속도 제한 표시
                   Container(
-                    width: 60,
-                    height: 60,
+                    width: 80,
+                    height: 80,
                     decoration: BoxDecoration(
                       color: Colors.white,
                       shape: BoxShape.circle,
-                      border: Border.all(color: Colors.red, width: 3),
+                      border: Border.all(color: Colors.red, width: 5),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withOpacity(0.2),
@@ -1152,17 +1407,17 @@ class _NavigationPageState extends State<NavigationPage>
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Container(width: 4, height: 4, color: Colors.red),
+                              Container(width: 6, height: 6, color: Colors.red),
                               SizedBox(width: 2),
                               Container(
-                                width: 4,
-                                height: 4,
+                                width: 6,
+                                height: 6,
                                 color: Colors.yellow,
                               ),
                               SizedBox(width: 2),
                               Container(
-                                width: 4,
-                                height: 4,
+                                width: 6,
+                                height: 6,
                                 color: Colors.green,
                               ),
                             ],
@@ -1172,13 +1427,14 @@ class _NavigationPageState extends State<NavigationPage>
                           '$_speedLimit',
                           style: TextStyle(
                             fontFamily: 'Pretendard',
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
+                            fontSize: 30,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ],
                     ),
                   ),
+
                   // 거리 정보 표시 (빨간색 박스)
                   SizedBox(height: 10),
                   Container(
@@ -1194,7 +1450,7 @@ class _NavigationPageState extends State<NavigationPage>
                       style: TextStyle(
                         fontFamily: 'Pretendard',
                         fontSize: 18,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w800,
                         color: Colors.white,
                       ),
                     ),
@@ -1203,172 +1459,76 @@ class _NavigationPageState extends State<NavigationPage>
               ),
             ),
 
-          // 도보 모드일 때 위치 버튼 위치 조정
-          if (widget.mode == TransitMode.walk && !_hasArrived)
+          // 하단 간단한 정보 표시 (상단 스타일과 동일한 흰색 도형)
+          if (_isPathDisplayed || !_isPathDisplayed)
             Positioned(
-              bottom: 170,
-              right: 20,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      blurRadius: 6,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: _moveToCurrentLocation,
-                    borderRadius: BorderRadius.circular(30),
-                    child: Container(
-                      width: 50,
-                      height: 50,
-                      decoration: BoxDecoration(shape: BoxShape.circle),
-                      child: Icon(
-                        Icons.my_location,
-                        color: mainColor,
-                        size: 24,
+              bottom: 20,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10), // radius 10으로 설정
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
                       ),
-                    ),
+                    ],
                   ),
-                ),
-              ),
-            ),
-
-          // 하단 정보 패널 (축소된 버전)
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(20),
-                  topRight: Radius.circular(20),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 6,
-                    offset: const Offset(0, -2),
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // 슬라이더 표시 (짧은 회색 선)
-                  Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[300],
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                    margin: EdgeInsets.only(bottom: 10),
-                  ),
-
-                  // 실시간 방향 및 거리 정보 (한 줄로 축소)
-                  if (_isPathDisplayed)
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        // 방향 지시
-                        Expanded(
-                          flex: 2,
-                          child: Text(
-                            _lastInstruction.isEmpty
-                                ? '안내 준비 중...'
-                                : _lastInstruction,
-                            style: TextStyle(
-                              fontFamily: "Pretendard",
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                            overflow: TextOverflow.ellipsis,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // 실시간 거리 및 시간 정보 표시
+                      if (_isPathDisplayed) ...[
+                        // 남은 거리
+                        Text(
+                          _remainingDistance,
+                          style: TextStyle(
+                            fontFamily: "Pretendard",
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                            color: mainColor,
                           ),
                         ),
-
-                        // 남은 거리 및 시간
-                        Expanded(
-                          flex: 1,
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              Text(
-                                _remainingDistance,
-                                style: TextStyle(
-                                  fontFamily: "Pretendard",
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: mainColor,
-                                ),
-                              ),
-                              Text(
-                                ' • ',
-                                style: TextStyle(
-                                  fontFamily: "Pretendard",
-                                  fontSize: 14,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                              Text(
-                                _remainingTime,
-                                style: TextStyle(
-                                  fontFamily: "Pretendard",
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
+                        Text(
+                          ' • ',
+                          style: TextStyle(
+                            fontFamily: "Pretendard",
+                            fontSize: 14,
+                            color: Color(0xFF000000),
+                          ),
+                        ),
+                        // 남은 시간
+                        Text(
+                          _remainingTime,
+                          style: TextStyle(
+                            fontFamily: "Pretendard",
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF000000),
                           ),
                         ),
                       ],
-                    ),
 
-                  if (!_isPathDisplayed)
-                    Text(
-                      '경로 로딩 중...',
-                      style: TextStyle(fontFamily: "Pretendard", fontSize: 14),
-                    ),
-
-                  SizedBox(height: 10),
-
-                  // 안내 종료 버튼 (작게 수정)
-                  SizedBox(
-                    width: double.infinity,
-                    height: 36,
-                    child: ElevatedButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: mainColor,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 0),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                      if (!_isPathDisplayed)
+                        Text(
+                          '경로 로딩 중...',
+                          style: TextStyle(
+                            fontFamily: "Pretendard",
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF000000),
+                          ),
                         ),
-                      ),
-                      child: const Text(
-                        '안내 종료',
-                        style: TextStyle(
-                          fontFamily: "Pretendard",
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
-          ),
         ],
       ),
     );

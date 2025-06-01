@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:tomapto/search/search_main.dart';
 import 'package:tomapto/search/search_return.dart';
 import 'package:tomapto/controllers/search/search_main_controller.dart';
-import 'package:tomapto/pages/map/naver_map.dart'; // NaverMapPage import 추가
+import 'package:tomapto/pages/map/naver_map.dart';
 
 class SearchBarWidget extends StatelessWidget {
   final String originPlace;
@@ -23,6 +23,18 @@ class SearchBarWidget extends StatelessWidget {
     required this.onClosePressed,
     this.onSearchResultSelected, // 이 매개변수를 그대로 사용
   });
+
+  // 🔥 기본 텍스트인지 확인하는 메서드 추가
+  bool _isDefaultOriginText(String text) {
+    return text == '출발지 입력' ||
+        text == '위치 확인 중...' ||
+        text == '위치 권한 없음' ||
+        text == '위치 확인 실패';
+  }
+
+  bool _isDefaultDestinationText(String text) {
+    return text == '도착지 입력';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -76,13 +88,11 @@ class SearchBarWidget extends StatelessWidget {
                         // 출발지 검색창
                         GestureDetector(
                           onTap: () async {
-                            // 출발지 검색 페이지로 이동 - 현재 출발지/도착지 정보 전달
+                            // 🔥 기본 텍스트인 경우 빈 문자열로 시작
                             final initialSearchTerm =
-                                originPlace != '위치 확인 중...' &&
-                                        originPlace != '위치 권한 없음' &&
-                                        originPlace != '위치 확인 실패'
-                                    ? originPlace
-                                    : '';
+                                _isDefaultOriginText(originPlace)
+                                    ? '' // 기본 텍스트면 빈 문자열로 시작
+                                    : originPlace; // 실제 장소명이면 그대로 사용
 
                             final result = await Navigator.push(
                               context,
@@ -144,7 +154,15 @@ class SearchBarWidget extends StatelessWidget {
                                         fontFamily: "Pretendard",
                                         fontSize: 18,
                                         fontWeight: FontWeight.w500,
-                                        color: Color(0xFFFFFFFF),
+                                        // 🔥 기본 텍스트인 경우 투명도 적용으로 연하게 표시
+                                        color:
+                                            _isDefaultOriginText(originPlace)
+                                                ? Color(0xFFFFFFFF).withOpacity(
+                                                  0.7,
+                                                ) // 기본 텍스트는 연하게
+                                                : Color(
+                                                  0xFFFFFFFF,
+                                                ), // 실제 값은 선명하게
                                       ),
                                       overflow: TextOverflow.ellipsis,
                                     ),
@@ -158,11 +176,11 @@ class SearchBarWidget extends StatelessWidget {
                         // 목적지 검색창
                         GestureDetector(
                           onTap: () async {
-                            // 도착지 검색 페이지로 이동 - 현재 출발지/도착지 정보 전달
+                            // 🔥 기본 텍스트인 경우 빈 문자열로 시작
                             final initialSearchTerm =
-                                destinationPlace != '도착지 입력'
-                                    ? destinationPlace
-                                    : '';
+                                _isDefaultDestinationText(destinationPlace)
+                                    ? '' // 기본 텍스트면 빈 문자열로 시작
+                                    : destinationPlace; // 실제 장소명이면 그대로 사용
 
                             final result = await Navigator.push(
                               context,
@@ -221,7 +239,17 @@ class SearchBarWidget extends StatelessWidget {
                                         fontFamily: "Pretendard",
                                         fontWeight: FontWeight.w500,
                                         fontSize: 18,
-                                        color: Color(0xFFFFFFFF),
+                                        // 🔥 기본 텍스트인 경우 투명도 적용으로 연하게 표시
+                                        color:
+                                            _isDefaultDestinationText(
+                                                  destinationPlace,
+                                                )
+                                                ? Color(0xFFFFFFFF).withOpacity(
+                                                  0.7,
+                                                ) // 기본 텍스트는 연하게
+                                                : Color(
+                                                  0xFFFFFFFF,
+                                                ), // 실제 값은 선명하게
                                       ),
                                       overflow: TextOverflow.ellipsis,
                                     ),

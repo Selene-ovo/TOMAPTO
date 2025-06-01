@@ -38,6 +38,8 @@ class _SearchResultPageState extends State<SearchResultPage> {
     _initializeAndSearch();
   }
 
+  // search_return.dart의 _initializeAndSearch 메서드 수정
+
   Future<void> _initializeAndSearch() async {
     try {
       // 컨트롤러 초기화 (위치 정보 등) - 중요: 검색 전에 반드시 실행
@@ -46,8 +48,25 @@ class _SearchResultPageState extends State<SearchResultPage> {
         '위치 초기화 완료: ${_controller.userPosition?.latitude}, ${_controller.userPosition?.longitude}',
       );
 
-      // 검색 수행
-      await _performSearch(widget.searchTerm);
+      bool _isDefaultText(String text) {
+        return text == '출발지 입력' ||
+            text == '도착지 입력' ||
+            text == '위치 확인 중...' ||
+            text == '위치 권한 없음' ||
+            text == '위치 확인 실패';
+      }
+
+      // 검색어가 기본 텍스트가 아닌 경우에만 검색 수행
+      if (!_isDefaultText(widget.searchTerm)) {
+        await _performSearch(widget.searchTerm);
+      } else {
+        // 기본 텍스트인 경우 검색하지 않고 빈 결과로 설정
+        setState(() {
+          isLoading = false;
+          searchResults = [];
+          errorMessage = null;
+        });
+      }
     } catch (e) {
       setState(() {
         errorMessage = '검색 중 오류가 발생했습니다: $e';
