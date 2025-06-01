@@ -1,4 +1,4 @@
-// profile_edit.dart
+// profile_edit.dart - 아이디 수정 기능 제거, 닉네임만 수정 가능
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:http/http.dart' as http;
@@ -27,34 +27,26 @@ class ProfileEditPage extends StatefulWidget {
 }
 
 class _ProfileEditPageState extends State<ProfileEditPage> {
-  // 컨트롤러
-  final TextEditingController _userIdController = TextEditingController();
+  // 컨트롤러 (닉네임만)
   final TextEditingController _nicknameController = TextEditingController();
   
   // 포커스 노드
-  final FocusNode _userIdFocusNode = FocusNode();
   final FocusNode _nicknameFocusNode = FocusNode();
   
   // 상태 변수
   bool _hasChanges = false;
-  bool _isUserIdChanged = false;
   bool _isNicknameChanged = false;
   bool _isLoading = false;
   
   // 유효성 검사 상태
-  bool _isUserIdValid = true;
   bool _isNicknameValid = true;
-  String? _userIdValidationMessage;
   String? _nicknameValidationMessage;
   
   // 중복 확인 상태
-  bool _isUserIdAvailable = true;
   bool _isNicknameAvailable = true;
-  String? _userIdAvailabilityMessage;
   String? _nicknameAvailabilityMessage;
   
   // 중복 확인 타이머
-  Timer? _userIdTimer;
   Timer? _nicknameTimer;
   
   // 원본 값들
@@ -69,23 +61,20 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
     _originalUserId = widget.currentUserId;
     _originalNickname = widget.currentNickname;
     
-    _userIdController.text = _originalUserId;
     _nicknameController.text = _originalNickname;
     
     // 리스너 설정
     _setupListeners();
     
-    // 현재 프로필 정보 로드
-    _loadCurrentProfile();
+    // 토큰 확인 후 프로필 정보 로드
+    _checkTokenAndLoadProfile();
   }
   
   void _setupListeners() {
     // 포커스 변경 시 setState 호출
-    _userIdFocusNode.addListener(() => setState(() {}));
     _nicknameFocusNode.addListener(() => setState(() {}));
     
     // 텍스트 변경 리스너
-    _userIdController.addListener(_onUserIdChanged);
     _nicknameController.addListener(_onNicknameChanged);
   }
   
@@ -102,11 +91,64 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
   Future<String?> _getToken() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      return prefs.getString('auth_token');
+      
+      // 여러 가능한 키로 토큰 찾기
+      String? token = prefs.getString('auth_token');
+      if (token == null) {
+        token = prefs.getString('token');
+      }
+      if (token == null) {
+        token = prefs.getString('jwt_token');
+      }
+      if (token == null) {
+        token = prefs.getString('access_token');
+      }
+      
+      print('저장된 토큰 확인: ${token != null ? "토큰 있음" : "토큰 없음"}');
+      
+      if (token != null) {
+        print('토큰 길이: ${token.length}');
+        print('토큰 앞부분: ${token.length > 20 ? token.substring(0, 20) + "..." : token}');
+      }
+      
+      return token;
     } catch (e) {
       print('토큰 조회 오류: $e');
       return null;
     }
+  }
+  
+  // 토큰 확인 후 프로필 로드
+  Future<void> _checkTokenAndLoadProfile() async {
+    final token = await _getToken();
+    if (token == null) {
+      _showTokenErrorDialog();
+    } else {
+      _loadCurrentProfile();
+    }
+  }
+  
+  // 토큰 오류 다이얼로그
+  void _showTokenErrorDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Text('인증 오류'),
+        content: Text('로그인 정보가 만료되었습니다.\n다시 로그인해주세요.'),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (context) => const LoginPage()),
+                (route) => false,
+              );
+            },
+            child: Text('로그인하러 가기'),
+          ),
+        ],
+      ),
+    );
   }
   
   // 현재 프로필 정보 로드
@@ -120,6 +162,8 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
       if (token == null) {
         throw Exception('인증 토큰이 없습니다.');
       }
+      
+      print('프로필 로드 시작 - API URL: ${_getApiBaseUrl()}/account/profile-edit/current');
       
       final response = await http.get(
         Uri.parse('${_getApiBaseUrl()}/account/profile-edit/current'),
@@ -139,52 +183,43 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
             _originalUserId = data['data']['user_id'] ?? widget.currentUserId;
             _originalNickname = data['data']['user_nickname'] ?? widget.currentNickname;
             
-            _userIdController.text = _originalUserId;
             _nicknameController.text = _originalNickname;
           });
+          
+          print('프로필 로드 성공');
+        } else {
+          throw Exception(data['message'] ?? '프로필 데이터가 올바르지 않습니다.');
         }
       } else if (response.statusCode == 401) {
-        throw Exception('인증이 만료되었습니다. 다시 로그인해주세요.');
+        print('인증 만료 - 로그인 페이지로 이동');
+        _showTokenErrorDialog();
       } else {
         final data = jsonDecode(response.body);
         throw Exception(data['message'] ?? '프로필 조회에 실패했습니다.');
       }
     } catch (e) {
       print('프로필 로드 오류: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('프로필 정보를 불러오는데 실패했습니다: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      
+      // 토큰 관련 오류인 경우 로그인 페이지로 이동
+      if (e.toString().contains('인증 토큰이 없습니다') || 
+          e.toString().contains('인증이 만료되었습니다')) {
+        _showTokenErrorDialog();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('프로필 정보를 불러오는데 실패했습니다: $e'),
+            backgroundColor: Colors.red,
+            action: SnackBarAction(
+              label: '재시도',
+              textColor: Colors.white,
+              onPressed: _loadCurrentProfile,
+            ),
+          ),
+        );
+      }
     } finally {
       setState(() {
         _isLoading = false;
-      });
-    }
-  }
-  
-  void _onUserIdChanged() {
-    final userId = _userIdController.text;
-    
-    // 유효성 검사
-    setState(() {
-      _isUserIdChanged = userId != _originalUserId;
-      _userIdValidationMessage = _getUserIdValidationMessage(userId);
-      _isUserIdValid = _userIdValidationMessage == null;
-      _checkForChanges();
-    });
-    
-    // 중복 확인 타이머 설정
-    _userIdTimer?.cancel();
-    if (userId.isNotEmpty && _isUserIdValid && _isUserIdChanged) {
-      _userIdTimer = Timer(const Duration(milliseconds: 500), () {
-        _checkUserIdAvailability(userId);
-      });
-    } else if (!_isUserIdChanged) {
-      setState(() {
-        _isUserIdAvailable = true;
-        _userIdAvailabilityMessage = null;
       });
     }
   }
@@ -197,7 +232,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
       _isNicknameChanged = nickname != _originalNickname;
       _nicknameValidationMessage = _getNicknameValidationMessage(nickname);
       _isNicknameValid = _nicknameValidationMessage == null;
-      _checkForChanges();
+      _hasChanges = _isNicknameChanged;
     });
     
     // 중복 확인 타이머 설정
@@ -212,34 +247,6 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
         _nicknameAvailabilityMessage = null;
       });
     }
-  }
-  
-  void _checkForChanges() {
-    setState(() {
-      _hasChanges = _isUserIdChanged || _isNicknameChanged;
-    });
-  }
-  
-  // 아이디 유효성 검사 메시지
-  String? _getUserIdValidationMessage(String userId) {
-    if (userId.isEmpty) {
-      return null; // 빈 값일 때는 메시지 없음
-    }
-    
-    if (userId.length < 4) {
-      return '아이디는 4자 이상이어야 합니다.';
-    }
-    
-    if (userId.length > 20) {
-      return '아이디는 20자 이하여야 합니다.';
-    }
-    
-    final RegExp userIdRegex = RegExp(r'^[a-zA-Z0-9_]+$');
-    if (!userIdRegex.hasMatch(userId)) {
-      return '영문, 숫자, 언더스코어(_)만 사용 가능합니다.';
-    }
-    
-    return null; // 유효함
   }
   
   // 닉네임 유효성 검사 메시지
@@ -259,47 +266,14 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
     return null; // 유효함
   }
   
-  // 아이디 중복 확인
-  Future<void> _checkUserIdAvailability(String userId) async {
-    try {
-      final token = await _getToken();
-      if (token == null) return;
-      
-      final response = await http.post(
-        Uri.parse('${_getApiBaseUrl()}/account/profile-edit/check-userid'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode({
-          'new_user_id': userId,
-        }),
-      );
-      
-      final data = jsonDecode(response.body);
-      
-      if (mounted) {
-        setState(() {
-          _isUserIdAvailable = data['available'] ?? false;
-          _userIdAvailabilityMessage = data['message'];
-        });
-      }
-    } catch (e) {
-      print('아이디 중복 확인 오류: $e');
-      if (mounted) {
-        setState(() {
-          _isUserIdAvailable = false;
-          _userIdAvailabilityMessage = '중복 확인에 실패했습니다.';
-        });
-      }
-    }
-  }
-  
   // 닉네임 중복 확인
   Future<void> _checkNicknameAvailability(String nickname) async {
     try {
       final token = await _getToken();
-      if (token == null) return;
+      if (token == null) {
+        print('토큰이 없어서 닉네임 중복 확인 불가');
+        return;
+      }
       
       final response = await http.post(
         Uri.parse('${_getApiBaseUrl()}/account/profile-edit/check-nickname'),
@@ -311,6 +285,11 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
           'new_nickname': nickname,
         }),
       );
+      
+      if (response.statusCode == 401) {
+        _showTokenErrorDialog();
+        return;
+      }
       
       final data = jsonDecode(response.body);
       
@@ -333,11 +312,8 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
   
   @override
   void dispose() {
-    _userIdController.dispose();
     _nicknameController.dispose();
-    _userIdFocusNode.dispose();
     _nicknameFocusNode.dispose();
-    _userIdTimer?.cancel();
     _nicknameTimer?.cancel();
     super.dispose();
   }
@@ -345,14 +321,12 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
   // 저장 가능 여부 확인
   bool get _canSave {
     return _hasChanges && 
-           _isUserIdValid && 
            _isNicknameValid && 
-           _isUserIdAvailable && 
            _isNicknameAvailable &&
            !_isLoading;
   }
   
-  // 저장하기 처리
+  // 저장하기 처리 (닉네임만)
   Future<void> _saveProfile() async {
     if (!_canSave) return;
     
@@ -366,11 +340,8 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
         throw Exception('인증 토큰이 없습니다.');
       }
       
-      // 요청 바디 구성
+      // 요청 바디 구성 (닉네임만)
       Map<String, dynamic> requestBody = {};
-      if (_isUserIdChanged) {
-        requestBody['new_user_id'] = _userIdController.text;
-      }
       if (_isNicknameChanged) {
         requestBody['new_nickname'] = _nicknameController.text;
       }
@@ -411,7 +382,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
                 SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    data['message'] ?? '프로필이 성공적으로 업데이트되었습니다.',
+                    data['message'] ?? '닉네임이 성공적으로 변경되었습니다.',
                     style: TextStyle(fontFamily: 'Pretendard'),
                   ),
                 ),
@@ -425,26 +396,21 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
           ),
         );
         
-        // 아이디가 변경된 경우 로그아웃 처리
-        if (data['data']?['updated_fields']?['user_id_changed'] == true) {
-          _showLogoutDialog();
-        } else {
-          // 이전 페이지로 돌아가기 (업데이트된 데이터 전달)
-          Navigator.of(context).pop({
-            'userId': data['data']['user_id'],
-            'nickname': data['data']['user_nickname'],
-            'updated': true,
-          });
-        }
+        // 이전 페이지로 돌아가기 (업데이트된 데이터 전달)
+        Navigator.of(context).pop({
+          'userId': data['data']['user_id'],
+          'nickname': data['data']['user_nickname'],
+          'updated': true,
+        });
       } else if (response.statusCode == 401) {
         // 인증 만료
-        _showLogoutDialog();
+        _showTokenErrorDialog();
       } else {
         // 오류 메시지 표시
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              data['message'] ?? '프로필 업데이트에 실패했습니다.',
+              data['message'] ?? '닉네임 변경에 실패했습니다.',
               style: TextStyle(fontFamily: 'Pretendard'),
             ),
             backgroundColor: Colors.red,
@@ -457,15 +423,20 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
       }
     } catch (e) {
       print('프로필 저장 오류: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '네트워크 오류가 발생했습니다.',
-            style: TextStyle(fontFamily: 'Pretendard'),
+      
+      if (e.toString().contains('인증 토큰이 없습니다')) {
+        _showTokenErrorDialog();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '네트워크 오류가 발생했습니다.',
+              style: TextStyle(fontFamily: 'Pretendard'),
+            ),
+            backgroundColor: Colors.red,
           ),
-          backgroundColor: Colors.red,
-        ),
-      );
+        );
+      }
     } finally {
       setState(() {
         _isLoading = false;
@@ -473,119 +444,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
     }
   }
   
-  // 로그아웃 처리
-  Future<void> _logout() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('auth_token');
-      await prefs.remove('user_id');
-      await prefs.remove('user_nickname');
-      print('로그아웃 완료 - 토큰 및 사용자 정보 삭제');
-    } catch (e) {
-      print('로그아웃 처리 오류: $e');
-    }
-  }
-  
-  // 로그아웃 다이얼로그 표시
-  void _showLogoutDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        title: Text(
-          '아이디 변경 완료',
-          style: TextStyle(
-            fontFamily: 'Pretendard',
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '아이디가 성공적으로 변경되었습니다.',
-              style: TextStyle(
-                fontFamily: 'Pretendard',
-                fontSize: 16,
-              ),
-            ),
-            SizedBox(height: 12),
-            Container(
-              padding: EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.orange[50],
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.orange[200]!),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.info_outline, size: 16, color: Colors.orange[600]),
-                      SizedBox(width: 6),
-                      Text(
-                        '중요 안내',
-                        style: TextStyle(
-                          fontFamily: 'Pretendard',
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.orange[600],
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    '보안을 위해 다시 로그인해주세요.\n변경된 아이디로 로그인하시기 바랍니다.',
-                    style: TextStyle(
-                      fontFamily: 'Pretendard',
-                      fontSize: 13,
-                      color: Colors.grey[700],
-                      height: 1.4,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          ElevatedButton(
-            onPressed: () async {
-              // 로그아웃 처리
-              await _logout();
-              
-              // 로그인 페이지로 이동
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (context) => const LoginPage()),
-                (route) => false,
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Color(0xFFFB233B),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: Text(
-              '확인',
-              style: TextStyle(
-                fontFamily: 'Pretendard',
-                color: Colors.white,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-  
-  // 비밀번호 변경 페이지로 직접 이동 (모달 제거)
+  // 비밀번호 변경 페이지로 직접 이동
   void _navigateToPasswordReset() async {
     print('프로필 편집에서 비밀번호 변경 페이지로 직접 이동');
     
@@ -707,16 +566,10 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
                     
                     SizedBox(height: 40 * (screenHeight / 812)),
                     
-                    // 아이디 변경 필드
-                    _buildEditField(
-                      controller: _userIdController,
-                      focusNode: _userIdFocusNode,
+                    // 아이디 표시 필드 (수정 불가)
+                    _buildDisplayField(
                       label: '아이디',
-                      hintText: '아이디를 입력해주세요',
-                      isChanged: _isUserIdChanged,
-                      isValid: _isUserIdValid && _isUserIdAvailable,
-                      validationMessage: _userIdValidationMessage ?? _userIdAvailabilityMessage,
-                      isError: !_isUserIdValid || (!_isUserIdAvailable && _isUserIdChanged),
+                      value: _originalUserId,
                     ),
                     
                     SizedBox(height: 20 * (screenHeight / 812)),
@@ -735,7 +588,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
                     
                     SizedBox(height: 20 * (screenHeight / 812)),
                     
-                    // 비밀번호 변경 버튼 (모달 제거, 직접 이동)
+                    // 비밀번호 변경 버튼
                     Container(
                       width: double.infinity,
                       height: 54,
@@ -751,7 +604,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
                         color: Colors.transparent,
                         child: InkWell(
                           borderRadius: BorderRadius.circular(12),
-                          onTap: _navigateToPasswordReset, // 직접 페이지 이동
+                          onTap: _navigateToPasswordReset,
                           child: Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 16.0),
                             child: Row(
@@ -793,7 +646,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
                     
                     SizedBox(height: 60 * (screenHeight / 812)),
                     
-                    // 저장하기 버튼
+                    // 저장하기 버튼 (닉네임 변경시에만 활성화)
                     Container(
                       width: double.infinity,
                       height: 52,
@@ -838,6 +691,55 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
                 ),
               ),
             ),
+    );
+  }
+  
+  // 표시용 필드 위젯 (수정 불가)
+  Widget _buildDisplayField({
+    required String label,
+    required String value,
+  }) {
+    return Container(
+      height: 54,
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.grey.shade300,
+          width: 1,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 56,
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: Colors.grey[700],
+                  fontSize: 15,
+                  fontWeight: FontWeight.w400,
+                  fontFamily: 'Pretendard',
+                ),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                value,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontFamily: 'Pretendard',
+                  color: Colors.grey[700],
+                  fontWeight: FontWeight.normal,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
   
