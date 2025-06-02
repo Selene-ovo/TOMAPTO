@@ -103,33 +103,27 @@ class POIController {
     }
 
     try {
-      // 네이버 클라우드 플랫폼 Reverse Geocoding API 사용
-      final url = Uri.parse(
-        'https://naveropenapi.apigw.ntruss.com/map-reversegeocode/v2/gc',
+      // ✅ 공식 문서에 맞춘 올바른 URL 구성
+      final coords = Uri.encodeComponent(
+        '${position.longitude},${position.latitude}',
       );
+      final url =
+          'https://maps.apigw.ntruss.com/map-reversegeocode/v2/gc?'
+          'coords=$coords&output=json&orders=legalcode%2Cadmcode%2Caddr%2Croadaddr';
 
-      final queryParams = {
-        'coords': '${position.longitude},${position.latitude}',
-        'sourcecrs': 'epsg:4326', // WGS84 좌표계
-        'targetcrs': 'epsg:4326', // WGS84 좌표계
-        'orders': 'roadaddr,legalcode,admcode', // 도로명주소 우선
-        'output': 'json',
-      };
-
-      final uri = url.replace(queryParameters: queryParams);
-
-      print('정확한 주소 조회 API 호출: $uri');
+      print('정확한 주소 조회 API 호출: $url');
 
       final response = await http
           .get(
-            uri,
+            Uri.parse(url),
             headers: {
-              'X-NCP-APIGW-API-KEY-ID': _cachedApiKey!,
-              'X-NCP-APIGW-API-KEY': _cachedSecretKey!,
+              // ✅ 공식 문서와 동일한 헤더명 (소문자)
+              'x-ncp-apigw-api-key-id': _cachedApiKey!,
+              'x-ncp-apigw-api-key': _cachedSecretKey!,
               'Accept': 'application/json',
             },
           )
-          .timeout(Duration(seconds: 8)); // 타임아웃 증가
+          .timeout(Duration(seconds: 8));
 
       print('주소 조회 응답 상태 코드: ${response.statusCode}');
 
@@ -169,7 +163,6 @@ class POIController {
           final region = result['region'];
           final land = result['land'];
 
-          // 도로명주소 구성
           List<String> addressParts = [];
 
           // 시도 (area1)
@@ -189,21 +182,22 @@ class POIController {
 
           // 도로명 정보
           if (land != null) {
-            if (land['name'] != null) {
-              addressParts.add(land['name']);
+            if (land['name'] != null &&
+                land['name'].toString().trim().isNotEmpty) {
+              addressParts.add(land['name'].toString().trim());
             }
 
-            // 건물번호
-            if (land['number1'] != null) {
-              String buildingNumber = land['number1'];
-              if (land['number2'] != null) {
-                buildingNumber += '-${land['number2']}';
-              }
+            // ✅ 개선된 건물번호 처리
+            String buildingNumber = _buildAddressNumber(
+              land['number1'],
+              land['number2'],
+            );
+            if (buildingNumber.isNotEmpty) {
               addressParts.add(buildingNumber);
             }
           }
 
-          roadAddress = addressParts.join(' ');
+          roadAddress = addressParts.join(' ').trim();
           address = roadAddress;
 
           print('도로명주소 파싱 완료: $roadAddress');
@@ -214,7 +208,7 @@ class POIController {
       // 2순위: 지번주소 찾기 (도로명주소가 없는 경우)
       if (address == '주소 정보 없음') {
         for (var result in results) {
-          if (result['name'] == 'legalcode' && result['region'] != null) {
+          if (result['name'] == 'addr' && result['region'] != null) {
             final region = result['region'];
             final land = result['land'];
 
@@ -235,18 +229,18 @@ class POIController {
               addressParts.add(region['area3']['name']);
             }
 
-            // 지번 정보
+            // ✅ 개선된 지번 정보 처리
             if (land != null) {
-              if (land['type'] != null && land['number1'] != null) {
-                String landNumber = land['number1'];
-                if (land['number2'] != null) {
-                  landNumber += '-${land['number2']}';
-                }
+              String landNumber = _buildAddressNumber(
+                land['number1'],
+                land['number2'],
+              );
+              if (landNumber.isNotEmpty) {
                 addressParts.add(landNumber);
               }
             }
 
-            address = addressParts.join(' ');
+            address = addressParts.join(' ').trim();
 
             print('지번주소 파싱 완료: $address');
             break;
@@ -254,10 +248,10 @@ class POIController {
         }
       }
 
-      // 3순위: 행정구역명만 (위치 정보)
+      // 3순위: 법정동코드 기반 주소
       if (address == '주소 정보 없음') {
         for (var result in results) {
-          if (result['region'] != null) {
+          if (result['name'] == 'legalcode' && result['region'] != null) {
             final region = result['region'];
             List<String> addressParts = [];
 
@@ -272,8 +266,8 @@ class POIController {
             }
 
             if (addressParts.isNotEmpty) {
-              address = addressParts.join(' ');
-              print('행정구역명 파싱 완료: $address');
+              address = addressParts.join(' ').trim();
+              print('법정동코드 파싱 완료: $address');
               break;
             }
           }
@@ -288,6 +282,29 @@ class POIController {
       print('정확한 주소 파싱 오류: $e');
       return {'address': '주소 확인 불가', 'roadAddress': ''};
     }
+  }
+
+  String _buildAddressNumber(dynamic number1, dynamic number2) {
+    if (number1 == null) return '';
+
+    String num1 = number1.toString().trim();
+    if (num1.isEmpty || num1 == '0') return '';
+
+    String result = num1;
+
+    if (number2 != null) {
+      String num2 = number2.toString().trim();
+      // number2가 유효한 값인 경우에만 추가
+      if (num2.isNotEmpty &&
+          num2 != '0' &&
+          num2 != 'null' &&
+          num2 != '""' &&
+          num2 != 'undefined') {
+        result += '-$num2';
+      }
+    }
+
+    return result;
   }
 
   // 상가명으로 카테고리 추측

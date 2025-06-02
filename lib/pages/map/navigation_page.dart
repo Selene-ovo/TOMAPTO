@@ -1402,33 +1402,52 @@ class _NavigationPageState extends State<NavigationPage>
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
+                        // 🆕 실제 API 데이터 표시 표시등
                         Container(
                           height: 10,
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Container(width: 6, height: 6, color: Colors.red),
-                              SizedBox(width: 2),
                               Container(
                                 width: 6,
                                 height: 6,
-                                color: Colors.yellow,
+                                decoration: BoxDecoration(
+                                  color: Colors.red,
+                                  shape: BoxShape.circle,
+                                ),
                               ),
                               SizedBox(width: 2),
                               Container(
                                 width: 6,
                                 height: 6,
-                                color: Colors.green,
+                                decoration: BoxDecoration(
+                                  color: Colors.yellow,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              SizedBox(width: 2),
+                              Container(
+                                width: 6,
+                                height: 6,
+                                decoration: BoxDecoration(
+                                  color: Colors.blueAccent,
+                                  shape: BoxShape.circle,
+                                ),
                               ),
                             ],
                           ),
                         ),
+                        // 실제 속도 제한 값 표시
                         Text(
                           '$_speedLimit',
                           style: TextStyle(
                             fontFamily: 'Pretendard',
                             fontSize: 30,
                             fontWeight: FontWeight.w700,
+                            color:
+                                _currentSpeed > _speedLimit
+                                    ? Colors.red
+                                    : Colors.black,
                           ),
                         ),
                       ],

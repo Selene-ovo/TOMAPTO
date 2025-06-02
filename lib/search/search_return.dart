@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:provider/provider.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:tomapto/pages/map/transit.dart';
+import 'package:tomapto/search/search_main.dart'; // 🔥 SearchMainPage import 추가
 
 // 검색 결과 페이지
 class SearchResultPage extends StatefulWidget {
@@ -296,6 +297,27 @@ class _SearchResultPageState extends State<SearchResultPage> {
     }
   }
 
+  void _onClosePressed() {
+    // 1. 검색어 초기화
+    _controller.searchController.clear();
+
+    // 2. SearchMainPage로 이동 (기존 출발지/도착지 정보는 유지)
+    Navigator.pushReplacement(
+      context,
+      PageRouteBuilder(
+        pageBuilder:
+            (context, animation, secondaryAnimation) => SearchMainPage(
+              initialSearchTerm: '', // 🔥 빈 검색어로 시작
+              currentOriginPlace: widget.currentOriginPlace,
+              currentDestinationPlace: widget.currentDestinationPlace,
+              isSearchingOrigin: widget.isSearchingOrigin,
+            ),
+        transitionDuration: Duration.zero, // 🔥 전환 애니메이션 시간 0으로 설정
+        reverseTransitionDuration: Duration.zero, // 🔥 역방향 애니메이션 시간도 0으로 설정
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _controller.removeListener(_onControllerUpdate);
@@ -483,7 +505,7 @@ class _SearchResultPageState extends State<SearchResultPage> {
                   ),
                   padding: EdgeInsets.zero,
                   constraints: BoxConstraints(),
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: _onClosePressed, // 🔥 수정된 메서드 호출
                 ),
               ],
             ),
