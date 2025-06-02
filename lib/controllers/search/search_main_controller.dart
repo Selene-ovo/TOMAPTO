@@ -267,108 +267,76 @@ class SearchMainController extends ChangeNotifier {
     double katechY,
   ) async {
     try {
+      print('🔍 좌표 변환 시작: KATECH($katechX, $katechY) → GPS');
+
       if (_mapClientId.isEmpty || _mapClientSecret.isEmpty) {
-        print('네이버 Maps API 키가 설정되지 않았습니다.');
-        return _improvedKatechToGps(katechX, katechY); // 🔥 개선된 변환 사용
+        print('❌ 네이버 Maps API 키가 설정되지 않았습니다.');
+        return _improvedKatechToGps(katechX, katechY);
       }
 
-      // 네이버 Geocoding API 호출 (기존 코드 유지하되 타임아웃 증가)
-      final url =
-          'https://naveropenapi.apigw.ntruss.com/map-geocode/v2/geocode?'
-          'coords=${katechX},${katechY}&sourcecrs=KATECH&targetcrs=WGS84&output=json';
+      // 네이버의 좌표계 변환 API 사용 (Geocoding이 아닌 별도 API)
+      // 실제로는 네이버에서 직접적인 좌표계 변환 API를 제공하지 않으므로
+      // 수학적 변환을 사용하는 것이 올바릅니다.
 
-      final response = await http
-          .get(
-            Uri.parse(url),
-            headers: {
-              'X-NCP-APIGW-API-KEY-ID': _mapClientId,
-              'X-NCP-APIGW-API-KEY': _mapClientSecret,
-              'Accept': 'application/json',
-            },
-          )
-          .timeout(Duration(seconds: 8)); // 🔥 3초 → 8초로 증가
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['addresses'] != null && data['addresses'].isNotEmpty) {
-          final address = data['addresses'][0];
-          final result = {
-            'lat': double.parse(address['y']),
-            'lng': double.parse(address['x']),
-          };
-
-          // 🔥 변환 결과 검증 추가
-          if (_isValidKoreanCoordinate(result['lat']!, result['lng']!)) {
-            print('API 좌표 변환 성공: ${result['lat']}, ${result['lng']}');
-            return result;
-          } else {
-            print('API 변환 결과가 한국 영역을 벗어남');
-          }
-        }
-      } else {
-        print('Geocoding API 실패: ${response.statusCode}');
-      }
-
-      // API 실패 시 개선된 근사 변환 사용
+      print('💡 API 대신 수학적 변환 사용');
       return _improvedKatechToGps(katechX, katechY);
     } catch (e) {
-      print('좌표 변환 오류: $e');
+      print('❌ 좌표 변환 오류: $e');
       return _improvedKatechToGps(katechX, katechY);
     }
   }
 
-  // 한국 좌표 유효성 검사 메서드 추가
+  // 한국 좌표 유효성 검사
   bool _isValidKoreanCoordinate(double lat, double lng) {
-    // 한국 전체 영역 좌표 범위
     return lat >= 33.0 && lat <= 38.5 && lng >= 124.0 && lng <= 132.0;
   }
 
   // 개선된 KATECH → GPS 변환 메서드 추가
   Map<String, double> _improvedKatechToGps(double katechX, double katechY) {
     try {
-      // 네이버 API에서 받는 좌표가 이미 특수 형태로 인코딩된 경우
       double lat, lng;
 
-      // 좌표값이 매우 큰 경우 (네이버 API 특수 형태)
+      // 네이버 API에서 받는 좌표 처리
       if (katechX > 1000000 && katechY > 1000000) {
+        // 네이버 API 특수 형태 (10^7 배수)
         lat = katechY / 10000000.0;
         lng = katechX / 10000000.0;
-      }
-      // 일반적인 KATECH 좌표인 경우
-      else if (katechX > 100000 && katechY > 100000) {
-        // 실제 KATECH → WGS84 변환 공식 적용
-        lng = katechX / 1000000.0 + 124.0; // 대략적인 변환
+        print('📍 네이버 API 형태 좌표 변환: ($lat, $lng)');
+      } else if (katechX > 100000 && katechY > 100000) {
+        // 일반적인 KATECH 좌표계
+        // KATECH → WGS84 근사 변환 공식
+        lng = katechX / 1000000.0 + 124.0;
         lat = katechY / 1000000.0 + 33.0;
-      }
-      // 이미 GPS 좌표인 경우
-      else {
+        print('📍 KATECH 좌표계 변환: ($lat, $lng)');
+      } else {
+        // 이미 GPS 좌표인 경우
         lat = katechY;
         lng = katechX;
+        print('📍 이미 GPS 좌표: ($lat, $lng)');
       }
 
-      // 변환 결과가 한국 영역을 벗어나면 보정
+      // 한국 영역 검증
       if (!_isValidKoreanCoordinate(lat, lng)) {
-        print('좌표 보정 필요: 원본($lat, $lng)');
+        print('⚠️ 좌표가 한국 영역을 벗어남, 보정 필요');
 
-        // 강릉 지역 기본 좌표로 보정 (가톨릭관동대학교 문제 해결용)
+        // 강릉 지역 기본 좌표로 보정
         if (katechX.toString().contains('37') ||
             katechY.toString().contains('128')) {
-          lat = 37.7519; // 강릉시 중심 위도
-          lng = 128.8761; // 강릉시 중심 경도
-          print('강릉 지역으로 보정됨: ($lat, $lng)');
+          lat = 37.7519;
+          lng = 128.8761;
+          print('📍 강릉 지역으로 보정: ($lat, $lng)');
         } else {
-          // 기본값: 서울 시청
+          // 서울 기본 좌표
           lat = 37.5666805;
           lng = 126.9784147;
-          print('서울로 보정됨: ($lat, $lng)');
+          print('📍 서울로 보정: ($lat, $lng)');
         }
       }
 
-      print('최종 변환 결과: $lat, $lng');
+      print('✅ 최종 변환 결과: $lat, $lng');
       return {'lat': lat, 'lng': lng};
     } catch (e) {
-      print('좌표 변환 중 오류: $e');
-      // 오류 시 서울 시청 좌표 반환
+      print('❌ 좌표 변환 중 오류: $e');
       return {'lat': 37.5666805, 'lng': 126.9784147};
     }
   }
@@ -466,35 +434,54 @@ class SearchMainController extends ChangeNotifier {
       return '주소 변환 불가';
     }
 
+    // ✅ 공식 문서에 맞춘 올바른 URL 구성
+    final coords = Uri.encodeComponent('$longitude,$latitude'); // URL 인코딩 적용
     final url =
-        'https://naveropenapi.apigw.ntruss.com/map-reversegeocode/v2/gc?'
-        'coords=$longitude,$latitude&output=json&orders=roadaddr,addr';
+        'https://maps.apigw.ntruss.com/map-reversegeocode/v2/gc?'
+        'coords=$coords&output=json&orders=legalcode%2Cadmcode%2Caddr%2Croadaddr';
 
     try {
+      print('🌐 Reverse Geocoding API 요청: $url');
+
       final response = await http
           .get(
             Uri.parse(url),
             headers: {
-              'X-NCP-APIGW-API-KEY-ID': _mapClientId,
-              'X-NCP-APIGW-API-KEY': _mapClientSecret,
+              // ✅ 공식 문서와 동일한 헤더명 (소문자)
+              'x-ncp-apigw-api-key-id': _mapClientId,
+              'x-ncp-apigw-api-key': _mapClientSecret,
               'Accept': 'application/json',
             },
           )
           .timeout(Duration(seconds: 5));
 
+      print('📥 응답 상태 코드: ${response.statusCode}');
+
       if (response.statusCode == 200) {
         final responseBody = utf8.decode(response.bodyBytes);
         final data = json.decode(responseBody);
 
-        if (data['results'] != null && data['results'].isNotEmpty) {
-          return _parseAddressFromResponse(data);
-        }
-      }
+        print('✅ API 호출 성공');
 
-      print('주소 변환 API 실패: ${response.statusCode}');
-      return '주소 확인 불가';
+        if (data['results'] != null && data['results'].isNotEmpty) {
+          final address = _parseAddressFromResponse(data);
+          print('📍 변환된 주소: $address');
+          return address;
+        } else {
+          print('⚠️ 응답에 결과가 없음');
+          return '주소 확인 불가';
+        }
+      } else if (response.statusCode == 401) {
+        print('❌ 401 Unauthorized');
+        print('📋 응답 내용: ${response.body}');
+        return '주소 확인 불가 (API 인증 실패)';
+      } else {
+        print('⚠️ 예상치 못한 응답 코드: ${response.statusCode}');
+        print('응답 내용: ${response.body}');
+        return '주소 확인 불가';
+      }
     } catch (e) {
-      print('주소 변환 오류: $e');
+      print('❌ API 호출 오류: $e');
       return '주소 확인 불가';
     }
   }
@@ -504,13 +491,26 @@ class SearchMainController extends ChangeNotifier {
     try {
       final results = response['results'];
 
+      // 1순위: 도로명주소 (roadaddr)
       for (var result in results) {
         if (result['name'] == 'roadaddr' && result['land'] != null) {
           final land = result['land'];
           String address = '';
 
           if (land['area1'] != null && land['area1']['name'] != null) {
-            address += '${land['area1']['name']} ';
+            String area1 = land['area1']['name'];
+            // 긴 도명을 줄여서 표시
+            if (area1.contains('강원특별자치도')) {
+              address += '강원도 ';
+            } else if (area1.contains('특별시') ||
+                area1.contains('광역시') ||
+                area1.contains('특별자치시')) {
+              // 서울특별시 → 서울시, 부산광역시 → 부산시
+              address +=
+                  '${area1.replaceAll('특별시', '시').replaceAll('광역시', '시').replaceAll('특별자치시', '시')} ';
+            } else {
+              address += '${area1} ';
+            }
           }
           if (land['area2'] != null && land['area2']['name'] != null) {
             address += '${land['area2']['name']} ';
@@ -523,18 +523,30 @@ class SearchMainController extends ChangeNotifier {
           }
 
           if (address.trim().isNotEmpty) {
+            print('✅ 도로명주소 파싱: $address');
             return address.trim();
           }
         }
       }
 
+      // 2순위: 지번주소 (addr)
       for (var result in results) {
         if (result['name'] == 'addr' && result['region'] != null) {
           final region = result['region'];
           String address = '';
 
           if (region['area1'] != null && region['area1']['name'] != null) {
-            address += '${region['area1']['name']} ';
+            String area1 = region['area1']['name'];
+            if (area1.contains('강원특별자치도')) {
+              address += '강원도 ';
+            } else if (area1.contains('특별시') ||
+                area1.contains('광역시') ||
+                area1.contains('특별자치시')) {
+              address +=
+                  '${area1.replaceAll('특별시', '시').replaceAll('광역시', '시').replaceAll('특별자치시', '시')} ';
+            } else {
+              address += '${area1} ';
+            }
           }
           if (region['area2'] != null && region['area2']['name'] != null) {
             address += '${region['area2']['name']} ';
@@ -544,14 +556,82 @@ class SearchMainController extends ChangeNotifier {
           }
 
           if (address.trim().isNotEmpty) {
+            print('✅ 지번주소 파싱: $address');
             return address.trim();
           }
         }
       }
 
+      // 3순위: 법정동코드 (legalcode)
+      for (var result in results) {
+        if (result['name'] == 'legalcode' && result['region'] != null) {
+          final region = result['region'];
+          String address = '';
+
+          if (region['area1'] != null && region['area1']['name'] != null) {
+            String area1 = region['area1']['name'];
+            if (area1.contains('강원특별자치도')) {
+              address += '강원도 ';
+            } else if (area1.contains('특별시') ||
+                area1.contains('광역시') ||
+                area1.contains('특별자치시')) {
+              address +=
+                  '${area1.replaceAll('특별시', '시').replaceAll('광역시', '시').replaceAll('특별자치시', '시')} ';
+            } else {
+              address += '${area1} ';
+            }
+          }
+          if (region['area2'] != null && region['area2']['name'] != null) {
+            address += '${region['area2']['name']} ';
+          }
+          if (region['area3'] != null && region['area3']['name'] != null) {
+            address += '${region['area3']['name']}';
+          }
+
+          if (address.trim().isNotEmpty) {
+            print('✅ 법정동코드 파싱: $address');
+            return address.trim();
+          }
+        }
+      }
+
+      // 4순위: 행정동코드 (admcode)
+      for (var result in results) {
+        if (result['name'] == 'admcode' && result['region'] != null) {
+          final region = result['region'];
+          String address = '';
+
+          if (region['area1'] != null && region['area1']['name'] != null) {
+            String area1 = region['area1']['name'];
+            if (area1.contains('강원특별자치도')) {
+              address += '강원도 ';
+            } else if (area1.contains('특별시') ||
+                area1.contains('광역시') ||
+                area1.contains('특별자치시')) {
+              address +=
+                  '${area1.replaceAll('특별시', '시').replaceAll('광역시', '시').replaceAll('특별자치시', '시')} ';
+            } else {
+              address += '${area1} ';
+            }
+          }
+          if (region['area2'] != null && region['area2']['name'] != null) {
+            address += '${region['area2']['name']} ';
+          }
+          if (region['area3'] != null && region['area3']['name'] != null) {
+            address += '${region['area3']['name']}';
+          }
+
+          if (address.trim().isNotEmpty) {
+            print('✅ 행정동코드 파싱: $address');
+            return address.trim();
+          }
+        }
+      }
+
+      print('⚠️ 모든 파싱 시도 실패');
       return '주소 확인 불가';
     } catch (e) {
-      print('주소 파싱 오류: $e');
+      print('❌ 주소 파싱 오류: $e');
       return '주소 확인 불가';
     }
   }

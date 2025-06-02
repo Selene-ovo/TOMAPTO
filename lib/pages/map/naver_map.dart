@@ -227,7 +227,7 @@ class _NaverMapPageState extends State<NaverMapPage> {
           position: position,
         );
 
-        marker.setIconTintColor(Color(0xFFFB233B)); // 빨간색으로 설정
+        marker.setIconTintColor(Color(0xFF000000)); // 빨간색으로 설정
 
         _mapController.addMarker(marker);
         _locationMarkers.add(marker);
