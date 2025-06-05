@@ -5,7 +5,7 @@ import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:tomapto/controllers/map/transit_map_controller.dart';
 import 'package:tomapto/controllers/map/route_controller.dart';
-import 'package:tomapto/services/korea_traffic_api_service.dart'; // 새로 추가
+import 'package:tomapto/services/korea_traffic_api_service.dart';
 
 class NavigationController {
   // 모드 (자동차/도보)
@@ -13,6 +13,8 @@ class NavigationController {
 
   // 네이버 맵 컨트롤러
   NaverMapController? _mapController;
+
+  List<TurnByTurnInstruction> _apiTurnInstructions = [];
 
   // 오버레이 객체들
   NPathOverlay? _routePathOverlay;
@@ -36,9 +38,10 @@ class NavigationController {
   // 🆕 한국 교통 정보 API 서비스 추가
   final KoreaTrafficApiService _koreaTrafficService = KoreaTrafficApiService();
 
-  // 이탈 감지 관련 변수들
+  // 🆕 수정된 이탈 감지 관련 변수들
   int _deviationCounter = 0;
   DateTime? _lastRecalculationTime;
+  DateTime? _lastDeviationCheckTime; // 마지막 이탈 체크 시간 추가
 
   // 위치 추적 스트림 구독 객체
   StreamSubscription<Position>? _positionStreamSubscription;
@@ -48,7 +51,7 @@ class NavigationController {
   late final Color _destinationMarkerColor;
   late final Color _currentLocationColor;
 
-  // 현재 위치 (GPS)
+  // 현재 위치 (GPS) - 실시간 업데이트
   NLatLng? _currentPosition;
 
   // 현재 속도 (km/h)
@@ -151,14 +154,21 @@ class NavigationController {
     }
   }
 
-  // 🆕 한국 교통 정보 API를 사용한 실제 속도 제한 업데이트
+  // 🆕 한국 교통 정보 API를 사용한 실제 속도 제한 업데이트 - 디버깅 강화
+  // navigation_controller.dart의 _updateActualSpeedLimit 메서드만 수정
+  // (기존 코드에서 아래 메서드만 교체하세요)
+
+  // 🆕 한국 교통 정보 API를 사용한 실제 속도 제한 업데이트 - 하드코딩 제거
   Future<void> _updateActualSpeedLimit(NLatLng position) async {
+    print('=== 🚦 속도 제한 업데이트 시작 ===');
+
     // 너무 자주 호출하지 않도록 제한 (30초마다 한 번, 또는 200m 이상 이동했을 때)
     final now = DateTime.now();
 
     bool shouldUpdate = false;
 
     if (_lastSpeedLimitUpdate == null) {
+      print('🆕 첫 번째 속도 제한 업데이트');
       shouldUpdate = true;
     } else {
       // 시간 조건: 30초 경과
@@ -170,43 +180,58 @@ class NavigationController {
         distanceDiff = _calculateDistance(_lastSpeedLimitPosition!, position);
       }
 
-      if (timeDiff >= 30 || distanceDiff >= 200) {
+      print('⏰ 마지막 업데이트로부터: ${timeDiff}초, ${distanceDiff.toInt()}m 이동');
+
+      if (timeDiff >= 30) {
+        print('✅ 시간 조건 충족 (30초 경과)');
         shouldUpdate = true;
+      } else if (distanceDiff >= 200) {
+        print('✅ 거리 조건 충족 (200m 이상 이동)');
+        shouldUpdate = true;
+      } else {
+        print('⏭️ 업데이트 조건 미충족 - 건너뜀');
       }
     }
 
     if (!shouldUpdate) return;
 
     try {
-      print('🚦 실제 속도 제한 조회 시작: ${position.latitude}, ${position.longitude}');
+      print('🌐 한국 교통 정보 API 호출 시작');
+      print(
+        '📍 위치: ${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}',
+      );
 
       // 한국 교통 정보 API로 실제 속도 제한 조회
       final speedLimit = await _koreaTrafficService.getSpeedLimitAtPosition(
         position,
       );
 
+      print('📊 API 응답: ${speedLimit}km/h');
+
       if (speedLimit != _actualSpeedLimit) {
+        final oldLimit = _actualSpeedLimit;
         _actualSpeedLimit = speedLimit;
         _speedLimitController.add(_actualSpeedLimit);
 
-        print('🚦 실제 속도 제한 업데이트: ${_actualSpeedLimit}km/h');
+        print('🔄 속도 제한 변경: ${oldLimit}km/h → ${speedLimit}km/h');
         print(
           '📍 위치: ${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}',
         );
+      } else {
+        print('➡️ 속도 제한 동일: ${speedLimit}km/h');
       }
 
       // 마지막 업데이트 시간과 위치 저장
       _lastSpeedLimitUpdate = now;
       _lastSpeedLimitPosition = position;
+
+      print('✅ 속도 제한 업데이트 완료');
     } catch (e) {
-      print('❌ 실제 속도 제한 조회 오류: $e');
-      // 오류 발생 시 기본값 사용
-      if (_actualSpeedLimit == 30) {
-        // 이미 기본값이면 변경하지 않음
-      } else {
-        _actualSpeedLimit = 30;
-        _speedLimitController.add(_actualSpeedLimit);
-      }
+      print('❌ 속도 제한 조회 오류: $e');
+      print('📄 오류 스택 트레이스: ${StackTrace.current}');
+
+      // 🆕 오류 발생 시에도 기본값으로 변경하지 않음 - 기존 값 유지
+      print('🔄 기존 속도 제한 값 유지: ${_actualSpeedLimit}km/h');
     }
   }
 
@@ -304,6 +329,24 @@ class NavigationController {
 
       _currentRouteData = routeData;
 
+      // 🆕 API 분기점 정보 저장 및 위치 보정
+      if (routeData['turnInstructions'] != null) {
+        _apiTurnInstructions = List<TurnByTurnInstruction>.from(
+          routeData['turnInstructions'],
+        );
+
+        // 🆕 경로 좌표와 분기점 위치 매칭하여 보정
+        if (routeData['routes'] != null && routeData['routes'].isNotEmpty) {
+          final route = routeData['routes'][0];
+          if (route['path'] != null) {
+            _pathCoordinates = List<NLatLng>.from(route['path']);
+            _correctInstructionPositions(); // 위치 보정
+          }
+        }
+
+        print('API 분기점 정보 로딩 완료: ${_apiTurnInstructions.length}개');
+      }
+
       if (mode == TransitMode.car && routeData['roadSegments'] != null) {
         _roadSegments = List<RoadSegment>.from(routeData['roadSegments']);
         print('도로명 정보 로딩 완료: ${_roadSegments!.length}개 구간');
@@ -318,7 +361,12 @@ class NavigationController {
           if (mode == TransitMode.walk) {
             print('도보 모드: 턴바이턴 지시 생성 안 함');
           } else {
-            _generateTurnByTurnInstructionsAsync();
+            // 🆕 API 분기점 정보가 있으면 사용, 없으면 기존 방식 사용
+            if (_apiTurnInstructions.isNotEmpty) {
+              _generateTurnByTurnFromApi();
+            } else {
+              _generateTurnByTurnInstructionsAsync();
+            }
           }
 
           if (_mapController != null) {
@@ -329,6 +377,163 @@ class NavigationController {
     } catch (e) {
       print('경로 가져오기 오류: $e');
       _createStraightPathFast();
+    }
+  }
+
+  void _correctInstructionPositions() {
+    if (_pathCoordinates.isEmpty || _apiTurnInstructions.isEmpty) return;
+
+    List<TurnByTurnInstruction> correctedInstructions = [];
+
+    for (int i = 0; i < _apiTurnInstructions.length; i++) {
+      final instruction = _apiTurnInstructions[i];
+
+      // 경로 상에서 적절한 위치 찾기
+      NLatLng correctedPosition;
+
+      if (i == 0) {
+        // 첫 번째 분기점: 시작점에서 distance만큼 떨어진 지점
+        correctedPosition = _findPositionByDistance(
+          _origin,
+          instruction.distance.toDouble(),
+        );
+      } else {
+        // 이후 분기점들: 이전 분기점에서 distance만큼 떨어진 지점
+        final prevPosition = correctedInstructions[i - 1].position;
+        correctedPosition = _findPositionByDistance(
+          prevPosition,
+          instruction.distance.toDouble(),
+        );
+      }
+
+      // 보정된 위치로 새 instruction 생성
+      final correctedInstruction = TurnByTurnInstruction(
+        type: instruction.type,
+        instruction: instruction.instruction,
+        position: correctedPosition,
+        distance: instruction.distance,
+        duration: instruction.duration,
+        iconData: instruction.iconData,
+        directionText: instruction.directionText,
+        roadName: instruction.roadName,
+      );
+
+      correctedInstructions.add(correctedInstruction);
+    }
+
+    _apiTurnInstructions = correctedInstructions;
+    print('분기점 위치 보정 완료: ${_apiTurnInstructions.length}개');
+  }
+
+  // 🆕 특정 지점에서 거리만큼 떨어진 경로상의 위치 찾기
+  NLatLng _findPositionByDistance(NLatLng startPoint, double targetDistance) {
+    if (_pathCoordinates.isEmpty) return startPoint;
+
+    // 시작점에서 가장 가까운 경로 지점 찾기
+    int startIndex = 0;
+    double minDistanceToStart = double.infinity;
+
+    for (int i = 0; i < _pathCoordinates.length; i++) {
+      final distance = _calculateDistance(startPoint, _pathCoordinates[i]);
+      if (distance < minDistanceToStart) {
+        minDistanceToStart = distance;
+        startIndex = i;
+      }
+    }
+
+    // 시작 지점에서 목표 거리만큼 떨어진 지점 찾기
+    double accumulatedDistance = 0;
+
+    for (int i = startIndex; i < _pathCoordinates.length - 1; i++) {
+      final segmentDistance = _calculateDistance(
+        _pathCoordinates[i],
+        _pathCoordinates[i + 1],
+      );
+
+      if (accumulatedDistance + segmentDistance >= targetDistance) {
+        // 목표 거리에 도달 - 선형 보간으로 정확한 위치 계산
+        final remainingDistance = targetDistance - accumulatedDistance;
+        final ratio = remainingDistance / segmentDistance;
+
+        final lat =
+            _pathCoordinates[i].latitude +
+            (_pathCoordinates[i + 1].latitude - _pathCoordinates[i].latitude) *
+                ratio;
+        final lng =
+            _pathCoordinates[i].longitude +
+            (_pathCoordinates[i + 1].longitude -
+                    _pathCoordinates[i].longitude) *
+                ratio;
+
+        return NLatLng(lat, lng);
+      }
+
+      accumulatedDistance += segmentDistance;
+    }
+
+    // 목표 거리에 도달하지 못한 경우 마지막 지점 반환
+    return _pathCoordinates.last;
+  }
+
+  // 🆕 API 분기점 정보를 사용한 턴바이턴 생성
+  void _generateTurnByTurnFromApi() {
+    _turnByTurnInstructions = [];
+
+    print('=== API 분기점 정보로 턴바이턴 생성 시작 ===');
+
+    for (int i = 0; i < _apiTurnInstructions.length; i++) {
+      final apiInstruction = _apiTurnInstructions[i];
+
+      // 다음 분기점까지의 거리 계산
+      double nextDistance = 0;
+      if (i < _apiTurnInstructions.length - 1) {
+        nextDistance = _calculateDistance(
+          apiInstruction.position,
+          _apiTurnInstructions[i + 1].position,
+        );
+      } else {
+        // 마지막 분기점에서 목적지까지의 거리
+        nextDistance = _calculateDistance(
+          apiInstruction.position,
+          _destination,
+        );
+      }
+
+      // 턴바이턴 지시 생성
+      final turnInstruction = {
+        'direction': apiInstruction.directionText,
+        'directionIcon': apiInstruction.iconData,
+        'point': apiInstruction.position,
+        'distance': apiInstruction.distance,
+        'nextDistance': nextDistance.round(),
+        'roadName':
+            apiInstruction.roadName.isNotEmpty
+                ? apiInstruction.roadName
+                : _getRoadNameForPosition(apiInstruction.position),
+        'index': i,
+        'apiType': apiInstruction.type, // API 타입 코드 보존
+        'apiInstruction': apiInstruction.instruction, // 원본 안내 메시지
+        'distanceToPoint': apiInstruction.distance, // 초기값
+      };
+
+      _turnByTurnInstructions.add(turnInstruction);
+
+      print(
+        'API 턴바이턴 ${i + 1}: ${apiInstruction.directionText} (타입: ${apiInstruction.type}), '
+        '거리: ${apiInstruction.distance}m, 도로: ${turnInstruction['roadName']}',
+      );
+    }
+
+    // 첫 번째 지시 설정
+    if (_turnByTurnInstructions.isNotEmpty) {
+      _currentInstruction = _turnByTurnInstructions.first;
+
+      if (_turnByTurnInstructions.length > 1) {
+        _nextInstruction = _turnByTurnInstructions[1];
+      }
+
+      _turnByTurnController.add(_currentInstruction!);
+      print('초기 턴바이턴 지시 설정 완료');
     }
   }
 
@@ -553,6 +758,8 @@ class NavigationController {
       locationSettings: locationSettings,
     ).listen((Position position) {
       final newPosition = NLatLng(position.latitude, position.longitude);
+
+      // 🆕 현재 위치 업데이트 (실시간)
       _currentPosition = newPosition;
 
       _currentSpeed = (position.speed * 3.6).clamp(0, 200);
@@ -574,6 +781,7 @@ class NavigationController {
         return;
       }
 
+      // 🆕 수정된 경로 이탈 감지
       handleRouteDeviation(newPosition);
 
       // 🆕 자동차 모드에서 실제 속도 제한 업데이트
@@ -611,9 +819,20 @@ class NavigationController {
   void _updateTurnByTurnInstruction(NLatLng position) {
     if (_turnByTurnInstructions.isEmpty) return;
 
+    // 🆕 API 분기점 정보가 있는 경우 더 정확한 업데이트
+    if (_apiTurnInstructions.isNotEmpty) {
+      _updateTurnByTurnFromApi(position);
+    } else {
+      // 기존 방식 유지
+      _updateTurnByTurnLegacy(position);
+    }
+  }
+
+  void _updateTurnByTurnFromApi(NLatLng position) {
     int nearestIndex = -1;
     double minDistance = double.infinity;
 
+    // 현재 위치에서 가장 가까운 분기점 찾기
     for (int i = 0; i < _turnByTurnInstructions.length; i++) {
       final instructionPoint = _turnByTurnInstructions[i]['point'] as NLatLng;
       final distance = _calculateDistance(position, instructionPoint);
@@ -627,38 +846,62 @@ class NavigationController {
     if (nearestIndex >= 0) {
       final newInstruction = _turnByTurnInstructions[nearestIndex];
 
+      // 분기점이 바뀌었는지 확인
       if (_currentInstruction == null ||
           _currentInstruction!['index'] != newInstruction['index']) {
         _currentInstruction = newInstruction;
 
+        // 다음 분기점 설정
         if (nearestIndex < _turnByTurnInstructions.length - 1) {
           _nextInstruction = _turnByTurnInstructions[nearestIndex + 1];
         } else {
           _nextInstruction = null;
         }
 
-        if (_currentInstruction != null) {
-          final instructionPoint = _currentInstruction!['point'] as NLatLng;
-          final distanceToInstruction =
-              _calculateDistance(position, instructionPoint).round();
+        print(
+          '새 분기점 활성화: ${_currentInstruction!['direction']} (${minDistance.toInt()}m)',
+        );
+      }
 
-          _currentInstruction!['distanceToPoint'] = distanceToInstruction;
-
-          _turnByTurnController.add(_currentInstruction!);
-        }
-      } else if (_currentInstruction != null) {
+      // 현재 분기점까지의 거리 업데이트
+      if (_currentInstruction != null) {
         final instructionPoint = _currentInstruction!['point'] as NLatLng;
         final distanceToInstruction =
             _calculateDistance(position, instructionPoint).round();
 
+        // 거리가 변경되었을 때만 업데이트
         if (_currentInstruction!['distanceToPoint'] != distanceToInstruction) {
           _currentInstruction!['distanceToPoint'] = distanceToInstruction;
+          _turnByTurnController.add(_currentInstruction!);
+        }
+
+        // 🆕 분기점을 지나쳤는지 확인 (50m 이내)
+        if (distanceToInstruction <= 50 &&
+            nearestIndex < _turnByTurnInstructions.length - 1) {
+          print('분기점 통과 감지 - 다음 분기점으로 이동');
+
+          // 다음 분기점으로 이동
+          _currentInstruction = _turnByTurnInstructions[nearestIndex + 1];
+
+          if (nearestIndex + 1 < _turnByTurnInstructions.length - 1) {
+            _nextInstruction = _turnByTurnInstructions[nearestIndex + 2];
+          } else {
+            _nextInstruction = null;
+          }
+
+          // 새로운 분기점까지의 거리 계산
+          final nextInstructionPoint = _currentInstruction!['point'] as NLatLng;
+          final nextDistance =
+              _calculateDistance(position, nextInstructionPoint).round();
+          _currentInstruction!['distanceToPoint'] = nextDistance;
+
           _turnByTurnController.add(_currentInstruction!);
         }
       }
     }
   }
 
+  // 🆕 수정된 경로 재계산 메서드 - 현재 실시간 위치 사용
   Future<Map<String, dynamic>> recalculateRoute(NLatLng newOrigin) async {
     print('경로 재계산 시작: 출발지=${newOrigin}, 도착지=${_destination}');
 
@@ -739,9 +982,26 @@ class NavigationController {
 
       _pathCoordinates = pathCoordinates;
 
+      // 🆕 경로 데이터 업데이트
+      _currentRouteData = routeData;
+
       if (mode == TransitMode.car && routeData['roadSegments'] != null) {
         _roadSegments = List<RoadSegment>.from(routeData['roadSegments']);
         print('도로명 정보 업데이트 완료: ${_roadSegments!.length}개 구간');
+      }
+
+      // 🆕 턴바이턴 지시 재생성
+      if (mode == TransitMode.car) {
+        if (routeData['turnInstructions'] != null) {
+          _apiTurnInstructions = List<TurnByTurnInstruction>.from(
+            routeData['turnInstructions'],
+          );
+          _correctInstructionPositions();
+          _generateTurnByTurnFromApi();
+        } else {
+          _generateTurnByTurnInstructions();
+        }
+        print('턴바이턴 지시 재생성 완료');
       }
 
       Color pathColor =
@@ -785,14 +1045,59 @@ class NavigationController {
         );
       }
 
-      if (mode == TransitMode.car) {
-        _generateTurnByTurnInstructions();
-      }
-
       return {'success': true, 'newOriginAddress': originAddress};
     } catch (e) {
       print('경로 재계산 중 오류 발생: $e');
       return {'success': false, 'newOriginAddress': originAddress};
+    }
+  }
+
+  void _updateTurnByTurnLegacy(NLatLng position) {
+    // 기존 _updateTurnByTurnInstruction 로직 그대로 유지
+    int nearestIndex = -1;
+    double minDistance = double.infinity;
+
+    for (int i = 0; i < _turnByTurnInstructions.length; i++) {
+      final instructionPoint = _turnByTurnInstructions[i]['point'] as NLatLng;
+      final distance = _calculateDistance(position, instructionPoint);
+
+      if (distance < minDistance) {
+        nearestIndex = i;
+        minDistance = distance;
+      }
+    }
+
+    if (nearestIndex >= 0) {
+      final newInstruction = _turnByTurnInstructions[nearestIndex];
+
+      if (_currentInstruction == null ||
+          _currentInstruction!['index'] != newInstruction['index']) {
+        _currentInstruction = newInstruction;
+
+        if (nearestIndex < _turnByTurnInstructions.length - 1) {
+          _nextInstruction = _turnByTurnInstructions[nearestIndex + 1];
+        } else {
+          _nextInstruction = null;
+        }
+
+        if (_currentInstruction != null) {
+          final instructionPoint = _currentInstruction!['point'] as NLatLng;
+          final distanceToInstruction =
+              _calculateDistance(position, instructionPoint).round();
+
+          _currentInstruction!['distanceToPoint'] = distanceToInstruction;
+          _turnByTurnController.add(_currentInstruction!);
+        }
+      } else if (_currentInstruction != null) {
+        final instructionPoint = _currentInstruction!['point'] as NLatLng;
+        final distanceToInstruction =
+            _calculateDistance(position, instructionPoint).round();
+
+        if (_currentInstruction!['distanceToPoint'] != distanceToInstruction) {
+          _currentInstruction!['distanceToPoint'] = distanceToInstruction;
+          _turnByTurnController.add(_currentInstruction!);
+        }
+      }
     }
   }
 
@@ -883,21 +1188,37 @@ class NavigationController {
     }
   }
 
+  // 🆕 수정된 경로 이탈 감지 - 더 정확하고 안정적
   bool _isDeviated(NLatLng position) {
     if (_pathCoordinates.isEmpty) return false;
 
+    // 🆕 경로 재계산 제한 - 최소 15초 간격
     if (_lastRecalculationTime != null) {
       final timeSinceLastRecalculation =
           DateTime.now().difference(_lastRecalculationTime!).inSeconds;
-      if (timeSinceLastRecalculation < 10) {
+      if (timeSinceLastRecalculation < 15) {
+        print('경로 재계산 제한: ${15 - timeSinceLastRecalculation}초 남음');
         return false;
       }
     }
 
+    // 🆕 이탈 체크 빈도 제한 - 3초마다 한 번
+    final now = DateTime.now();
+    if (_lastDeviationCheckTime != null) {
+      final timeSinceLastCheck =
+          now.difference(_lastDeviationCheckTime!).inSeconds;
+      if (timeSinceLastCheck < 3) {
+        return false;
+      }
+    }
+    _lastDeviationCheckTime = now;
+
+    // 경로상에서 가장 가까운 지점 찾기 (더 정밀한 검색)
     double minDistance = double.infinity;
     int closestPointIndex = 0;
 
-    for (int i = 0; i < _pathCoordinates.length; i += 5) {
+    // 전체 경로에서 검색 (기존: 5간격 → 수정: 전체)
+    for (int i = 0; i < _pathCoordinates.length; i++) {
       final distance = _calculateDistance(position, _pathCoordinates[i]);
       if (distance < minDistance) {
         minDistance = distance;
@@ -905,8 +1226,9 @@ class NavigationController {
       }
     }
 
-    int start = max(0, closestPointIndex - 10);
-    int end = min(_pathCoordinates.length - 1, closestPointIndex + 10);
+    // 가장 가까운 지점 주변을 더 정밀하게 검색
+    int start = max(0, closestPointIndex - 20);
+    int end = min(_pathCoordinates.length - 1, closestPointIndex + 20);
 
     for (int i = start; i <= end; i++) {
       final distance = _calculateDistance(position, _pathCoordinates[i]);
@@ -915,15 +1237,23 @@ class NavigationController {
       }
     }
 
-    final deviationThreshold = mode == TransitMode.car ? 100.0 : 50.0;
+    // 🆕 동적 이탈 임계값 - 속도에 따라 조정
+    double baseThreshold = mode == TransitMode.car ? 80.0 : 30.0;
+    double speedFactor = _currentSpeed > 50 ? 1.5 : 1.0; // 고속일 때 더 관대하게
+    final deviationThreshold = baseThreshold * speedFactor;
+
+    print(
+      '이탈 감지: 거리=${minDistance.toInt()}m, 임계값=${deviationThreshold.toInt()}m, 속도=${_currentSpeed.toInt()}km/h',
+    );
 
     if (minDistance > deviationThreshold) {
       _deviationCounter++;
       print(
-        '경로 이탈 가능성 감지: 카운터($_deviationCounter/3), 거리: ${minDistance.toStringAsFixed(1)}m',
+        '경로 이탈 가능성 감지: 카운터($_deviationCounter/2), 거리: ${minDistance.toStringAsFixed(1)}m',
       );
 
-      if (_deviationCounter >= 3) {
+      // 🆕 카운터 임계값 낮춤 (3 → 2) - 더 빠른 반응
+      if (_deviationCounter >= 2) {
         _deviationCounter = 0;
         _lastRecalculationTime = DateTime.now();
         print('경로 이탈 확정: 경로에서 ${minDistance.toStringAsFixed(1)}m 떨어짐');
@@ -942,10 +1272,8 @@ class NavigationController {
     }
 
     if (_isDeviated(currentPosition)) {
-      print('경로 재계산 시작: 현재 위치에서 목적지까지');
+      print('경로 이탈 감지: 스트림에 알림 전송');
       _routeDeviationController.add(true);
-
-      recalculateRoute(currentPosition);
     }
   }
 

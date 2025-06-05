@@ -1,12 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:tomapto/pages/intro.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 환경 변수 로드
-  await dotenv.load(fileName: ".env");
+  try {
+    // 환경 변수 로드
+    await dotenv.load(fileName: ".env");
+
+    // 네이버 맵 SDK 초기화
+    await FlutterNaverMap().init(
+      clientId: dotenv.env['NAVER_API_KEY'] ?? '',
+      onAuthFailed: (NAuthFailedException ex) {
+        print('네이버 맵 인증 실패: ${ex.message}');
+      },
+    );
+    print('네이버 맵 초기화 성공');
+  } catch (e) {
+    print('앱 초기화 중 오류: $e');
+    // 초기화 실패해도 앱은 계속 실행
+  }
 
   runApp(const MyApp());
 }

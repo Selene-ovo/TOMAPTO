@@ -61,6 +61,11 @@ class _NavigationPageState extends State<NavigationPage>
   // 알림
   late FlutterLocalNotificationsPlugin _flutterLocalNotificationsPlugin;
 
+  // 🆕 경로 재갱신 설정 관련 변수들
+  bool _autoRecalculateEnabled = true; // 자동 재갱신 활성화 여부
+  Timer? _recalculateTimer; // 5초 타이머
+  bool _isRecalculateModalShown = false; // 모달창 표시 중인지 확인
+
   @override
   void initState() {
     super.initState();
@@ -133,7 +138,283 @@ class _NavigationPageState extends State<NavigationPage>
     return earthRadius * c;
   }
 
-  // 메뉴 모달창 표시 메서드 추가
+  // 🆕 경로 재갱신 확인 모달창
+  void _showRecalculateModal() {
+    if (_isRecalculateModalShown || _hasArrived) return;
+
+    setState(() {
+      _isRecalculateModalShown = true;
+    });
+
+    final Color mainColor = Color(0xFFFB233B);
+
+    // 5초 타이머 시작
+    _recalculateTimer = Timer(Duration(seconds: 5), () {
+      if (_isRecalculateModalShown && mounted) {
+        Navigator.of(context, rootNavigator: true).pop(); // 모달 닫기
+        _handleRecalculateChoice(true); // 자동으로 재갱신
+      }
+    });
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            // 타이머 UI 업데이트를 위한 추가 타이머
+            Timer.periodic(Duration(seconds: 1), (timer) {
+              if (!_isRecalculateModalShown) {
+                timer.cancel();
+                return;
+              }
+
+              if (mounted) {
+                setModalState(() {}); // 모달 내부 상태 업데이트
+              }
+            });
+
+            return WillPopScope(
+              onWillPop: () async => false, // 뒤로가기 비활성화
+              child: AlertDialog(
+                title: Row(
+                  children: [
+                    Icon(Icons.warning_amber_rounded, color: mainColor),
+                    SizedBox(width: 8),
+                    Text(
+                      '경로 이탈 감지',
+                      style: TextStyle(
+                        fontFamily: "Pretendard",
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF363636),
+                      ),
+                    ),
+                  ],
+                ),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '현재 경로에서 벗어났습니다.\n새로운 경로로 재갱신하시겠습니까?',
+                      style: TextStyle(
+                        fontFamily: "Pretendard",
+                        fontSize: 14,
+                        color: Color(0xFF363636),
+                      ),
+                    ),
+                    SizedBox(height: 16),
+                    Container(
+                      padding: EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.timer_outlined,
+                            color: mainColor,
+                            size: 16,
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            '${_recalculateTimer?.tick != null ? 5 - (_recalculateTimer!.tick ~/ 1) : 5}초 후 자동 재갱신',
+                            style: TextStyle(
+                              fontFamily: "Pretendard",
+                              fontSize: 12,
+                              color: mainColor,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                actions: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () {
+                            _recalculateTimer?.cancel();
+                            Navigator.of(context, rootNavigator: true).pop();
+                            _handleRecalculateChoice(false);
+                          },
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(color: Colors.grey[400]!),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          child: Text(
+                            '아니요',
+                            style: TextStyle(
+                              fontFamily: "Pretendard",
+                              color: Colors.grey[700],
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () {
+                            _recalculateTimer?.cancel();
+                            Navigator.of(context, rootNavigator: true).pop();
+                            _handleRecalculateChoice(true);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: mainColor,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          child: Text(
+                            '재갱신',
+                            style: TextStyle(
+                              fontFamily: "Pretendard",
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    ).then((_) {
+      // 모달이 닫힐 때 상태 초기화
+      setState(() {
+        _isRecalculateModalShown = false;
+      });
+      _recalculateTimer?.cancel();
+    });
+  }
+
+  // 🆕 사용자 선택 처리
+  void _handleRecalculateChoice(bool shouldRecalculate) {
+    setState(() {
+      _isRecalculateModalShown = false;
+    });
+
+    if (shouldRecalculate) {
+      // 재갱신 선택 시
+      _performRouteRecalculation();
+    } else {
+      // 아니요 선택 시 - 자동 재갱신 비활성화
+      setState(() {
+        _autoRecalculateEnabled = false;
+      });
+
+      // 사용자에게 알림
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '경로 재갱신이 비활성화되었습니다',
+            style: TextStyle(fontFamily: "Pretendard"),
+          ),
+          backgroundColor: Colors.grey[700],
+          duration: Duration(seconds: 2),
+          action: SnackBarAction(
+            label: '다시 활성화',
+            textColor: Colors.white,
+            onPressed: () {
+              setState(() {
+                _autoRecalculateEnabled = true;
+              });
+            },
+          ),
+        ),
+      );
+    }
+  }
+
+  // 🆕 실제 경로 재계산 수행
+  void _performRouteRecalculation() {
+    if (_currentPosition == null) {
+      print('경로 재계산 실패: 현재 위치 정보가 없음');
+      return;
+    }
+
+    print('경로 재계산 시작: 현재 실제 위치에서 목적지까지');
+
+    // 로딩 상태로 전환
+    setState(() {
+      _isLoading = true;
+      _isPathDisplayed = false;
+    });
+
+    // 사용자에게 알림
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '현재 위치에서 새 경로를 검색합니다',
+          style: TextStyle(fontFamily: "Pretendard"),
+        ),
+        backgroundColor: Color(0xFFFB233B),
+        duration: Duration(seconds: 2),
+      ),
+    );
+
+    // 경로 재계산 수행
+    _navigationController
+        .recalculateRoute(_currentPosition!)
+        .then((result) {
+          final success = result['success'] as bool;
+          final newOriginAddress = result['newOriginAddress'] as String;
+
+          Future.delayed(Duration(milliseconds: 500), () {
+            if (mounted) {
+              setState(() {
+                _isLoading = false;
+                _isPathDisplayed = true;
+
+                if (newOriginAddress.isNotEmpty) {
+                  _updatedOriginName = newOriginAddress;
+                }
+              });
+
+              if (success) {
+                print('경로 재계산 성공 - UI 업데이트 완료');
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('경로 재계산 실패. 다시 시도합니다.'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              }
+            }
+          });
+        })
+        .catchError((error) {
+          print('경로 재계산 중 오류: $error');
+
+          if (mounted) {
+            setState(() {
+              _isLoading = false;
+              _isPathDisplayed = true;
+            });
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('경로 계산 중 오류가 발생했습니다'),
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
+        });
+  }
+
+  // 메뉴 모달창 표시 메서드 수정 (자동 재갱신 설정 추가)
   void _showMenuModal() {
     final Color mainColor =
         widget.mode == TransitMode.car ? Color(0xFFFB233B) : Color(0xFF0771EB);
@@ -143,176 +424,239 @@ class _NavigationPageState extends State<NavigationPage>
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (BuildContext context) {
-        return Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(20),
-              topRight: Radius.circular(20),
-            ),
-          ),
-          child: SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // 모달 헤더
-                Container(
-                  padding: EdgeInsets.all(20),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        '네비게이션 메뉴',
-                        style: TextStyle(
-                          fontFamily: "Pretendard",
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF363636),
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: () => Navigator.pop(context),
-                        icon: Icon(Icons.close, color: Colors.grey[600]),
-                      ),
-                    ],
-                  ),
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(20),
+                  topRight: Radius.circular(20),
                 ),
+              ),
+              child: SafeArea(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // 모달 헤더
+                    Container(
+                      padding: EdgeInsets.all(20),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '네비게이션 메뉴',
+                            style: TextStyle(
+                              fontFamily: "Pretendard",
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF363636),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.pop(context),
+                            icon: Icon(Icons.close, color: Colors.grey[600]),
+                          ),
+                        ],
+                      ),
+                    ),
 
-                // 구분선
-                Divider(height: 1, color: Colors.grey[200]),
+                    // 구분선
+                    Divider(height: 1, color: Colors.grey[200]),
 
-                // 메뉴 아이템들
-                Container(
-                  padding: EdgeInsets.all(20),
-                  child: Column(
-                    children: [
-                      // 경로 정보
-                      Container(
-                        padding: EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[50],
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '현재 경로',
-                              style: TextStyle(
-                                fontFamily: "Pretendard",
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.grey[600],
+                    // 메뉴 아이템들
+                    Container(
+                      padding: EdgeInsets.all(20),
+                      child: Column(
+                        children: [
+                          // 🆕 자동 재갱신 설정 (자동차 모드에서만)
+                          if (widget.mode == TransitMode.car) ...[
+                            Container(
+                              padding: EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[50],
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.auto_fix_high,
+                                    color: mainColor,
+                                    size: 20,
+                                  ),
+                                  SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          '경로 자동 재갱신',
+                                          style: TextStyle(
+                                            fontFamily: "Pretendard",
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w600,
+                                            color: Color(0xFF363636),
+                                          ),
+                                        ),
+                                        Text(
+                                          '경로 이탈 시 자동으로 새 경로를 찾습니다',
+                                          style: TextStyle(
+                                            fontFamily: "Pretendard",
+                                            fontSize: 12,
+                                            color: Colors.grey[600],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Switch(
+                                    value: _autoRecalculateEnabled,
+                                    onChanged: (value) {
+                                      setModalState(() {
+                                        _autoRecalculateEnabled = value;
+                                      });
+                                      setState(() {
+                                        _autoRecalculateEnabled = value;
+                                      });
+                                    },
+                                    activeColor: mainColor,
+                                  ),
+                                ],
                               ),
                             ),
-                            SizedBox(height: 8),
-                            Text(
-                              '${widget.originName} → ${widget.destinationName}',
-                              style: TextStyle(
-                                fontFamily: "Pretendard",
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF363636),
-                              ),
+                            SizedBox(height: 16),
+                          ],
+
+                          // 경로 정보
+                          Container(
+                            padding: EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[50],
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                            SizedBox(height: 8),
-                            Row(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  '남은 거리: $_remainingDistance',
+                                  '현재 경로',
                                   style: TextStyle(
                                     fontFamily: "Pretendard",
                                     fontSize: 14,
-                                    color: mainColor,
                                     fontWeight: FontWeight.w600,
+                                    color: Colors.grey[600],
                                   ),
                                 ),
+                                SizedBox(height: 8),
                                 Text(
-                                  ' • ',
-                                  style: TextStyle(color: Colors.grey),
-                                ),
-                                Text(
-                                  '예상 시간: $_remainingTime',
+                                  '${widget.originName} → ${widget.destinationName}',
                                   style: TextStyle(
                                     fontFamily: "Pretendard",
-                                    fontSize: 14,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
                                     color: Color(0xFF363636),
-                                    fontWeight: FontWeight.w600,
                                   ),
+                                ),
+                                SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Text(
+                                      '남은 거리: $_remainingDistance',
+                                      style: TextStyle(
+                                        fontFamily: "Pretendard",
+                                        fontSize: 14,
+                                        color: mainColor,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    Text(
+                                      ' • ',
+                                      style: TextStyle(color: Colors.grey),
+                                    ),
+                                    Text(
+                                      '예상 시간: $_remainingTime',
+                                      style: TextStyle(
+                                        fontFamily: "Pretendard",
+                                        fontSize: 14,
+                                        color: Color(0xFF363636),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
-                          ],
-                        ),
-                      ),
+                          ),
 
-                      SizedBox(height: 24),
+                          SizedBox(height: 24),
 
-                      // 안내 종료 버튼
-                      SizedBox(
-                        width: double.infinity,
-                        height: 50,
-                        child: ElevatedButton(
-                          onPressed: () {
-                            Navigator.pop(context); // 모달 닫기
-                            _showExitConfirmationDialog(); // 종료 확인 다이얼로그 표시
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: mainColor,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                          // 안내 종료 버튼
+                          SizedBox(
+                            width: double.infinity,
+                            height: 50,
+                            child: ElevatedButton(
+                              onPressed: () {
+                                Navigator.pop(context); // 모달 닫기
+                                _showExitConfirmationDialog(); // 종료 확인 다이얼로그 표시
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: mainColor,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.stop_circle_outlined, size: 20),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    '안내 종료',
+                                    style: TextStyle(
+                                      fontFamily: "Pretendard",
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.stop_circle_outlined, size: 20),
-                              SizedBox(width: 8),
-                              Text(
-                                '안내 종료',
+
+                          SizedBox(height: 12),
+
+                          // 취소 버튼
+                          SizedBox(
+                            width: double.infinity,
+                            height: 50,
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.pop(context),
+                              style: OutlinedButton.styleFrom(
+                                side: BorderSide(color: Colors.grey[300]!),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: Text(
+                                '취소',
                                 style: TextStyle(
                                   fontFamily: "Pretendard",
                                   fontWeight: FontWeight.w600,
                                   fontSize: 16,
+                                  color: Color(0xFF363636),
                                 ),
                               ),
-                            ],
-                          ),
-                        ),
-                      ),
-
-                      SizedBox(height: 12),
-
-                      // 취소 버튼
-                      SizedBox(
-                        width: double.infinity,
-                        height: 50,
-                        child: OutlinedButton(
-                          onPressed: () => Navigator.pop(context),
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(color: Colors.grey[300]!),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                          child: Text(
-                            '취소',
-                            style: TextStyle(
-                              fontFamily: "Pretendard",
-                              fontWeight: FontWeight.w600,
-                              fontSize: 16,
-                              color: Color(0xFF363636),
-                            ),
-                          ),
-                        ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         );
       },
     );
@@ -602,12 +946,7 @@ class _NavigationPageState extends State<NavigationPage>
     try {
       // 위치 오버레이 가져오기
       final locationOverlay = _mapController!.getLocationOverlay();
-
-      // 위치 설정
       locationOverlay.setPosition(position);
-
-      // === 색상 커스터마이징 ===
-      // 모드에 따른 색상 설정
       if (widget.mode == TransitMode.car) {
         // 자동차 모드: 빨간색 계열
         locationOverlay.setCircleColor(Color(0x10FB233B)); // 반투명 빨간색 원
@@ -660,10 +999,16 @@ class _NavigationPageState extends State<NavigationPage>
     });
   }
 
-  // 경로 이탈 처리 (자동차 모드에서만)
+  // 🆕 수정된 경로 이탈 처리 - 모달창을 통한 사용자 선택
   void _handleRouteDeviation(bool isDeviated) {
     // 이미 처리 중이거나, 도착했거나, 이탈이 아니면 무시
-    if (_isLoading || _hasArrived || !isDeviated) {
+    if (_isLoading || _hasArrived || !isDeviated || _isRecalculateModalShown) {
+      return;
+    }
+
+    // 자동 재갱신이 비활성화되어 있으면 무시
+    if (!_autoRecalculateEnabled) {
+      print('자동 재갱신이 비활성화되어 있어 경로 이탈을 무시합니다');
       return;
     }
 
@@ -673,85 +1018,10 @@ class _NavigationPageState extends State<NavigationPage>
       return;
     }
 
-    print('경로 이탈 감지: 현재 위치에서 재계산 시작');
+    print('경로 이탈 감지: 사용자 선택 모달창 표시');
 
-    // 로딩 상태로 전환
-    setState(() {
-      _isLoading = true;
-      _isPathDisplayed = false; // 경로 표시 상태 리셋
-    });
-
-    // 사용자에게 알림
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          '경로 이탈 감지: 새 경로를 검색합니다',
-          style: TextStyle(fontFamily: "Pretendard"),
-        ),
-        backgroundColor:
-            widget.mode == TransitMode.car
-                ? Color(0xFFFB233B)
-                : Color(0xFF0771EB),
-        duration: Duration(seconds: 2),
-      ),
-    );
-
-    // 약간의 지연 후 경로 재계산 (UI 업데이트 시간 확보)
-    Future.delayed(Duration(milliseconds: 300), () {
-      // 현재 위치에서 목적지까지 경로 재계산 - 결과에 주소 정보 포함하도록 수정
-      _navigationController
-          .recalculateRoute(_currentPosition!)
-          .then((result) {
-            // 새로운 출발지 주소 받아오기
-            final success = result['success'] as bool;
-            final newOriginAddress = result['newOriginAddress'] as String;
-
-            // 약간의 지연 후 UI 상태 업데이트
-            Future.delayed(Duration(milliseconds: 500), () {
-              if (mounted) {
-                setState(() {
-                  _isLoading = false;
-                  _isPathDisplayed = true;
-
-                  // 출발지 주소 업데이트 추가
-                  if (newOriginAddress.isNotEmpty) {
-                    _updatedOriginName = newOriginAddress;
-                  }
-                });
-
-                if (success) {
-                  print('경로 재계산 성공 - UI 업데이트 완료');
-                } else {
-                  // 실패 시 사용자에게 알림
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('경로 재계산 실패. 다시 시도합니다.'),
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
-                }
-              }
-            });
-          })
-          .catchError((error) {
-            print('경로 재계산 중 오류: $error');
-
-            if (mounted) {
-              setState(() {
-                _isLoading = false;
-                _isPathDisplayed = true;
-              });
-
-              // 오류 알림
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('경로 계산 중 오류가 발생했습니다'),
-                  duration: Duration(seconds: 2),
-                ),
-              );
-            }
-          });
-    });
+    // 모달창 표시
+    _showRecalculateModal();
   }
 
   // 도착 처리
@@ -873,7 +1143,7 @@ class _NavigationPageState extends State<NavigationPage>
     try {
       // NaverMap 초기 옵션과 동일한 값 사용
       double targetZoom =
-          widget.mode == TransitMode.car ? 18.0 : 16.0; // 초기 옵션과 동일
+          widget.mode == TransitMode.car ? 18.0 : 17.0; // 초기 옵션과 동일
       double targetTilt =
           widget.mode == TransitMode.car ? 35.0 : 0.0; // 초기 옵션과 동일
 
@@ -882,7 +1152,7 @@ class _NavigationPageState extends State<NavigationPage>
         await _mapController!.updateCamera(
           NCameraUpdate.withParams(
             target: _currentPosition!,
-            zoom: targetZoom, // 21 (자동차) / 16 (도보)
+            zoom: targetZoom, // 21 (자동차) / 17 (도보)
             tilt: targetTilt, // 35도 (자동차) / 0도 (도보)
           ),
         );
@@ -909,7 +1179,7 @@ class _NavigationPageState extends State<NavigationPage>
         await _mapController!.updateCamera(
           NCameraUpdate.withParams(
             target: currentLocation,
-            zoom: targetZoom, // 21 (자동차) / 16 (도보)
+            zoom: targetZoom, // 21 (자동차) / 17 (도보)
             tilt: targetTilt, // 35도 (자동차) / 0도 (도보)
           ),
         );
@@ -930,6 +1200,7 @@ class _NavigationPageState extends State<NavigationPage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _navigationController.dispose();
+    _recalculateTimer?.cancel(); // 🆕 타이머 정리
     super.dispose();
   }
 
@@ -1545,6 +1816,74 @@ class _NavigationPageState extends State<NavigationPage>
                         ),
                     ],
                   ),
+                ),
+              ),
+            ),
+
+          // 🆕 자동 재갱신 비활성화 상태 표시 (자동차 모드에서만)
+          if (widget.mode == TransitMode.car &&
+              !_autoRecalculateEnabled &&
+              !_hasArrived)
+            Positioned(
+              top: 80,
+              left: 20,
+              right: 20,
+              child: Container(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.9),
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.warning_amber_rounded,
+                      color: Colors.white,
+                      size: 16,
+                    ),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '경로 자동 재갱신이 비활성화되었습니다',
+                        style: TextStyle(
+                          fontFamily: "Pretendard",
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          _autoRecalculateEnabled = true;
+                        });
+                      },
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        minimumSize: Size(0, 0),
+                      ),
+                      child: Text(
+                        '활성화',
+                        style: TextStyle(
+                          fontFamily: "Pretendard",
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),

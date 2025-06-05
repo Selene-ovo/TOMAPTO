@@ -17,9 +17,9 @@ class SearchMainController extends ChangeNotifier {
 
   // 최근 검색 기록 (실제로는 DB나 SharedPreferences에서 가져옴)
   List<SearchItem> recentSearches = [
+    SearchItem('가톨릭관동대학교', '25.05.11'),
     SearchItem('강릉의료원', '25.05.10'),
     SearchItem('강릉시외버스터미널', '25.05.09'),
-    SearchItem('돌탱이pc방 강릉', '25.05.11'),
   ];
 
   // 검색 결과
@@ -58,10 +58,6 @@ class SearchMainController extends ChangeNotifier {
   // 네이버 지역 검색 API URL
   final String _baseUrl = 'https://openapi.naver.com/v1/search/local.json';
 
-  // 네이버 Directions API URL
-  final String _directionsUrl =
-      'https://naveropenapi.apigw.ntruss.com/map-direction/v1/driving';
-
   // 초기화 메서드
   Future<void> initialize() async {
     try {
@@ -90,7 +86,6 @@ class SearchMainController extends ChangeNotifier {
     });
   }
 
-  // 검색어 변경 시 처리할 메서드
   // 검색어 변경 시 처리할 메서드 (개선된 위치 기반 필터링)
   void onSearchChanged(String query) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
@@ -192,7 +187,6 @@ class SearchMainController extends ChangeNotifier {
     });
   }
 
-  // 위치 기반 검색을 위한 개선된 searchPlaces 메서드
   // 단순화된 검색 메서드 (위치 필터링은 클라이언트에서 처리)
   Future<List<NaverSearchResult>> searchPlaces(
     String query, {
@@ -256,11 +250,6 @@ class SearchMainController extends ChangeNotifier {
     }
   }
 
-  // GPS 좌표를 KATECH 좌표로 변환
-  Map<String, double> _convertGpsToKatech(double lat, double lng) {
-    return {'x': lng * 10000000.0, 'y': lat * 10000000.0};
-  }
-
   // KATECH 좌표를 GPS 좌표로 변환하는 메서드
   Future<Map<String, double>?> convertKatechToGps(
     double katechX,
@@ -273,10 +262,6 @@ class SearchMainController extends ChangeNotifier {
         print('❌ 네이버 Maps API 키가 설정되지 않았습니다.');
         return _improvedKatechToGps(katechX, katechY);
       }
-
-      // 네이버의 좌표계 변환 API 사용 (Geocoding이 아닌 별도 API)
-      // 실제로는 네이버에서 직접적인 좌표계 변환 API를 제공하지 않으므로
-      // 수학적 변환을 사용하는 것이 올바릅니다.
 
       print('💡 API 대신 수학적 변환 사용');
       return _improvedKatechToGps(katechX, katechY);
@@ -340,11 +325,6 @@ class SearchMainController extends ChangeNotifier {
       return {'lat': 37.5666805, 'lng': 126.9784147};
     }
   }
-
-  // 근사 좌표 변환
-  /*Map<String, double> _approximateKatechToGps(double katechX, double katechY) {
-    return {'lat': katechY / 10000000.0, 'lng': katechX / 10000000.0};
-  }*/
 
   // 카테고리 문자열에서 주요 카테고리 추출
   String _extractCategory(String fullCategory) {
@@ -434,7 +414,7 @@ class SearchMainController extends ChangeNotifier {
       return '주소 변환 불가';
     }
 
-    // ✅ 공식 문서에 맞춘 올바른 URL 구성
+    // 공식 문서에 맞춘 올바른 URL 구성
     final coords = Uri.encodeComponent('$longitude,$latitude'); // URL 인코딩 적용
     final url =
         'https://maps.apigw.ntruss.com/map-reversegeocode/v2/gc?'
@@ -447,7 +427,7 @@ class SearchMainController extends ChangeNotifier {
           .get(
             Uri.parse(url),
             headers: {
-              // ✅ 공식 문서와 동일한 헤더명 (소문자)
+              // 공식 문서와 동일한 헤더명 (소문자)
               'x-ncp-apigw-api-key-id': _mapClientId,
               'x-ncp-apigw-api-key': _mapClientSecret,
               'Accept': 'application/json',
@@ -792,12 +772,4 @@ class NaverSearchResult {
       );
     }
   }
-}
-
-// 거리 정보를 포함한 검색 결과 (내부 정렬용)
-class NaverSearchResultWithDistance {
-  final NaverSearchResult result;
-  final double distance;
-
-  NaverSearchResultWithDistance({required this.result, required this.distance});
 }

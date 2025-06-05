@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:tomapto/search/search_main.dart';
 import 'package:tomapto/search/search_return.dart';
 import 'package:tomapto/controllers/search/search_main_controller.dart';
@@ -13,6 +14,9 @@ class SearchBarWidget extends StatelessWidget {
   final VoidCallback onClosePressed; // 이 콜백을 그대로 유지
   final Function(Map<String, dynamic>?)? onSearchResultSelected;
 
+  final NLatLng? currentOriginCoords;
+  final NLatLng? currentDestinationCoords;
+
   const SearchBarWidget({
     super.key,
     required this.originPlace,
@@ -21,7 +25,9 @@ class SearchBarWidget extends StatelessWidget {
     required this.onDestinationChanged,
     required this.onSwapLocations,
     required this.onClosePressed,
-    this.onSearchResultSelected, // 이 매개변수를 그대로 사용
+    this.onSearchResultSelected,
+    this.currentOriginCoords,
+    this.currentDestinationCoords,
   });
 
   // 🔥 기본 텍스트인지 확인하는 메서드 추가
@@ -103,6 +109,10 @@ class SearchBarWidget extends StatelessWidget {
                                       currentOriginPlace: originPlace,
                                       currentDestinationPlace: destinationPlace,
                                       isSearchingOrigin: true, // 출발지 검색 모드
+                                      // 🔥 추가: 좌표 정보 전달
+                                      currentOriginCoords: currentOriginCoords,
+                                      currentDestinationCoords:
+                                          currentDestinationCoords,
                                     ),
                               ),
                             );
@@ -185,13 +195,32 @@ class SearchBarWidget extends StatelessWidget {
                             final result = await Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder:
-                                    (context) => SearchMainPage(
-                                      initialSearchTerm: initialSearchTerm,
-                                      currentOriginPlace: originPlace,
-                                      currentDestinationPlace: destinationPlace,
-                                      isSearchingOrigin: false, // 도착지 검색 모드
-                                    ),
+                                builder: (context) {
+                                  print('🏗️ SearchMainPage 생성 중 (도착지 검색)...');
+                                  print(
+                                    '  전달할 currentOriginPlace: $originPlace',
+                                  );
+                                  print(
+                                    '  전달할 currentOriginCoords: $currentOriginCoords',
+                                  ); // 🔥 중요
+                                  print(
+                                    '  전달할 currentDestinationPlace: $destinationPlace',
+                                  );
+                                  print(
+                                    '  전달할 currentDestinationCoords: $currentDestinationCoords',
+                                  );
+
+                                  return SearchMainPage(
+                                    initialSearchTerm: initialSearchTerm,
+                                    currentOriginPlace: originPlace,
+                                    currentDestinationPlace: destinationPlace,
+                                    isSearchingOrigin: false, // 도착지 검색 모드
+                                    // 🔥 추가: 좌표 정보 전달
+                                    currentOriginCoords: currentOriginCoords,
+                                    currentDestinationCoords:
+                                        currentDestinationCoords,
+                                  );
+                                },
                               ),
                             );
 

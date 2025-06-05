@@ -15,6 +15,7 @@ class SignupConstants {
     'password': 'assets/icons/password_tooltip.svg',
     'password_confirm': 'assets/icons/password_confirm_tooltip.svg',
     'email': 'assets/icons/email_tooltip.svg',
+    'name': 'assets/icons/name_tooltip.svg', // 이름 툴팁 추가
   };
 
   // 이메일 도메인 리스트
@@ -188,6 +189,73 @@ class SignupApiService {
   }
 }
 
+// 입력 검증 클래스 - 새로 추가된 부분
+class InputValidator {
+  // 이름 검증 - 한국어만 허용
+  static bool isValidName(String name) {
+    if (name.isEmpty) return false;
+
+    // 한국어 완성형 글자만 허용 (자음, 모음 초성 제외)
+    // 한글 유니코드 범위: 가(0xAC00) ~ 힣(0xD7A3)
+    final koreanPattern = RegExp(r'^[가-힣]+$');
+    return koreanPattern.hasMatch(name);
+  }
+
+  // 아이디 검증 - 영어와 숫자만, 4~16자
+  static bool isValidId(String id) {
+    if (id.isEmpty) return false;
+    if (id.length < 4 || id.length > 16) return false;
+
+    // 영어와 숫자만 허용
+    final idPattern = RegExp(r'^[a-zA-Z0-9]+$');
+    return idPattern.hasMatch(id);
+  }
+
+  // 닉네임 검증 - 한국어, 영어, 숫자만 허용, 최대 16자
+  static bool isValidNickname(String nickname) {
+    if (nickname.isEmpty) return false;
+    if (nickname.length > 16) return false;
+
+    // 한국어 완성형, 영어, 숫자만 허용
+    final nicknamePattern = RegExp(r'^[가-힣a-zA-Z0-9]+$');
+    return nicknamePattern.hasMatch(nickname);
+  }
+
+  // 에러 메시지 반환
+  static String? getNameErrorMessage(String name) {
+    if (name.isEmpty) return null;
+    if (!isValidName(name)) {
+      return '이름은 한국어만 입력 가능합니다.';
+    }
+    return null;
+  }
+
+  static String? getIdErrorMessage(String id) {
+    if (id.isEmpty) return null;
+    if (id.length < 4) {
+      return '아이디는 4자 이상이어야 합니다.';
+    }
+    if (id.length > 16) {
+      return '아이디는 16자 이하여야 합니다.';
+    }
+    if (!isValidId(id)) {
+      return '아이디는 영어와 숫자만 입력 가능합니다.';
+    }
+    return null;
+  }
+
+  static String? getNicknameErrorMessage(String nickname) {
+    if (nickname.isEmpty) return null;
+    if (nickname.length > 16) {
+      return '닉네임은 16자 이하여야 합니다.';
+    }
+    if (!isValidNickname(nickname)) {
+      return '닉네임은 한국어, 영어, 숫자만 입력 가능합니다.';
+    }
+    return null;
+  }
+}
+
 // 툴팁 관리 클래스 - 툴팁 관련 로직 분리
 class TooltipManager {
   OverlayEntry? _currentTooltip;
@@ -287,6 +355,14 @@ class SignupController {
   bool _isEmailDuplicate = false;
   bool _isEmailValid = true;
 
+  // 입력 양식 검증 상태 변수 - 새로 추가된 부분
+  bool _isNameValid = true;
+  bool _isIdFormatValid = true;
+  bool _isNicknameFormatValid = true;
+  String? _nameErrorMessage;
+  String? _idErrorMessage;
+  String? _nicknameErrorMessage;
+
   // 이메일 인증 관련 상태 변수
   bool _isVerificationSent = false;
   bool _isEmailVerified = false;
@@ -298,6 +374,7 @@ class SignupController {
   Timer? _idDebounceTimer;
   Timer? _nicknameDebounceTimer;
   Timer? _emailDebounceTimer;
+  Timer? _nameDebounceTimer; // 이름 디바운스 타이머 추가
 
   // Tooltip manager
   final TooltipManager _tooltipManager = TooltipManager();
@@ -309,6 +386,14 @@ class SignupController {
   bool get isEmailValid => _isEmailValid;
   String get selectedDomain => _selectedDomain;
   List<String> get domains => SignupConstants.domains;
+
+  // 새로운 getter들 - 입력 양식 검증용
+  bool get isNameValid => _isNameValid;
+  bool get isIdFormatValid => _isIdFormatValid;
+  bool get isNicknameFormatValid => _isNicknameFormatValid;
+  String? get nameErrorMessage => _nameErrorMessage;
+  String? get idErrorMessage => _idErrorMessage;
+  String? get nicknameErrorMessage => _nicknameErrorMessage;
 
   // 이메일 인증 관련 getter
   bool get isVerificationSent => _isVerificationSent;
@@ -333,12 +418,13 @@ class SignupController {
     }
   }
 
-  // 이벤트 리스너 설정
+  // 이벤트 리스너 설정 - 이름 필드 추가
   void _setupEventListeners() {
     focusNodes['id']?.addListener(() => onFocusChange('id'));
     focusNodes['nickname']?.addListener(() => onFocusChange('nickname'));
     focusNodes['email']?.addListener(() => onFocusChange('email'));
 
+    controllers['name']?.addListener(() => onTextChange('name')); // 이름 리스너 추가
     controllers['id']?.addListener(() => onTextChange('id'));
     controllers['nickname']?.addListener(() => onTextChange('nickname'));
     controllers['email']?.addListener(() => onTextChange('email'));
@@ -374,35 +460,62 @@ class SignupController {
     }
   }
 
-  // 텍스트 변경 이벤트 통합 처리
+  // 텍스트 변경 이벤트 통합 처리 - 이름 추가
   void onTextChange(String field) {
     switch (field) {
+      case 'name': // 새로 추가된 이름 검증
+        _nameDebounceTimer?.cancel();
+        if (controllers['name']?.text.isNotEmpty ?? false) {
+          _nameDebounceTimer = Timer(const Duration(milliseconds: 100), () {
+            _validateName(controllers['name']!.text);
+          });
+        } else {
+          updateUI(() {
+            _isNameValid = true;
+            _nameErrorMessage = null;
+          });
+          _tooltipManager.removeTooltip();
+        }
+        break;
+
       case 'id':
         _idDebounceTimer?.cancel();
         if (controllers['id']?.text.isNotEmpty ?? false) {
           _idDebounceTimer = Timer(const Duration(milliseconds: 100), () {
-            _checkDuplicate('user_id', controllers['id']!.text);
+            _validateId(controllers['id']!.text);
+            if (_isIdFormatValid) {
+              _checkDuplicate('user_id', controllers['id']!.text);
+            }
           });
         } else {
           updateUI(() {
             _isIdDuplicate = false;
+            _isIdFormatValid = true;
+            _idErrorMessage = null;
           });
           _tooltipManager.removeTooltip();
         }
         break;
+
       case 'nickname':
         _nicknameDebounceTimer?.cancel();
         if (controllers['nickname']?.text.isNotEmpty ?? false) {
           _nicknameDebounceTimer = Timer(const Duration(milliseconds: 100), () {
-            _checkDuplicate('user_nickname', controllers['nickname']!.text);
+            _validateNickname(controllers['nickname']!.text);
+            if (_isNicknameFormatValid) {
+              _checkDuplicate('user_nickname', controllers['nickname']!.text);
+            }
           });
         } else {
           updateUI(() {
             _isNicknameDuplicate = false;
+            _isNicknameFormatValid = true;
+            _nicknameErrorMessage = null;
           });
           _tooltipManager.removeTooltip();
         }
         break;
+
       case 'email':
         _emailDebounceTimer?.cancel();
         if (controllers['email']?.text.isNotEmpty ?? false) {
@@ -433,12 +546,52 @@ class SignupController {
     }
   }
 
+  // 이름 검증 - 새로 추가된 메서드
+  void _validateName(String name) {
+    updateUI(() {
+      _nameErrorMessage = InputValidator.getNameErrorMessage(name);
+      _isNameValid = _nameErrorMessage == null;
+
+      // 에러가 있으면 툴팁 표시
+      if (!_isNameValid && focusNodes.containsKey('name')) {
+        // 이름 필드에 포커스 노드가 없다면 생성 (필요시)
+        // showTooltip(focusNodes['name']!, 'name');
+      }
+    });
+  }
+
+  // 아이디 검증 - 새로 추가된 메서드
+  void _validateId(String id) {
+    updateUI(() {
+      _idErrorMessage = InputValidator.getIdErrorMessage(id);
+      _isIdFormatValid = _idErrorMessage == null;
+
+      // 양식 에러가 있으면 툴팁 표시
+      if (!_isIdFormatValid && focusNodes['id'] != null) {
+        showTooltip(focusNodes['id']!, 'id');
+      }
+    });
+  }
+
+  // 닉네임 검증 - 새로 추가된 메서드
+  void _validateNickname(String nickname) {
+    updateUI(() {
+      _nicknameErrorMessage = InputValidator.getNicknameErrorMessage(nickname);
+      _isNicknameFormatValid = _nicknameErrorMessage == null;
+
+      // 양식 에러가 있으면 툴팁 표시
+      if (!_isNicknameFormatValid && focusNodes['nickname'] != null) {
+        showTooltip(focusNodes['nickname']!, 'nickname');
+      }
+    });
+  }
+
   // 스크롤 이벤트 처리
   void onScroll() {
     _tooltipManager.removeTooltip();
   }
 
-  // 중복 확인 통합 처리
+  // 중복 확인 통합 처리 - 양식 검증 후에만 실행
   Future<void> _checkDuplicate(String field, String value) async {
     bool isDuplicate = await SignupApiService.checkDuplicate(field, value);
 
@@ -597,11 +750,33 @@ class SignupController {
     _tooltipManager.showTooltip(context, node, tooltipType);
   }
 
-  // 회원가입 처리
+  // 회원가입 처리 - 검증 로직 강화
   Future<void> signup(GlobalKey<FormState> formKey) async {
     try {
       // 기본 폼 유효성 검증
       if (formKey.currentState?.validate() != true) {
+        return;
+      }
+
+      // 입력 양식 검증 - 새로 추가된 부분
+      if (!_isNameValid) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_nameErrorMessage ?? '이름을 올바르게 입력해주세요.')),
+        );
+        return;
+      }
+
+      if (!_isIdFormatValid) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_idErrorMessage ?? '아이디를 올바르게 입력해주세요.')),
+        );
+        return;
+      }
+
+      if (!_isNicknameFormatValid) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_nicknameErrorMessage ?? '닉네임을 올바르게 입력해주세요.')),
+        );
         return;
       }
 
@@ -712,6 +887,7 @@ class SignupController {
     _idDebounceTimer?.cancel();
     _nicknameDebounceTimer?.cancel();
     _emailDebounceTimer?.cancel();
+    _nameDebounceTimer?.cancel(); // 이름 타이머도 해제
     _verificationTimer?.cancel();
     _tooltipManager.dispose();
   }

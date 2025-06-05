@@ -105,8 +105,9 @@ class _SignUpPageState extends State<SignUpPage> {
     'email': TextEditingController(),
   };
 
-  // 포커스 노드 맵 - 포커스 노드를 효율적으로 관리
+  // 포커스 노드 맵 - 포커스 노드를 효율적으로 관리 (이름 포커스 노드 추가)
   late final Map<String, FocusNode> _focusNodes = {
+    'name': FocusNode(), // 이름 포커스 노드 추가
     'id': FocusNode(),
     'nickname': FocusNode(),
     'password': FocusNode(),
@@ -117,10 +118,10 @@ class _SignUpPageState extends State<SignUpPage> {
   // 회원가입 컨트롤러
   late SignupController _signupController;
 
-  // 약관 동의 상태 변수
-  bool _allAgreements = true;
-  bool _serviceAgreement = true;
-  bool _privacyAgreement = true;
+  // 약관 동의 상태 변수 - 기본값을 false로 변경
+  bool _allAgreements = false;
+  bool _serviceAgreement = false;
+  bool _privacyAgreement = false;
   bool _marketingAgreement = false;
 
   @override
@@ -135,6 +136,37 @@ class _SignUpPageState extends State<SignUpPage> {
       scrollController: _scrollController,
       updateUI: setState,
     );
+
+    // 이름 필드 포커스 이벤트 리스너 추가
+    _focusNodes['name']?.addListener(() {
+      if (!_focusNodes['name']!.hasFocus &&
+          _controllers['name']!.text.isNotEmpty) {
+        if (!_signupController.isNameValid) {
+          // 필요시 툴팁 표시 (현재는 텍스트로만 표시)
+        }
+      }
+    });
+
+    // 아이디 필드 포커스 이벤트 리스너 수정
+    _focusNodes['id']?.addListener(() {
+      if (!_focusNodes['id']!.hasFocus && _controllers['id']!.text.isNotEmpty) {
+        if (!_signupController.isIdFormatValid ||
+            _signupController.isIdDuplicate) {
+          _signupController.showTooltip(_focusNodes['id']!, 'id');
+        }
+      }
+    });
+
+    // 닉네임 필드 포커스 이벤트 리스너 수정
+    _focusNodes['nickname']?.addListener(() {
+      if (!_focusNodes['nickname']!.hasFocus &&
+          _controllers['nickname']!.text.isNotEmpty) {
+        if (!_signupController.isNicknameFormatValid ||
+            _signupController.isNicknameDuplicate) {
+          _signupController.showTooltip(_focusNodes['nickname']!, 'nickname');
+        }
+      }
+    });
 
     // 비밀번호 필드와 비밀번호 확인 필드의 포커스 이벤트 리스너 설정
     _focusNodes['password']?.addListener(() {
@@ -180,6 +212,163 @@ class _SignUpPageState extends State<SignUpPage> {
     _signupController.dispose();
 
     super.dispose();
+  }
+
+  // 서비스 이용약관 모달 표시
+  void _showServiceTermsModal() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (BuildContext context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.9,
+          minChildSize: 0.5,
+          maxChildSize: 0.95,
+          expand: false,
+          builder: (_, scrollController) {
+            return Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        '서비스 이용약관 동의',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          fontFamily: 'Pretendard',
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(),
+                Expanded(
+                  child: ListView(
+                    controller: scrollController,
+                    padding: const EdgeInsets.all(16),
+                    children: const [
+                      Text(
+                        '서비스 이용약관',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          fontFamily: 'Pretendard',
+                        ),
+                      ),
+                      SizedBox(height: 16),
+                      Text(
+                        '제 1 조 (목적)\n'
+                        '이 약관은 서비스 이용에 관한 기본적인 사항을 규정함을 목적으로 합니다.\n\n'
+                        '제 2 조 (정의)\n'
+                        '1. "서비스"라 함은 회사가 제공하는 위치기반 서비스, 지도 서비스 등을 말합니다.\n'
+                        '2. "이용자"라 함은 회사가 제공하는 서비스를 이용하는 자를 말합니다.\n\n'
+                        '제 3 조 (약관의 효력 및 변경)\n'
+                        '1. 이 약관은 서비스를 이용하고자 하는 모든 이용자에게 적용됩니다.\n'
+                        '2. 회사는 필요한 경우 약관을 변경할 수 있으며, 변경된 약관은 적용일 7일 전에 공지합니다.\n\n'
+                        '본 약관은 2023년 1월 1일부터 시행됩니다.',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontFamily: 'Pretendard',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // 개인정보 수집 및 이용 모달 표시
+  void _showPrivacyPolicyModal() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (BuildContext context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.9,
+          minChildSize: 0.5,
+          maxChildSize: 0.95,
+          expand: false,
+          builder: (_, scrollController) {
+            return Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        '개인정보 수집 및 이용',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          fontFamily: 'Pretendard',
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(),
+                Expanded(
+                  child: ListView(
+                    controller: scrollController,
+                    padding: const EdgeInsets.all(16),
+                    children: const [
+                      Text(
+                        '개인정보 수집 및 이용 안내',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          fontFamily: 'Pretendard',
+                        ),
+                      ),
+                      SizedBox(height: 16),
+                      Text(
+                        '1. 수집하는 개인정보 항목\n'
+                        '- 위치정보: 현재 위치, 검색 위치, 경로 정보\n'
+                        '- 기기정보: 기기 식별자, 운영체제 정보\n\n'
+                        '2. 수집 및 이용 목적\n'
+                        '- 위치기반 서비스 제공\n'
+                        '- 서비스 개선 및 불편사항 해결\n\n'
+                        '3. 보유 및 이용 기간\n'
+                        '- 서비스 이용 종료 시까지 또는 법령에 따른 보관 기간\n\n'
+                        '4. 동의 거부권 및 거부 시 불이익\n'
+                        '- 개인정보 수집 및 이용에 대한 동의를 거부할 수 있으나, 서비스 이용이 제한될 수 있습니다.',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontFamily: 'Pretendard',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   // 드롭다운 오버레이 표시 메서드
@@ -311,8 +500,30 @@ class _SignUpPageState extends State<SignUpPage> {
 
   // 전체 동의 상태 업데이트
   void _updateAllAgreementsState() {
-    _allAgreements =
-        _serviceAgreement && _privacyAgreement && _marketingAgreement;
+    _allAgreements = _serviceAgreement && _privacyAgreement;
+  }
+
+  // 회원가입 가능 여부 확인 함수 추가
+  bool get _canSignup {
+    // 필수 약관 동의 확인 (마케팅은 선택사항이므로 제외)
+    return _serviceAgreement && _privacyAgreement;
+  }
+
+  // 수정된 회원가입 처리 함수
+  Future<void> _handleSignup() async {
+    // 필수 약관 동의 확인
+    if (!_serviceAgreement || !_privacyAgreement) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('필수 약관에 동의해주세요.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // 기존 회원가입 로직 실행
+    await _signupController.signup(_formKey);
   }
 
   @override
@@ -335,48 +546,16 @@ class _SignUpPageState extends State<SignUpPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // 이름 입력 필드
-                  _buildInputField(
-                    controller: _controllers['name']!,
-                    labelText: '이름',
-                    hintText: '이름을 적어주세요.',
-                    validator: _validateRequired,
-                    isRequired: true,
-                  ),
+                  // 이름 입력 필드 (검증 기능 추가)
+                  _buildNameField(),
                   const SizedBox(height: SignupStyles.fieldSpacing),
 
-                  // 아이디 입력 필드
-                  _buildInputField(
-                    controller: _controllers['id']!,
-                    labelText: '아이디',
-                    hintText: '아이디를 적어주세요.',
-                    focusNode: _focusNodes['id'],
-                    validator: _validateRequired,
-                    isRequired: true,
-                    hasError: _signupController.isIdDuplicate,
-                    suffixIcon:
-                        _controllers['id']!.text.isNotEmpty
-                            ? _buildStatusIcon(_signupController.isIdDuplicate)
-                            : null,
-                  ),
+                  // 아이디 입력 필드 (검증 기능 강화)
+                  _buildIdField(),
                   const SizedBox(height: SignupStyles.fieldSpacing),
 
-                  // 닉네임 입력 필드
-                  _buildInputField(
-                    controller: _controllers['nickname']!,
-                    labelText: '닉네임',
-                    hintText: '닉네임을 적어주세요.',
-                    focusNode: _focusNodes['nickname'],
-                    validator: _validateRequired,
-                    isRequired: true,
-                    hasError: _signupController.isNicknameDuplicate,
-                    suffixIcon:
-                        _controllers['nickname']!.text.isNotEmpty
-                            ? _buildStatusIcon(
-                              _signupController.isNicknameDuplicate,
-                            )
-                            : null,
-                  ),
+                  // 닉네임 입력 필드 (검증 기능 강화)
+                  _buildNicknameField(),
                   const SizedBox(height: SignupStyles.fieldSpacing),
 
                   // 비밀번호 필드
@@ -395,7 +574,7 @@ class _SignUpPageState extends State<SignUpPage> {
                   _buildAgreementsSection(),
                   const SizedBox(height: 24),
 
-                  // 가입하기 버튼
+                  // 가입하기 버튼 (수정됨)
                   _buildSignupButton(),
                 ],
               ),
@@ -435,6 +614,296 @@ class _SignUpPageState extends State<SignUpPage> {
       return '';
     }
     return null;
+  }
+
+  // 이름 필드 구성 - 새로 추가된 메서드
+  Widget _buildNameField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 이름 라벨
+        RichText(
+          text: const TextSpan(
+            text: '이름',
+            style: SignupStyles.labelStyle,
+            children: [
+              TextSpan(
+                text: '*',
+                style: TextStyle(
+                  fontFamily: 'Pretendard',
+                  color: SignupStyles.primaryRed,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: SignupStyles.smallSpacing),
+
+        // 이름 입력 필드
+        TextFormField(
+          controller: _controllers['name'],
+          focusNode: _focusNodes['name'],
+          style: const TextStyle(fontFamily: 'Pretendard', fontSize: 16.0),
+          decoration: InputDecoration(
+            hintText: '이름을 입력해주세요.',
+            hintStyle: SignupStyles.hintStyle,
+            suffixIcon:
+                _controllers['name']!.text.isNotEmpty
+                    ? _buildStatusIcon(!_signupController.isNameValid)
+                    : null,
+            contentPadding: SignupStyles.fieldPadding,
+            border: SignupStyles.getDefaultBorder(),
+            enabledBorder:
+                !_signupController.isNameValid
+                    ? SignupStyles.getErrorBorder()
+                    : SignupStyles.getDefaultBorder(),
+            focusedBorder:
+                !_signupController.isNameValid
+                    ? SignupStyles.getErrorBorder()
+                    : SignupStyles.getFocusedBorder(context),
+            errorBorder: SignupStyles.getErrorBorder(),
+            focusedErrorBorder: SignupStyles.getErrorBorder(),
+            errorStyle: SignupStyles.errorStyle,
+          ),
+          validator: _validateRequired,
+          onChanged: (_) {
+            setState(() {});
+          },
+        ),
+
+        // 이름 에러 메시지 표시
+        if (_signupController.nameErrorMessage != null &&
+            _signupController.nameErrorMessage!.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(left: 5, top: 4),
+            child: Text(
+              _signupController.nameErrorMessage!,
+              style: const TextStyle(
+                fontFamily: 'Pretendard',
+                color: SignupStyles.primaryRed,
+                fontSize: 12.0,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  // 아이디 필드 구성 - 검증 기능 강화
+  Widget _buildIdField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 아이디 라벨
+        RichText(
+          text: const TextSpan(
+            text: '아이디',
+            style: SignupStyles.labelStyle,
+            children: [
+              TextSpan(
+                text: '*',
+                style: TextStyle(
+                  fontFamily: 'Pretendard',
+                  color: SignupStyles.primaryRed,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: SignupStyles.smallSpacing),
+
+        // 아이디 입력 필드
+        TextFormField(
+          controller: _controllers['id'],
+          focusNode: _focusNodes['id'],
+          style: const TextStyle(fontFamily: 'Pretendard', fontSize: 16.0),
+          decoration: InputDecoration(
+            hintText: '아이디를 입력해주세요.',
+            hintStyle: SignupStyles.hintStyle,
+            suffixIcon:
+                _controllers['id']!.text.isNotEmpty
+                    ? _buildStatusIcon(
+                      !_signupController.isIdFormatValid ||
+                          _signupController.isIdDuplicate,
+                    )
+                    : null,
+            contentPadding: SignupStyles.fieldPadding,
+            border: SignupStyles.getDefaultBorder(),
+            enabledBorder:
+                (!_signupController.isIdFormatValid ||
+                        _signupController.isIdDuplicate)
+                    ? SignupStyles.getErrorBorder()
+                    : SignupStyles.getDefaultBorder(),
+            focusedBorder:
+                (!_signupController.isIdFormatValid ||
+                        _signupController.isIdDuplicate)
+                    ? SignupStyles.getErrorBorder()
+                    : SignupStyles.getFocusedBorder(context),
+            errorBorder: SignupStyles.getErrorBorder(),
+            focusedErrorBorder: SignupStyles.getErrorBorder(),
+            errorStyle: SignupStyles.errorStyle,
+          ),
+          validator: _validateRequired,
+          onChanged: (_) {
+            setState(() {});
+          },
+        ),
+
+        // 아이디 에러 메시지 표시
+        if (_signupController.idErrorMessage != null &&
+            _signupController.idErrorMessage!.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(left: 5, top: 4),
+            child: Text(
+              _signupController.idErrorMessage!,
+              style: const TextStyle(
+                fontFamily: 'Pretendard',
+                color: SignupStyles.primaryRed,
+                fontSize: 12.0,
+              ),
+            ),
+          ),
+
+        // 아이디 중복 메시지 표시
+        if (_signupController.isIdDuplicate &&
+            _signupController.isIdFormatValid)
+          Padding(
+            padding: const EdgeInsets.only(left: 5, top: 4),
+            child: Text(
+              '이미 사용 중인 아이디입니다.',
+              style: const TextStyle(
+                fontFamily: 'Pretendard',
+                color: SignupStyles.primaryRed,
+                fontSize: 12.0,
+              ),
+            ),
+          ),
+
+        // 도움말 텍스트
+        if (_controllers['id']!.text.isEmpty)
+          const Padding(
+            padding: EdgeInsets.only(left: 5, top: 1),
+            child: Text(
+              '영어와 숫자만 사용하여 4~16자로 입력해주세요.',
+              style: TextStyle(
+                fontFamily: 'Pretendard',
+                color: Colors.grey,
+                fontSize: 12.0,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  // 닉네임 필드 구성 - 검증 기능 강화
+  Widget _buildNicknameField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 닉네임 라벨
+        RichText(
+          text: const TextSpan(
+            text: '닉네임',
+            style: SignupStyles.labelStyle,
+            children: [
+              TextSpan(
+                text: '*',
+                style: TextStyle(
+                  fontFamily: 'Pretendard',
+                  color: SignupStyles.primaryRed,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: SignupStyles.smallSpacing),
+
+        // 닉네임 입력 필드
+        TextFormField(
+          controller: _controllers['nickname'],
+          focusNode: _focusNodes['nickname'],
+          style: const TextStyle(fontFamily: 'Pretendard', fontSize: 16.0),
+          decoration: InputDecoration(
+            hintText: '닉네임을 입력해주세요.',
+            hintStyle: SignupStyles.hintStyle,
+            suffixIcon:
+                _controllers['nickname']!.text.isNotEmpty
+                    ? _buildStatusIcon(
+                      !_signupController.isNicknameFormatValid ||
+                          _signupController.isNicknameDuplicate,
+                    )
+                    : null,
+            contentPadding: SignupStyles.fieldPadding,
+            border: SignupStyles.getDefaultBorder(),
+            enabledBorder:
+                (!_signupController.isNicknameFormatValid ||
+                        _signupController.isNicknameDuplicate)
+                    ? SignupStyles.getErrorBorder()
+                    : SignupStyles.getDefaultBorder(),
+            focusedBorder:
+                (!_signupController.isNicknameFormatValid ||
+                        _signupController.isNicknameDuplicate)
+                    ? SignupStyles.getErrorBorder()
+                    : SignupStyles.getFocusedBorder(context),
+            errorBorder: SignupStyles.getErrorBorder(),
+            focusedErrorBorder: SignupStyles.getErrorBorder(),
+            errorStyle: SignupStyles.errorStyle,
+          ),
+          validator: _validateRequired,
+          onChanged: (_) {
+            setState(() {});
+          },
+        ),
+
+        // 닉네임 에러 메시지 표시
+        if (_signupController.nicknameErrorMessage != null &&
+            _signupController.nicknameErrorMessage!.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(left: 5, top: 4),
+            child: Text(
+              _signupController.nicknameErrorMessage!,
+              style: const TextStyle(
+                fontFamily: 'Pretendard',
+                color: SignupStyles.primaryRed,
+                fontSize: 12.0,
+              ),
+            ),
+          ),
+
+        // 닉네임 중복 메시지 표시
+        if (_signupController.isNicknameDuplicate &&
+            _signupController.isNicknameFormatValid)
+          Padding(
+            padding: const EdgeInsets.only(left: 5, top: 4),
+            child: Text(
+              '이미 사용 중인 닉네임입니다.',
+              style: const TextStyle(
+                fontFamily: 'Pretendard',
+                color: SignupStyles.primaryRed,
+                fontSize: 12.0,
+              ),
+            ),
+          ),
+
+        // 도움말 텍스트
+        if (_controllers['nickname']!.text.isEmpty)
+          const Padding(
+            padding: EdgeInsets.only(left: 5, top: 1),
+            child: Text(
+              '한국어, 영어, 숫자만 사용하여 최대 16자까지 입력해주세요.',
+              style: TextStyle(
+                fontFamily: 'Pretendard',
+                color: Colors.grey,
+                fontSize: 12.0,
+              ),
+            ),
+          ),
+      ],
+    );
   }
 
   // 비밀번호 검증
@@ -496,73 +965,6 @@ class _SignUpPageState extends State<SignUpPage> {
     return null;
   }
 
-  // 입력 필드 구성
-  Widget _buildInputField({
-    required TextEditingController controller,
-    required String labelText,
-    required String hintText,
-    bool obscureText = false,
-    FocusNode? focusNode,
-    String? Function(String?)? validator,
-    bool isRequired = false,
-    bool hasError = false,
-    Widget? suffixIcon,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // 라벨
-        RichText(
-          text: TextSpan(
-            text: labelText,
-            style: SignupStyles.labelStyle,
-            children:
-                isRequired
-                    ? [
-                      const TextSpan(
-                        text: '*',
-                        style: TextStyle(
-                          fontFamily: 'Pretendard',
-                          color: SignupStyles.primaryRed,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ]
-                    : null,
-          ),
-        ),
-        const SizedBox(height: SignupStyles.smallSpacing),
-
-        // 입력 필드
-        TextFormField(
-          controller: controller,
-          focusNode: focusNode,
-          obscureText: obscureText,
-          style: const TextStyle(fontFamily: 'Pretendard', fontSize: 16.0),
-          decoration: InputDecoration(
-            hintText: hintText,
-            hintStyle: SignupStyles.hintStyle,
-            suffixIcon: suffixIcon,
-            contentPadding: SignupStyles.fieldPadding,
-            border: SignupStyles.getDefaultBorder(),
-            enabledBorder:
-                hasError
-                    ? SignupStyles.getErrorBorder()
-                    : SignupStyles.getDefaultBorder(),
-            focusedBorder:
-                hasError
-                    ? SignupStyles.getErrorBorder()
-                    : SignupStyles.getFocusedBorder(context),
-            errorBorder: SignupStyles.getErrorBorder(),
-            focusedErrorBorder: SignupStyles.getErrorBorder(),
-            errorStyle: SignupStyles.errorStyle,
-          ),
-          validator: validator,
-        ),
-      ],
-    );
-  }
-
   // 비밀번호 필드 구성
   Widget _buildPasswordField() {
     return Column(
@@ -594,7 +996,7 @@ class _SignUpPageState extends State<SignUpPage> {
           focusNode: _focusNodes['password'],
           style: const TextStyle(fontFamily: 'Pretendard', fontSize: 16.0),
           decoration: InputDecoration(
-            hintText: '비밀번호를 적어주세요.',
+            hintText: '비밀번호를 입력해주세요.',
             hintStyle: SignupStyles.hintStyle,
             // 아이콘 버튼 추가
             suffixIcon: Row(
@@ -683,7 +1085,7 @@ class _SignUpPageState extends State<SignUpPage> {
           focusNode: _focusNodes['confirmPassword'],
           style: const TextStyle(fontFamily: 'Pretendard', fontSize: 16.0),
           decoration: InputDecoration(
-            hintText: '비밀번호를 적어주세요.',
+            hintText: '비밀번호를 다시 입력해주세요.',
             hintStyle: SignupStyles.hintStyle,
             // 아이콘 버튼 추가
             suffixIcon: Row(
@@ -780,7 +1182,7 @@ class _SignUpPageState extends State<SignUpPage> {
                   focusNode: _focusNodes['email'],
                   style: const TextStyle(fontFamily: 'Pretendard'),
                   decoration: const InputDecoration(
-                    hintText: '이메일을 적어주세요.',
+                    hintText: '이메일을 입력해주세요.',
                     hintStyle: SignupStyles.hintStyle,
                     contentPadding: SignupStyles.fieldPadding,
                     border: InputBorder.none,
@@ -1193,30 +1595,31 @@ class _SignUpPageState extends State<SignUpPage> {
           onChanged: (value) => _handleAgreementChange('all', value),
           isAll: true,
         ),
-        //const Divider(), //구분선
 
-        // 필수 약관 1
+        // 필수 약관 1 - 서비스 이용약관 (화살표 클릭 시 모달 표시)
         _buildAgreementCheckbox(
           text: '[필수] 서비스 이용약관 동의',
           value: _serviceAgreement,
           onChanged: (value) => _handleAgreementChange('service', value),
           isRequired: true,
           hasArrow: true,
+          onArrowTap: _showServiceTermsModal, // 화살표 클릭 시 모달 표시
         ),
 
-        // 필수 약관 2
+        // 필수 약관 2 - 개인정보 수집 및 이용 (화살표 클릭 시 모달 표시)
         _buildAgreementCheckbox(
           text: '[필수] 개인정보 수집 및 이용 동의',
           value: _privacyAgreement,
           onChanged: (value) => _handleAgreementChange('privacy', value),
           isRequired: true,
           hasArrow: true,
+          onArrowTap: _showPrivacyPolicyModal, // 화살표 클릭 시 모달 표시
         ),
       ],
     );
   }
 
-  // 약관 동의 체크박스 구성
+  // 약관 동의 체크박스 구성 (화살표 클릭 이벤트 추가)
   Widget _buildAgreementCheckbox({
     required String text,
     required bool value,
@@ -1224,6 +1627,7 @@ class _SignUpPageState extends State<SignUpPage> {
     bool isRequired = false,
     bool isAll = false,
     bool hasArrow = false,
+    VoidCallback? onArrowTap, // 화살표 클릭 이벤트 추가
   }) {
     return Row(
       children: [
@@ -1231,8 +1635,43 @@ class _SignUpPageState extends State<SignUpPage> {
           value: value,
           onChanged: onChanged,
           shape: const CircleBorder(),
+          // 선택된 상태의 색상
           activeColor:
               isAll ? SignupStyles.primaryRed : SignupStyles.primaryRed,
+
+          // 비선택 상태의 테두리 색상 변경
+          side: BorderSide(
+            color:
+                value
+                    ? SignupStyles.primaryRed
+                    : Colors.grey.shade400, // 비선택 시 회색
+            width: 1.0, // 테두리 두께
+          ),
+
+          // 배경색 변경 (선택사항)
+          fillColor: MaterialStateProperty.resolveWith<Color?>((
+            Set<MaterialState> states,
+          ) {
+            if (states.contains(MaterialState.selected)) {
+              return isAll
+                  ? SignupStyles.primaryRed
+                  : SignupStyles.primaryRed; // 선택된 상태
+            }
+            return Colors.transparent; // 비선택 상태는 투명 (또는 원하는 색상으로 변경)
+          }),
+
+          // 체크마크 색상 변경 (선택사항)
+          checkColor: Colors.white,
+
+          // 포커스/호버 색상 변경 (선택사항)
+          overlayColor: MaterialStateProperty.resolveWith<Color?>((
+            Set<MaterialState> states,
+          ) {
+            if (states.contains(MaterialState.pressed)) {
+              return SignupStyles.primaryRed.withOpacity(0.1);
+            }
+            return null;
+          }),
         ),
         Expanded(
           child: Text(
@@ -1240,29 +1679,37 @@ class _SignUpPageState extends State<SignUpPage> {
             style: TextStyle(
               fontFamily: 'Pretendard',
               fontWeight: isAll ? FontWeight.w600 : FontWeight.w400,
-              fontSize: 15.0,
+              fontSize: 16.0,
               color: Color(0xFF363636),
             ),
           ),
         ),
         if (hasArrow)
-          const Icon(
-            Icons.chevron_right_rounded,
-            color: SignupStyles.secondaryText,
+          GestureDetector(
+            onTap: onArrowTap, // 화살표 클릭 시 onArrowTap 실행
+            child: const Icon(
+              Icons.chevron_right_rounded,
+              color: SignupStyles.secondaryText,
+            ),
           ),
       ],
     );
   }
 
-  // 가입하기 버튼 구성
+  // 가입하기 버튼 구성 (수정됨 - 약관 동의 상태에 따라 버튼 활성화)
   Widget _buildSignupButton() {
     return SizedBox(
       width: double.infinity,
       height: SignupStyles.inputHeight,
       child: ElevatedButton(
-        onPressed: () => _signupController.signup(_formKey),
+        onPressed: _canSignup ? _handleSignup : null, // 수정된 부분
         style: ButtonStyle(
-          backgroundColor: MaterialStateProperty.all(SignupStyles.primaryRed),
+          backgroundColor: MaterialStateProperty.resolveWith<Color>((states) {
+            if (states.contains(MaterialState.disabled)) {
+              return Colors.grey[400]!; // 비활성화 시 회색
+            }
+            return SignupStyles.primaryRed; // 활성화 시 빨간색
+          }),
           foregroundColor: MaterialStateProperty.all(Colors.white),
           padding: MaterialStateProperty.all(
             const EdgeInsets.symmetric(vertical: 16),
@@ -1283,7 +1730,18 @@ class _SignUpPageState extends State<SignUpPage> {
             return Colors.transparent;
           }),
         ),
-        child: const Text('가입하기', style: SignupStyles.buttonStyle),
+        child: Text(
+          '가입하기',
+          style: TextStyle(
+            fontFamily: 'Pretendard',
+            fontSize: SignupStyles.buttonFontSize,
+            fontWeight: FontWeight.bold,
+            color:
+                _canSignup
+                    ? Colors.white
+                    : Colors.white.withOpacity(0.7), // 텍스트 색상도 조정
+          ),
+        ),
       ),
     );
   }
