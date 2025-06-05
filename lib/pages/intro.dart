@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter_naver_map/flutter_naver_map.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:tomapto/services/real_time_location_service.dart';
@@ -26,16 +24,13 @@ class _IntroPageState extends State<IntroPage> {
 
   Future<void> _initializeApp() async {
     try {
-      // 1. 네이버 맵 초기화
-      await _initNaverMap();
-
-      // 2. 위치 권한 확인 및 요청
+      // 1. 위치 권한 확인 및 요청
       await _checkLocationPermissions();
 
-      // 3. 로그인 상태 확인 및 서비스 초기화
+      // 2. 로그인 상태 확인 및 서비스 초기화
       await _initLocationServiceIfLoggedIn();
 
-      // 4. 모든 초기화 완료 후 메인 페이지로 이동
+      // 3. 모든 초기화 완료 후 메인 페이지로 이동
       if (mounted) {
         Navigator.of(context).pushReplacement(
           PageRouteBuilder(
@@ -61,25 +56,6 @@ class _IntroPageState extends State<IntroPage> {
           ),
         );
       }
-    }
-  }
-
-  Future<void> _initNaverMap() async {
-    try {
-      await FlutterNaverMap().init(
-        clientId: dotenv.env['NAVER_API_KEY'] ?? '',
-        onAuthFailed: (NAuthFailedException ex) {
-          print('네이버 맵 인증 실패: ${ex.message}');
-        },
-      );
-      print('네이버 맵 초기화 성공');
-    } catch (e) {
-      if (e is SocketException || e is TimeoutException) {
-        print('네트워크 오류로 인한 네이버 맵 초기화 실패. 앱을 종료합니다.');
-        exit(0);
-      }
-      print('네이버 맵 초기화 오류: $e');
-      // 네이버 맵 초기화 실패는 앱 계속 진행
     }
   }
 

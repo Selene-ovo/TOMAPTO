@@ -6,7 +6,7 @@ import 'package:tomapto/controllers/account/login_controller.dart';
 import 'package:tomapto/widgets/navbar.dart';
 import 'package:tomapto/pages/profile/profile.dart';
 import 'package:tomapto/pages/profile/signup.dart';
-import 'password_reset.dart'; 
+import 'password_reset.dart';
 
 // 커스텀 텍스트 필드 위젯
 class CustomTextField extends StatelessWidget {
@@ -174,16 +174,10 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   // 로그인 처리
-  // login.dart 파일의 _LoginPageState 클래스 내부
-
-  // 로그인 처리
-  // login.dart 파일의 _login() 함수 수정
-  // 로그인 처리
   Future<void> _login() async {
     // 키보드 숨기기
     FocusScope.of(context).unfocus();
 
-    // _controller.login() 함수에 rememberMe 값을 전달
     final success = await _controller.login(context, setState);
     if (success && mounted) {
       // 로그인 성공 시 프로필 페이지로 이동
@@ -266,7 +260,8 @@ class _LoginPageState extends State<LoginPage> {
           },
           child: Row(
             children: [
-              Container(
+              AnimatedContainer(
+                duration: Duration(milliseconds: 100), // 애니메이션 시간
                 width: circleSize,
                 height: circleSize,
                 decoration: BoxDecoration(
@@ -274,7 +269,26 @@ class _LoginPageState extends State<LoginPage> {
                   color:
                       _controller.rememberMe
                           ? const Color(0xFFFB233B)
-                          : Color.fromARGB(255, 203, 211, 221),
+                          : Color(0xFFFFFFFF),
+                  border: Border.all(
+                    color:
+                        _controller.rememberMe
+                            ? const Color(0xFFFB233B)
+                            : Colors.grey.shade400,
+                    width: 1,
+                  ),
+                ),
+                child: AnimatedSwitcher(
+                  duration: Duration(milliseconds: 150),
+                  child:
+                      _controller.rememberMe
+                          ? Icon(
+                            Icons.check_rounded,
+                            key: ValueKey('checked'), // 애니메이션을 위한 키
+                            color: Colors.white,
+                            size: circleSize * 0.8,
+                          )
+                          : SizedBox(key: ValueKey('unchecked')),
                 ),
               ),
               SizedBox(width: spaceBetween),
@@ -334,6 +348,8 @@ class _LoginPageState extends State<LoginPage> {
       onTap: _unfocusAll, // 배경을 터치하면 모든 포커스 해제
       child: Scaffold(
         backgroundColor: Colors.white,
+        // resizeToAvoidBottomInset: false 추가 - 키보드가 올라와도 화면 크기 조정 안함
+        resizeToAvoidBottomInset: false,
         body: Stack(
           children: [
             // 메인 콘텐츠
@@ -341,6 +357,12 @@ class _LoginPageState extends State<LoginPage> {
               children: [
                 Expanded(
                   child: SingleChildScrollView(
+                    // 키보드가 올라와도 스크롤 가능하도록 패딩 추가
+                    padding: EdgeInsets.only(
+                      bottom:
+                          MediaQuery.of(context).viewInsets.bottom +
+                          90, // navbar 높이만큼 여유 공간
+                    ),
                     child: Padding(
                       padding: EdgeInsets.symmetric(
                         horizontal: horizontalPadding,
@@ -417,11 +439,9 @@ class _LoginPageState extends State<LoginPage> {
               ],
             ),
 
-            // 화면 하단에 고정된 내비게이션 바
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0, // 화면 최하단에 배치
+            // 화면 하단에 고정된 내비게이션 바 (키보드와 무관하게 고정)
+            Align(
+              alignment: Alignment.bottomCenter,
               child: BottomNavBar(
                 currentIndex: 3,
                 onTap: (index) {

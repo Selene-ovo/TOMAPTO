@@ -30,16 +30,12 @@ class TransitApp extends StatefulWidget {
 
 class _TransitAppState extends State<TransitApp> {
   int _selectedIndex = 0;
-
   String _originPlace = '위치 확인 중...';
   String _destinationPlace = '도착지 입력';
-
-  // 출발지와 도착지의 좌표 저장
   NLatLng? _originCoords;
   NLatLng? _destinationCoords;
 
   final LocationController _locationController = LocationController();
-  // final AddressController _addressController = AddressController(); // 제거
   final TransitMapController _transitMapController = TransitMapController();
   final RouteController _routeController = RouteController();
 
@@ -47,277 +43,9 @@ class _TransitAppState extends State<TransitApp> {
   void initState() {
     super.initState();
     _initializeLocation();
-
-    // 초기 출발지/도착지 설정
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _applyInitialPlaces();
     });
-  }
-
-  // 초기 출발지/도착지 설정 메서드
-  void _applyInitialPlaces() async {
-    print('🔍🔍🔍 _applyInitialPlaces 시작 🔍🔍🔍');
-    print('전달받은 초기값들:');
-    print('  initialOriginPlace: ${widget.initialOriginPlace}');
-    print('  initialOriginCoords: ${widget.initialOriginCoords}');
-    print('  initialDestinationPlace: ${widget.initialDestinationPlace}');
-    print('  initialDestinationCoords: ${widget.initialDestinationCoords}');
-
-    // 기존 마커 초기화
-    _transitMapController.clearAllMarkersAndRoutes();
-
-    bool shouldUpdateState = false;
-
-    // 🎯 출발지 처리 (매우 강력한 수정)
-    if (widget.initialOriginPlace != null) {
-      print('📍 출발지 처리 시작...');
-
-      // ✨ 1순위: 좌표가 직접 전달된 경우 - 무조건 이것 사용!
-      if (widget.initialOriginCoords != null) {
-        print('🔥🔥🔥 출발지 좌표 직접 전달됨! 🔥🔥🔥');
-        print('   상가명: ${widget.initialOriginPlace}');
-        print('   위도: ${widget.initialOriginCoords!.latitude}');
-        print('   경도: ${widget.initialOriginCoords!.longitude}');
-        print('🚨 중요: 주소 검색을 절대 하지 않고 이 좌표만 사용합니다!');
-
-        _originPlace = widget.initialOriginPlace!;
-        _originCoords = widget.initialOriginCoords!; // 정확한 좌표 직접 사용 ✨
-        _transitMapController.setCurrentPosition(_originCoords!);
-        shouldUpdateState = true;
-
-        print('✅ 출발지 좌표 설정 완료: $_originCoords');
-        print('🎯 이제 이 좌표로 경로를 계산합니다!');
-      }
-      // 2순위: "현재 위치"인 경우
-      else if (widget.initialOriginPlace == "현재 위치") {
-        print('📱 출발지가 "현재 위치"입니다 - GPS 좌표 사용');
-        _originPlace = "현재 위치";
-        _routeController.invalidateCache();
-        await _getOriginCoordinates(); // GPS 좌표 가져오기
-        shouldUpdateState = true;
-      }
-      // 3순위: 일반적인 주소 검색 (최후의 수단)
-      else {
-        print('⚠️⚠️⚠️ 경고: 좌표가 전달되지 않아 주소 검색을 수행합니다 ⚠️⚠️⚠️');
-        print('   검색어: ${widget.initialOriginPlace}');
-        print('   이는 정확하지 않을 수 있습니다!');
-        _originPlace = widget.initialOriginPlace!;
-        _routeController.invalidateCache();
-        await _getOriginCoordinates();
-        shouldUpdateState = true;
-      }
-    }
-
-    // 🎯 도착지 처리 (기존 로직 유지)
-    if (widget.initialDestinationPlace != null &&
-        widget.initialDestinationPlace != '도착지 입력') {
-      print('📍 도착지 처리 시작...');
-
-      if (widget.initialDestinationCoords != null) {
-        print('🔥 도착지 좌표 직접 전달됨!');
-        print('   상가명: ${widget.initialDestinationPlace}');
-        print('   좌표: ${widget.initialDestinationCoords}');
-
-        _destinationPlace = widget.initialDestinationPlace!;
-        _destinationCoords = widget.initialDestinationCoords!;
-        _transitMapController.setDestinationPosition(_destinationCoords!);
-        shouldUpdateState = true;
-
-        print('✅ 도착지 좌표 설정 완료: $_destinationCoords');
-      } else {
-        print('📍 도착지 주소 검색 수행: ${widget.initialDestinationPlace}');
-        _destinationPlace = widget.initialDestinationPlace!;
-        _routeController.invalidateCache();
-        await _getDestinationCoordinates();
-        shouldUpdateState = true;
-      }
-    }
-
-    // 변경사항이 있을 때만 setState 호출
-    if (shouldUpdateState) {
-      setState(() {
-        print('✅✅✅ 초기값 설정 완료 ✅✅✅');
-        print('   출발지: $_originPlace');
-        print('   출발지 좌표: $_originCoords');
-        print('   도착지: $_destinationPlace');
-        print('   도착지 좌표: $_destinationCoords');
-
-        if (_originCoords != null && _destinationCoords != null) {
-          print('🎯 출발지와 도착지 모두 설정되었습니다. 경로 계산 준비 완료!');
-        }
-      });
-    }
-  }
-
-  // 출발지 주소를 좌표로 변환하는 메서드 - route_controller 사용
-  Future<void> _getOriginCoordinates() async {
-    print('🔍 _getOriginCoordinates 시작: $_originPlace');
-
-    // 🚨 1순위: 좌표가 이미 설정되어 있으면 절대 검색하지 않음
-    if (_originCoords != null) {
-      print('🔥🔥🔥 출발지 좌표가 이미 설정되어 있습니다 🔥🔥🔥');
-      print('   좌표: $_originCoords');
-      print('🚨 주소 검색을 완전히 건너뛰고 기존 좌표를 사용합니다!');
-
-      _transitMapController.setCurrentPosition(_originCoords!);
-
-      if (_destinationPlace == '도착지 입력' || _destinationCoords == null) {
-        print('도착지가 없으므로 출발지로 카메라 이동');
-        _transitMapController.moveCamera(
-          _selectedIndex == 0 ? TransitMode.car : TransitMode.walk,
-          _originCoords!,
-          17,
-        );
-      }
-      print('✅ 기존 좌표 사용 완료 - 메서드 종료');
-      return; // 여기서 완전히 종료 - 아래 코드는 실행되지 않음
-    }
-
-    // 상태 체크
-    if (_originPlace == '위치 확인 중...' ||
-        _originPlace == '위치 권한 없음' ||
-        _originPlace == '위치 확인 실패') {
-      print('⚠️ 위치 상태가 불완전합니다: $_originPlace');
-      return;
-    }
-
-    // 🚨 2순위: "현재 위치"인 경우 GPS 좌표 사용
-    if (_originPlace == "현재 위치") {
-      print('📱 현재 위치 GPS 좌표 가져오기 시작...');
-      try {
-        final position = await _locationController.getCurrentLocation();
-        if (position != null) {
-          setState(() {
-            _originCoords = position;
-          });
-          _transitMapController.setCurrentPosition(_originCoords!);
-          print('✅ 현재 위치 좌표 설정 완료: $_originCoords');
-          return;
-        } else {
-          print('❌ 현재 위치를 가져올 수 없습니다');
-          return;
-        }
-      } catch (e) {
-        print('❌ 현재 위치 가져오기 오류: $e');
-        return;
-      }
-    }
-
-    // 🚨 3순위: 최후의 수단 - 주소 검색 (경고와 함께)
-    print('⚠️⚠️⚠️ 경고: 좌표가 설정되지 않아 주소 검색을 수행합니다 ⚠️⚠️⚠️');
-    print('   검색어: $_originPlace');
-    print('   이는 POI에서 좌표가 제대로 전달되지 않았다는 의미입니다!');
-    print('   검색 결과는 원래 위치와 다를 수 있습니다!');
-
-    try {
-      print('🔍 주소 검색 시작...');
-      final results = await _routeController.searchAddressByKeyword(
-        _originPlace,
-      );
-
-      print('검색 결과 수: ${results.length}');
-
-      if (results.isNotEmpty) {
-        final firstResult = results[0];
-
-        print('🚨 주의: 검색으로 찾은 첫 번째 결과를 사용합니다');
-        print('  name: ${firstResult['name']}');
-        print('  address: ${firstResult['address']}');
-        print('  x (mapx): ${firstResult['x']}');
-        print('  y (mapy): ${firstResult['y']}');
-
-        if (firstResult['x'] != null && firstResult['y'] != null) {
-          final coords = _routeController.convertAddressToCoords(firstResult);
-
-          print('🚨🚨🚨 경고: 검색으로 변환된 좌표 사용 🚨🚨🚨');
-          print('   변환된 좌표: $coords');
-          print('   이 좌표는 원래 터치한 위치와 다를 수 있습니다!');
-
-          setState(() {
-            _originCoords = coords;
-          });
-
-          _transitMapController.setCurrentPosition(_originCoords!);
-
-          if (_destinationPlace == '도착지 입력' || _destinationCoords == null) {
-            _transitMapController.moveCamera(
-              _selectedIndex == 0 ? TransitMode.car : TransitMode.walk,
-              coords,
-              17,
-            );
-          }
-
-          print('⚠️ 검색 기반 출발지 설정 완료: $_originCoords');
-        } else {
-          print('❌ 좌표값이 null입니다');
-        }
-      } else {
-        print('❌ 검색 결과가 없습니다');
-      }
-    } catch (e) {
-      print('❌ 출발지 좌표 변환 오류: $e');
-    }
-  }
-
-  // 도착지 주소를 좌표로 변환하는 메서드 - route_controller 사용
-  Future<void> _getDestinationCoordinates() async {
-    print('_getDestinationCoordinates 시작: $_destinationPlace');
-
-    if (_destinationPlace == '도착지 입력') {
-      setState(() {
-        _destinationCoords = null;
-      });
-      _transitMapController.setDestinationPosition(null);
-      print('도착지 초기화 완료');
-      return;
-    }
-
-    // "현재 위치"인 경우 실제 GPS 좌표 사용
-    if (_destinationPlace == "현재 위치") {
-      try {
-        final position = await _locationController.getCurrentLocation();
-        if (position != null) {
-          setState(() {
-            _destinationCoords = position;
-          });
-          _transitMapController.setDestinationPosition(_destinationCoords!);
-          print('현재 위치 좌표 설정 완료 (도착지): $_destinationCoords');
-          return;
-        } else {
-          print('현재 위치를 가져올 수 없습니다 (도착지)');
-          return;
-        }
-      } catch (e) {
-        print('현재 위치 가져오기 오류 (도착지): $e');
-        return;
-      }
-    }
-
-    // 일반적인 주소 검색 로직
-    try {
-      print('도착지 주소 검색: $_destinationPlace');
-      final results = await _routeController.searchAddressByKeyword(
-        _destinationPlace,
-      );
-
-      if (results.isNotEmpty) {
-        final firstResult = results[0];
-        if (firstResult['x'] != null && firstResult['y'] != null) {
-          final coords = _routeController.convertAddressToCoords(firstResult);
-
-          setState(() {
-            _destinationCoords = coords;
-          });
-
-          print('도착지 좌표 설정 완료: $_destinationCoords');
-          _transitMapController.setDestinationPosition(_destinationCoords!);
-        }
-      } else {
-        print('❌ 도착지 검색 결과 없음: $_destinationPlace');
-      }
-    } catch (e) {
-      print('❌ 도착지 좌표 변환 오류: $e');
-    }
   }
 
   @override
@@ -326,6 +54,108 @@ class _TransitAppState extends State<TransitApp> {
     super.dispose();
   }
 
+  /// 초기 출발지/도착지 설정
+  void _applyInitialPlaces() async {
+    _transitMapController.clearAllMarkersAndRoutes();
+    bool shouldUpdateState = false;
+
+    // 출발지 처리
+    if (widget.initialOriginPlace != null) {
+      if (widget.initialOriginCoords != null) {
+        // 좌표가 직접 전달된 경우
+        _originPlace = widget.initialOriginPlace!;
+        _originCoords = widget.initialOriginCoords!;
+        _transitMapController.setCurrentPosition(_originCoords!);
+        shouldUpdateState = true;
+      } else if (widget.initialOriginPlace == "현재 위치") {
+        // 현재 위치인 경우
+        _originPlace = "현재 위치";
+        _routeController.invalidateCache();
+        await _getOriginCoordinates();
+        shouldUpdateState = true;
+      } else {
+        // 일반 주소 검색
+        _originPlace = widget.initialOriginPlace!;
+        _routeController.invalidateCache();
+        await _getOriginCoordinates();
+        shouldUpdateState = true;
+      }
+    }
+
+    // 도착지 처리
+    if (widget.initialDestinationPlace != null &&
+        widget.initialDestinationPlace != '도착지 입력') {
+      if (widget.initialDestinationCoords != null) {
+        // 좌표가 직접 전달된 경우
+        _destinationPlace = widget.initialDestinationPlace!;
+        _destinationCoords = widget.initialDestinationCoords!;
+        _transitMapController.setDestinationPosition(_destinationCoords!);
+        shouldUpdateState = true;
+      } else {
+        // 일반 주소 검색
+        _destinationPlace = widget.initialDestinationPlace!;
+        _routeController.invalidateCache();
+        await _getDestinationCoordinates();
+        shouldUpdateState = true;
+      }
+    }
+
+    if (shouldUpdateState) {
+      setState(() {});
+    }
+  }
+
+  /// 출발지 주소를 좌표로 변환
+  Future<void> _getOriginCoordinates() async {
+    // 좌표가 이미 설정되어 있으면 기존 좌표 사용
+    if (_originCoords != null) {
+      _transitMapController.setCurrentPosition(_originCoords!);
+      if (_destinationPlace == '도착지 입력' || _destinationCoords == null) {
+        _transitMapController.moveCamera(
+          _selectedIndex == 0 ? TransitMode.car : TransitMode.walk,
+          _originCoords!,
+          17,
+        );
+      }
+      return;
+    }
+
+    // 위치 상태 체크
+    if (_isInvalidLocationState(_originPlace)) {
+      return;
+    }
+
+    // 현재 위치인 경우 GPS 좌표 사용
+    if (_originPlace == "현재 위치") {
+      await _setCurrentLocationAsOrigin();
+      return;
+    }
+
+    // 주소 검색으로 좌표 찾기
+    await _searchOriginCoordinates();
+  }
+
+  /// 도착지 주소를 좌표로 변환
+  Future<void> _getDestinationCoordinates() async {
+    if (_destinationPlace == '도착지 입력') {
+      setState(() {
+        _destinationCoords = null;
+      });
+      _transitMapController.setDestinationPosition(null);
+      return;
+    }
+
+    // 현재 위치인 경우
+    if (_destinationPlace == "현재 위치") {
+      await _setCurrentLocationAsDestination();
+      return;
+    }
+
+    // 주소 검색으로 좌표 찾기
+    await _searchDestinationCoordinates();
+  }
+
+  /// 초기 위치 설정
   Future<void> _initializeLocation() async {
     final hasPermission = await _locationController.checkLocationPermission(
       context,
@@ -337,7 +167,6 @@ class _TransitAppState extends State<TransitApp> {
       return;
     }
 
-    // 현재 위치 가져오기
     final position = await _locationController.getCurrentLocation();
     if (position != null) {
       setState(() {
@@ -353,7 +182,6 @@ class _TransitAppState extends State<TransitApp> {
         });
       }
     } else {
-      // 현재 위치를 가져올 수 없는 경우에도 초기 출발지 설정
       if (widget.initialOriginPlace == null) {
         setState(() {
           _originPlace = '위치 확인 실패';
@@ -362,8 +190,8 @@ class _TransitAppState extends State<TransitApp> {
     }
   }
 
+  /// 경로를 표시하기 위한 카메라 범위 조정
   void _fitBoundsToShowRoute(NLatLng origin, NLatLng destination) {
-    // 두 지점이 너무 가까이 있는지 확인
     double distance = _calculateDistance(origin, destination);
 
     if (distance < 0.5) {
@@ -410,39 +238,40 @@ class _TransitAppState extends State<TransitApp> {
 
     if (controller != null) {
       double cameraPadding = distance < 2.0 ? 15.0 : 30.0;
-
       controller.updateCamera(
         NCameraUpdate.fitBounds(bounds, padding: EdgeInsets.all(cameraPadding)),
       );
     }
   }
 
+  /// 현재 위치 새로고침
   void _refreshCurrentLocation(TransitMode mode) async {
-    final position = await _locationController.getCurrentLocation();
-    if (position != null) {
-      setState(() {
-        _originCoords = position;
-      });
-      _transitMapController.setCurrentPosition(position);
+    try {
+      final position = await _locationController.getCurrentLocation();
+      if (position != null) {
+        setState(() {
+          _originCoords = position;
+        });
+        _transitMapController.setCurrentPosition(position);
+        _transitMapController.moveCamera(mode, position, 17);
 
-      // 자동차 모드와 도보 모드 둘 다 더 확대된 줌 레벨 사용
-      _transitMapController.moveCamera(mode, position, 17);
+        final address = await _routeController.getAddressFromCoords(position);
+        setState(() {
+          _originPlace = address;
+        });
 
-      final address = await _routeController.getAddressFromCoords(position);
-      setState(() {
-        _originPlace = address;
-      });
-
-      _routeController.invalidateCache();
-    } else {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('현재 위치를 가져오는 데 실패했습니다.')));
+        _routeController.invalidateCache();
+      } else {
+        _showErrorMessage('현재 위치를 가져오는 데 실패했습니다.');
+      }
+    } catch (e) {
+      _showErrorMessage('위치 정보를 가져오는 중 오류가 발생했습니다.');
     }
   }
 
+  /// 두 좌표 간의 거리 계산 (킬로미터)
   double _calculateDistance(NLatLng point1, NLatLng point2) {
-    const double earthRadius = 6371; // 지구 반지름 (km)
+    const double earthRadius = 6371;
     const double pi = 3.1415926535897932;
 
     double lat1Rad = point1.latitude * (pi / 180);
@@ -458,6 +287,7 @@ class _TransitAppState extends State<TransitApp> {
     return earthRadius * c;
   }
 
+  /// 네비게이션 탭 변경 처리
   void _handleNavIndexChanged(int index) {
     final isSameTab = _selectedIndex == index;
 
@@ -465,49 +295,31 @@ class _TransitAppState extends State<TransitApp> {
       _selectedIndex = index;
     });
 
-    if (index == 0) {
-      // 자동차 탭 선택
-      if (_transitMapController.isCarMapInitialized) {
-        final position = _transitMapController.getCurrentPosition();
-        if (position != null) {
-          // 도착지가 설정되어 있고 경로가 있는 경우
-          final destinationPosition =
-              _transitMapController.getCurrentDestinationPosition();
-          if (destinationPosition != null && _destinationPlace != '도착지 입력') {
-            _fitBoundsToShowRoute(position, destinationPosition);
-          } else {
-            _transitMapController.moveCamera(TransitMode.car, position, 17);
+    final mode = index == 0 ? TransitMode.car : TransitMode.walk;
+    final isMapInitialized =
+        index == 0
+            ? _transitMapController.isCarMapInitialized
+            : _transitMapController.isWalkMapInitialized;
 
-            if (isSameTab) {
-              _refreshCurrentLocation(TransitMode.car);
-            }
-          }
-        }
-      }
-    } else if (index == 1) {
-      // 도보 탭 선택
-      if (_transitMapController.isWalkMapInitialized) {
-        final position = _transitMapController.getCurrentPosition();
-        if (position != null) {
-          // 도착지가 설정되어 있고 경로가 있는 경우
-          final destinationPosition =
-              _transitMapController.getCurrentDestinationPosition();
-          if (destinationPosition != null && _destinationPlace != '도착지 입력') {
-            _fitBoundsToShowRoute(position, destinationPosition);
-          } else {
-            _transitMapController.moveCamera(TransitMode.walk, position, 17);
-
-            if (isSameTab) {
-              _refreshCurrentLocation(TransitMode.walk);
-            }
+    if (isMapInitialized) {
+      final position = _transitMapController.getCurrentPosition();
+      if (position != null) {
+        final destinationPosition =
+            _transitMapController.getCurrentDestinationPosition();
+        if (destinationPosition != null && _destinationPlace != '도착지 입력') {
+          _fitBoundsToShowRoute(position, destinationPosition);
+        } else {
+          _transitMapController.moveCamera(mode, position, 17);
+          if (isSameTab) {
+            _refreshCurrentLocation(mode);
           }
         }
       }
     }
   }
 
+  /// 출발지 변경 처리
   void _handleOriginChanged(String value) async {
-    print('출발지 변경 시작: $value');
     _transitMapController.clearAllMarkersAndRoutes();
     setState(() {
       _originPlace = value;
@@ -515,16 +327,12 @@ class _TransitAppState extends State<TransitApp> {
     _routeController.invalidateCache();
 
     await _getOriginCoordinates();
-
     await Future.delayed(Duration(milliseconds: 100));
-
     setState(() {});
-
-    print('출발지 변경 완료 - 모달 업데이트 대기 중');
   }
 
+  /// 도착지 변경 처리
   void _handleDestinationChanged(String value) async {
-    print('도착지 변경 시작: $value');
     _transitMapController.clearAllMarkersAndRoutes();
     setState(() {
       _destinationPlace = value;
@@ -532,39 +340,27 @@ class _TransitAppState extends State<TransitApp> {
     _routeController.invalidateCache();
 
     await _getDestinationCoordinates();
-
     await Future.delayed(Duration(milliseconds: 100));
-
     setState(() {});
-
-    print('도착지 변경 완료 - 모달 업데이트 대기 중');
   }
 
-  // transit.dart의 _handleSwapLocations 메서드 수정
-
+  /// 출발지/도착지 위치 교환
   void _handleSwapLocations() async {
-    print('출발지/도착지 스왑 시작');
-
-    // 기존 마커와 경로 제거
     _transitMapController.clearAllMarkersAndRoutes();
 
-    // 출발지와 도착지 정보 교환
     final tempPlace = _originPlace;
     final tempCoords = _originCoords;
 
     setState(() {
-      // 텍스트 교체 시 기본 텍스트 처리
+      // 텍스트 교체
       if (_destinationPlace == '도착지 입력') {
-        _originPlace = '출발지 입력'; // 🔥 '도착지 입력' → '출발지 입력'으로 수정
+        _originPlace = '출발지 입력';
       } else {
         _originPlace = _destinationPlace;
       }
 
-      if (tempPlace == '출발지 입력' ||
-          tempPlace == '위치 확인 중...' ||
-          tempPlace == '위치 권한 없음' ||
-          tempPlace == '위치 확인 실패') {
-        _destinationPlace = '도착지 입력'; // 🔥 출발지가 기본값이면 도착지도 기본값으로
+      if (_isInvalidLocationState(tempPlace)) {
+        _destinationPlace = '도착지 입력';
       } else {
         _destinationPlace = tempPlace;
       }
@@ -574,9 +370,7 @@ class _TransitAppState extends State<TransitApp> {
       _destinationCoords = tempCoords;
     });
 
-    // 중요: 반드시 캐시를 무효화하여 새 경로를 강제로 계산하도록 함
     _routeController.invalidateCache();
-    print('경로 캐시 무효화됨');
 
     // TransitMapController에 새 위치 설정
     if (_originCoords != null) {
@@ -584,34 +378,138 @@ class _TransitAppState extends State<TransitApp> {
     }
     _transitMapController.setDestinationPosition(_destinationCoords);
 
-    print('스왑 후 좌표 - 출발지: $_originCoords, 도착지: $_destinationCoords');
-
-    // 이제 해당 모달의 업데이트를 강제
+    // 모달 강제 갱신
     if (_originCoords != null &&
         _destinationCoords != null &&
         _destinationPlace != '도착지 입력') {
-      // 약간의 지연 후 setState를 호출하여 해당 모달의 didUpdateWidget을 트리거
-      await Future.delayed(Duration(milliseconds: 200));
-
-      // 명시적으로 currentIndex를 변경했다가 다시 원래 값으로 돌려서 재구축 강제
-      int originalIndex = _selectedIndex;
-      setState(() {
-        _selectedIndex = (_selectedIndex == 0) ? 1 : 0; // 다른 값으로 변경
-      });
-
-      await Future.delayed(Duration(milliseconds: 100));
-
-      setState(() {
-        _selectedIndex = originalIndex; // 원래 값으로 복구
-      });
-
-      print('모달 강제 갱신 완료');
+      await _forceModalRefresh();
     }
   }
 
-  // 지도 터치 핸들러 - 이제 아무 작업도 수행하지 않음
+  /// 지도 터치 처리 (현재는 비활성화)
   void _handleLocationUpdated(NLatLng latLng) {
-    // 지도 터치시 아무런 작업도 수행하지 않음
+    // 현재는 아무 작업도 수행하지 않음
+  }
+
+  // Private helper methods
+
+  /// 위치 상태가 유효하지 않은지 확인
+  bool _isInvalidLocationState(String place) {
+    return place == '위치 확인 중...' ||
+        place == '위치 권한 없음' ||
+        place == '위치 확인 실패' ||
+        place == '출발지 입력';
+  }
+
+  /// 현재 위치를 출발지로 설정
+  Future<void> _setCurrentLocationAsOrigin() async {
+    try {
+      final position = await _locationController.getCurrentLocation();
+      if (position != null) {
+        setState(() {
+          _originCoords = position;
+        });
+        _transitMapController.setCurrentPosition(_originCoords!);
+      }
+    } catch (e) {
+      _showErrorMessage('현재 위치를 가져올 수 없습니다.');
+    }
+  }
+
+  /// 현재 위치를 도착지로 설정
+  Future<void> _setCurrentLocationAsDestination() async {
+    try {
+      final position = await _locationController.getCurrentLocation();
+      if (position != null) {
+        setState(() {
+          _destinationCoords = position;
+        });
+        _transitMapController.setDestinationPosition(_destinationCoords!);
+      }
+    } catch (e) {
+      _showErrorMessage('현재 위치를 가져올 수 없습니다.');
+    }
+  }
+
+  /// 출발지 좌표 검색
+  Future<void> _searchOriginCoordinates() async {
+    try {
+      final results = await _routeController.searchAddressByKeyword(
+        _originPlace,
+      );
+
+      if (results.isNotEmpty) {
+        final firstResult = results[0];
+        if (firstResult['x'] != null && firstResult['y'] != null) {
+          final coords = _routeController.convertAddressToCoords(firstResult);
+
+          setState(() {
+            _originCoords = coords;
+          });
+
+          _transitMapController.setCurrentPosition(_originCoords!);
+
+          if (_destinationPlace == '도착지 입력' || _destinationCoords == null) {
+            _transitMapController.moveCamera(
+              _selectedIndex == 0 ? TransitMode.car : TransitMode.walk,
+              coords,
+              17,
+            );
+          }
+        }
+      }
+    } catch (e) {
+      _showErrorMessage('출발지 좌표를 찾을 수 없습니다.');
+    }
+  }
+
+  /// 도착지 좌표 검색
+  Future<void> _searchDestinationCoordinates() async {
+    try {
+      final results = await _routeController.searchAddressByKeyword(
+        _destinationPlace,
+      );
+
+      if (results.isNotEmpty) {
+        final firstResult = results[0];
+        if (firstResult['x'] != null && firstResult['y'] != null) {
+          final coords = _routeController.convertAddressToCoords(firstResult);
+
+          setState(() {
+            _destinationCoords = coords;
+          });
+
+          _transitMapController.setDestinationPosition(_destinationCoords!);
+        }
+      }
+    } catch (e) {
+      _showErrorMessage('도착지 좌표를 찾을 수 없습니다.');
+    }
+  }
+
+  /// 모달 강제 새로고침
+  Future<void> _forceModalRefresh() async {
+    await Future.delayed(Duration(milliseconds: 200));
+
+    int originalIndex = _selectedIndex;
+    setState(() {
+      _selectedIndex = (_selectedIndex == 0) ? 1 : 0;
+    });
+
+    await Future.delayed(Duration(milliseconds: 100));
+
+    setState(() {
+      _selectedIndex = originalIndex;
+    });
+  }
+
+  /// 에러 메시지 표시
+  void _showErrorMessage(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    }
   }
 
   @override
@@ -638,8 +536,9 @@ class _TransitAppState extends State<TransitApp> {
                 (route) => false,
               );
             },
+            currentOriginCoords: _originCoords,
+            currentDestinationCoords: _destinationCoords,
           ),
-
           Container(
             decoration: BoxDecoration(
               color: Colors.white,
@@ -673,7 +572,6 @@ class _TransitAppState extends State<TransitApp> {
               ],
             ),
           ),
-
           Expanded(
             child: IndexedStack(
               index: _selectedIndex,
@@ -685,7 +583,6 @@ class _TransitAppState extends State<TransitApp> {
                   transitMapController: _transitMapController,
                   onLocationUpdated: _handleLocationUpdated,
                 ),
-
                 WalkModal(
                   initialPosition: _originCoords,
                   originPlace: _originPlace,

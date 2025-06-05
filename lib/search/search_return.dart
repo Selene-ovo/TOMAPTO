@@ -4,14 +4,15 @@ import 'dart:async';
 import 'package:provider/provider.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:tomapto/pages/map/transit.dart';
-import 'package:tomapto/search/search_main.dart'; // 🔥 SearchMainPage import 추가
+import 'package:tomapto/search/search_main.dart';
 
-// 검색 결과 페이지
 class SearchResultPage extends StatefulWidget {
   final String searchTerm;
-  final String currentOriginPlace; // 현재 출발지
-  final String currentDestinationPlace; // 현재 도착지
-  final bool isSearchingOrigin; // 출발지 검색인지 도착지 검색인지 구분
+  final String currentOriginPlace;
+  final String currentDestinationPlace;
+  final bool isSearchingOrigin;
+  final NLatLng? currentOriginCoords;
+  final NLatLng? currentDestinationCoords;
 
   const SearchResultPage({
     super.key,
@@ -19,6 +20,8 @@ class SearchResultPage extends StatefulWidget {
     required this.currentOriginPlace,
     required this.currentDestinationPlace,
     required this.isSearchingOrigin,
+    this.currentOriginCoords,
+    this.currentDestinationCoords,
   });
 
   @override
@@ -39,29 +42,21 @@ class _SearchResultPageState extends State<SearchResultPage> {
     _initializeAndSearch();
   }
 
-  // search_return.dart의 _initializeAndSearch 메서드 수정
+  bool _isDefaultText(String text) {
+    return text == '출발지 입력' ||
+        text == '도착지 입력' ||
+        text == '위치 확인 중...' ||
+        text == '위치 권한 없음' ||
+        text == '위치 확인 실패';
+  }
 
   Future<void> _initializeAndSearch() async {
     try {
-      // 컨트롤러 초기화 (위치 정보 등) - 중요: 검색 전에 반드시 실행
       await _controller.initialize();
-      print(
-        '위치 초기화 완료: ${_controller.userPosition?.latitude}, ${_controller.userPosition?.longitude}',
-      );
 
-      bool _isDefaultText(String text) {
-        return text == '출발지 입력' ||
-            text == '도착지 입력' ||
-            text == '위치 확인 중...' ||
-            text == '위치 권한 없음' ||
-            text == '위치 확인 실패';
-      }
-
-      // 검색어가 기본 텍스트가 아닌 경우에만 검색 수행
       if (!_isDefaultText(widget.searchTerm)) {
         await _performSearch(widget.searchTerm);
       } else {
-        // 기본 텍스트인 경우 검색하지 않고 빈 결과로 설정
         setState(() {
           isLoading = false;
           searchResults = [];
@@ -69,11 +64,15 @@ class _SearchResultPageState extends State<SearchResultPage> {
         });
       }
     } catch (e) {
-      setState(() {
-        errorMessage = '검색 중 오류가 발생했습니다: $e';
-        isLoading = false;
-      });
+      _handleError('검색 중 오류가 발생했습니다: $e');
     }
+  }
+
+  void _handleError(String message) {
+    setState(() {
+      errorMessage = message;
+      isLoading = false;
+    });
   }
 
   Future<void> _performSearch(String query) async {
@@ -83,37 +82,21 @@ class _SearchResultPageState extends State<SearchResultPage> {
     });
 
     try {
-      // 검색 실행
       _controller.searchController.text = query;
       _controller.onSearchChanged(query);
-
-      // 컨트롤러의 상태 변경 감지를 위한 리스너 추가
       _controller.addListener(_onControllerUpdate);
-
-      // 검색이 완료될 때까지 대기 (debounce 시간 + 약간의 여유)
-      // 컨트롤러에 리스너를 추가했으므로 자동으로 상태 업데이트됨
     } catch (e) {
-      setState(() {
-        errorMessage = '검색 중 오류가 발생했습니다: $e';
-        isLoading = false;
-      });
+      _handleError('검색 중 오류가 발생했습니다: $e');
     }
   }
 
-  // 컨트롤러 상태 변경 시 호출되는 메서드
   void _onControllerUpdate() {
-    // 컨트롤러의 상태가 변경되면 위젯 상태도 업데이트
     if (mounted) {
       setState(() {
         isLoading = _controller.isLoading;
         searchResults = _controller.searchResults;
         errorMessage = _controller.errorMessage;
       });
-
-      // 검색 완료되고 결과가 있으면 거리 순으로 정렬 (이미 controller에서 정렬됨)
-      if (!isLoading && searchResults.isNotEmpty) {
-        print('검색 결과 ${searchResults.length}개, 이미 거리순으로 정렬됨');
-      }
     }
   }
 
@@ -123,119 +106,110 @@ class _SearchResultPageState extends State<SearchResultPage> {
     });
   }
 
-  void _toggleFavorite(int index) {
-    // 실제로는 즐겨찾기 상태를 저장하는 로직 필요
-    setState(() {
-      // 현재는 임시로 상태만 토글
-      final result = searchResults[index];
-      // 여기서는 임의로 반전시키지만, 실제로는 DB에 저장하는 로직 필요
-      // 실제 구현에서는 컨트롤러를 통해 DB 업데이트 필요
-    });
-  }
-
-  // 현재 내 위치 버튼 클릭 처리 - 위치 갱신 추가
-  void _onCurrentLocationPressed() async {
+  Future<void> _onCurrentLocationPressed() async {
     try {
-      // 로딩 상태 표시
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const Center(child: CircularProgressIndicator()),
-      );
+      _showLoadingDialog();
 
-      // 최신 위치 정보로 업데이트
       await _controller.updateUserLocation();
-
-      // 현재 위치 가져오기
       final position = await _controller.getCurrentPosition();
 
-      // 로딩 다이얼로그 닫기
       Navigator.pop(context);
 
       if (position != null) {
-        // 좌표값을 직접 사용하여 길찾기 페이지로 이동
+        String locationName = _getLocationDisplayName();
         final currentLocation = NLatLng(position.latitude, position.longitude);
 
-        if (widget.isSearchingOrigin) {
-          // 출발지로 설정 - 좌표와 함께 전달
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(
-              builder:
-                  (context) => TransitApp(
-                    initialOriginPlace: "현재 위치", // 표시용 텍스트
-                    initialOriginCoords: currentLocation, // 실제 좌표 전달
-                    initialDestinationPlace:
-                        widget.currentDestinationPlace != '도착지 입력'
-                            ? widget.currentDestinationPlace
-                            : null,
-                  ),
-            ),
-            (route) => false,
-          );
-        } else {
-          // 도착지로 설정 - 좌표와 함께 전달
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(
-              builder:
-                  (context) => TransitApp(
-                    initialOriginPlace:
-                        widget.currentOriginPlace != '위치 확인 중...' &&
-                                widget.currentOriginPlace != '위치 권한 없음' &&
-                                widget.currentOriginPlace != '위치 확인 실패'
-                            ? widget.currentOriginPlace
-                            : null,
-                    initialDestinationPlace: "현재 위치", // 표시용 텍스트
-                    initialDestinationCoords: currentLocation, // 실제 좌표 전달
-                  ),
-            ),
-            (route) => false,
-          );
-        }
-
-        // 최근 검색어에 추가
-        _controller.addToRecentSearches("현재 위치");
+        _navigateToTransitApp(locationName, currentLocation);
+        _controller.addToRecentSearches(locationName);
       } else {
-        // 위치 정보를 가져올 수 없는 경우
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              '현재 위치를 가져올 수 없습니다. 위치 권한을 확인해주세요.',
-              style: TextStyle(fontFamily: "Pretendard"),
-            ),
-            duration: Duration(seconds: 3),
-          ),
-        );
+        _showErrorSnackBar('현재 위치를 가져올 수 없습니다. 위치 권한을 확인해주세요.');
       }
     } catch (e) {
-      // 로딩 다이얼로그가 열려있으면 닫기
       if (Navigator.canPop(context)) {
         Navigator.pop(context);
       }
+      _showErrorSnackBar('위치 정보를 가져오는 중 오류가 발생했습니다: $e');
+    }
+  }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '위치 정보를 가져오는 중 오류가 발생했습니다: $e',
-            style: const TextStyle(fontFamily: "Pretendard"),
-          ),
-          duration: const Duration(seconds: 3),
+  String _getLocationDisplayName() {
+    String locationName = _controller.userLocationAddress ?? "현재 위치";
+
+    if (locationName == "주소 확인 불가" ||
+        locationName == "주소 변환 불가" ||
+        locationName.isEmpty) {
+      locationName = "현재 위치";
+    }
+
+    return locationName;
+  }
+
+  void _showLoadingDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: const TextStyle(fontFamily: "Pretendard"),
         ),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  void _navigateToTransitApp(String locationName, NLatLng currentLocation) {
+    if (widget.isSearchingOrigin) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(
+          builder:
+              (context) => TransitApp(
+                initialOriginPlace: locationName,
+                initialOriginCoords: currentLocation,
+                initialDestinationPlace:
+                    widget.currentDestinationPlace != '도착지 입력'
+                        ? widget.currentDestinationPlace
+                        : null,
+                initialDestinationCoords: widget.currentDestinationCoords,
+              ),
+        ),
+        (route) => false,
+      );
+    } else {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(
+          builder:
+              (context) => TransitApp(
+                initialOriginPlace: _getValidOriginPlace(),
+                initialOriginCoords: widget.currentOriginCoords,
+                initialDestinationPlace: locationName,
+                initialDestinationCoords: currentLocation,
+              ),
+        ),
+        (route) => false,
       );
     }
   }
 
-  // 출발지로 설정하고 길찾기 페이지로 바로 이동하는 메서드
+  String? _getValidOriginPlace() {
+    return widget.currentOriginPlace != '위치 확인 중...' &&
+            widget.currentOriginPlace != '위치 권한 없음' &&
+            widget.currentOriginPlace != '위치 확인 실패' &&
+            widget.currentOriginPlace != '출발지 입력'
+        ? widget.currentOriginPlace
+        : null;
+  }
+
   void _setAsOrigin(SearchResult result) {
-    print('🎯 선택된 출발지:');
-    print('   이름: ${result.name}');
-    print('   주소: ${result.address}');
-    print('   원본 좌표: mapx=${result.mapx}, mapy=${result.mapy}');
-
     final originCoords = NLatLng(result.mapy, result.mapx);
-
-    print('   전달할 GPS 좌표: ${originCoords.latitude}, ${originCoords.longitude}');
 
     Navigator.pushAndRemoveUntil(
       context,
@@ -243,52 +217,36 @@ class _SearchResultPageState extends State<SearchResultPage> {
         builder:
             (context) => TransitApp(
               initialOriginPlace: result.name,
-              initialOriginCoords: originCoords, // ✅ 선택한 결과의 정확한 좌표 전달
+              initialOriginCoords: originCoords,
               initialDestinationPlace:
                   widget.currentDestinationPlace != '도착지 입력'
                       ? widget.currentDestinationPlace
                       : null,
+              initialDestinationCoords: widget.currentDestinationCoords,
             ),
       ),
       (route) => false,
     );
   }
 
-  // 도착지로 설정하고 길찾기 페이지로 바로 이동하는 메서드
   void _setAsDestination(SearchResult result) {
-    print('🎯 선택된 목적지:');
-    print('   이름: ${result.name}');
-    print('   주소: ${result.address}');
-    print('   원본 좌표: mapx=${result.mapx}, mapy=${result.mapy}');
-
-    // GPS 좌표로 변환 (이미 변환되어 있다면 그대로 사용)
     final destinationCoords = NLatLng(result.mapy, result.mapx);
-
-    print(
-      '   전달할 GPS 좌표: ${destinationCoords.latitude}, ${destinationCoords.longitude}',
-    );
 
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(
         builder:
             (context) => TransitApp(
-              initialOriginPlace:
-                  widget.currentOriginPlace != '위치 확인 중...' &&
-                          widget.currentOriginPlace != '위치 권한 없음' &&
-                          widget.currentOriginPlace != '위치 확인 실패'
-                      ? widget.currentOriginPlace
-                      : null,
+              initialOriginPlace: _getValidOriginPlace(),
+              initialOriginCoords: widget.currentOriginCoords,
               initialDestinationPlace: result.name,
-              initialDestinationCoords:
-                  destinationCoords, // ✅ 선택한 결과의 정확한 좌표 전달
+              initialDestinationCoords: destinationCoords,
             ),
       ),
       (route) => false,
     );
   }
 
-  // 항목 선택 시 현재 검색 모드에 따라 출발지 또는 도착지로 설정
   void _selectSearchResult(SearchResult result) {
     if (widget.isSearchingOrigin) {
       _setAsOrigin(result);
@@ -298,22 +256,20 @@ class _SearchResultPageState extends State<SearchResultPage> {
   }
 
   void _onClosePressed() {
-    // 1. 검색어 초기화
     _controller.searchController.clear();
 
-    // 2. SearchMainPage로 이동 (기존 출발지/도착지 정보는 유지)
     Navigator.pushReplacement(
       context,
       PageRouteBuilder(
         pageBuilder:
             (context, animation, secondaryAnimation) => SearchMainPage(
-              initialSearchTerm: '', // 🔥 빈 검색어로 시작
+              initialSearchTerm: '',
               currentOriginPlace: widget.currentOriginPlace,
               currentDestinationPlace: widget.currentDestinationPlace,
               isSearchingOrigin: widget.isSearchingOrigin,
             ),
-        transitionDuration: Duration.zero, // 🔥 전환 애니메이션 시간 0으로 설정
-        reverseTransitionDuration: Duration.zero, // 🔥 역방향 애니메이션 시간도 0으로 설정
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
       ),
     );
   }
@@ -363,7 +319,6 @@ class _SearchResultPageState extends State<SearchResultPage> {
       return Column(
         children: [
           const SizedBox(height: 20),
-          // 현재 위치 선택 옵션 추가
           _buildCurrentLocationOption(),
           const Divider(height: 1, color: Color(0xFFE2E2E2)),
           const Expanded(
@@ -375,7 +330,6 @@ class _SearchResultPageState extends State<SearchResultPage> {
 
     return Column(
       children: [
-        // 현재 위치 선택 옵션 추가
         _buildCurrentLocationOption(),
         const Divider(height: 1, color: Color(0xFFE2E2E2)),
         Expanded(child: _buildSearchResultsList()),
@@ -383,7 +337,6 @@ class _SearchResultPageState extends State<SearchResultPage> {
     );
   }
 
-  // 현재 위치 선택 옵션 위젯
   Widget _buildCurrentLocationOption() {
     return GestureDetector(
       onTap: _onCurrentLocationPressed,
@@ -399,57 +352,20 @@ class _SearchResultPageState extends State<SearchResultPage> {
             ),
             const SizedBox(width: 18),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    '현재 위치',
-                    style: TextStyle(
+              child: Consumer<SearchMainController>(
+                builder: (context, controller, child) {
+                  String displayName = _getLocationDisplayName();
+
+                  return Text(
+                    displayName,
+                    style: const TextStyle(
                       fontFamily: "Pretendard",
                       color: Color(0xFF0771EB),
                       fontWeight: FontWeight.w500,
                       fontSize: 18,
                     ),
-                  ),
-                  Consumer<SearchMainController>(
-                    builder: (context, controller, child) {
-                      if (controller.userPosition != null) {
-                        if (controller.userLocationAddress != null &&
-                            controller.userLocationAddress!.isNotEmpty &&
-                            controller.userLocationAddress != '주소 확인 불가') {
-                          return Text(
-                            controller.userLocationAddress!,
-                            style: const TextStyle(
-                              fontFamily: "Pretendard",
-                              color: Color(0xFF727272),
-                              fontWeight: FontWeight.w400,
-                              fontSize: 12,
-                            ),
-                          );
-                        } else {
-                          return Text(
-                            '위치: ${controller.userPosition!.latitude.toStringAsFixed(4)}, ${controller.userPosition!.longitude.toStringAsFixed(4)}',
-                            style: const TextStyle(
-                              fontFamily: "Pretendard",
-                              color: Color(0xFF727272),
-                              fontWeight: FontWeight.w400,
-                              fontSize: 12,
-                            ),
-                          );
-                        }
-                      }
-                      return const Text(
-                        '위치 정보 없음',
-                        style: TextStyle(
-                          fontFamily: "Pretendard",
-                          color: Color(0xFF727272),
-                          fontWeight: FontWeight.w400,
-                          fontSize: 12,
-                        ),
-                      );
-                    },
-                  ),
-                ],
+                  );
+                },
               ),
             ),
             Text(
@@ -505,7 +421,7 @@ class _SearchResultPageState extends State<SearchResultPage> {
                   ),
                   padding: EdgeInsets.zero,
                   constraints: BoxConstraints(),
-                  onPressed: _onClosePressed, // 🔥 수정된 메서드 호출
+                  onPressed: _onClosePressed,
                 ),
               ],
             ),
@@ -523,13 +439,7 @@ class _SearchResultPageState extends State<SearchResultPage> {
   Widget _buildSortOptions() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        children: [
-          _buildSortButton('내 위치 중심', Icons.arrow_drop_down),
-          const SizedBox(width: 10),
-          _buildSortButton('거리순', Icons.arrow_drop_down),
-        ],
-      ),
+      child: Row(children: [_buildSortButton('거리순', Icons.arrow_drop_down)]),
     );
   }
 
@@ -554,7 +464,7 @@ class _SearchResultPageState extends State<SearchResultPage> {
               style: TextStyle(
                 fontFamily: "Pretendard",
                 color: isSelected ? Color(0xFF0771EB) : Color(0xFF363636),
-                fontWeight: isSelected ? FontWeight.w500 : FontWeight.w500,
+                fontWeight: FontWeight.w500,
               ),
             ),
             Icon(
@@ -697,21 +607,6 @@ class _SearchResultPageState extends State<SearchResultPage> {
                         textColor: Color(0xFF0771EB),
                         onPressed: () => _setAsOrigin(result),
                       ),
-                      const SizedBox(width: 8),
-                      _buildSaveButton(
-                        '저장',
-                        Colors.white,
-                        _isFavorite(result.name)
-                            ? Icons.star_rounded
-                            : Icons.star_rounded,
-                        borderColor: Color(0xFFA0A0A0),
-                        textColor: Color(0xFF000000),
-                        iconColor:
-                            _isFavorite(result.name)
-                                ? Colors.red
-                                : Colors.grey[600]!,
-                        onPressed: () => _toggleFavorite(index),
-                      ),
                       const Spacer(),
                     ],
                   ),
@@ -722,12 +617,6 @@ class _SearchResultPageState extends State<SearchResultPage> {
         );
       },
     );
-  }
-
-  // 임시로 즐겨찾기 상태를 확인하는 메서드
-  bool _isFavorite(String fullcategory) {
-    // 실제로는 DB에서 확인하는 로직 필요
-    return fullcategory.contains('대학교');
   }
 
   Widget _buildActionButton(
@@ -753,43 +642,6 @@ class _SearchResultPageState extends State<SearchResultPage> {
           child: Text(
             text,
             style: TextStyle(color: textColor, fontWeight: FontWeight.w500),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSaveButton(
-    String text,
-    Color color,
-    IconData icon, {
-    Color textColor = Colors.white,
-    Color borderColor = Colors.transparent,
-    Color iconColor = Colors.grey,
-    required VoidCallback onPressed,
-  }) {
-    return Material(
-      color: color,
-      borderRadius: BorderRadius.circular(32),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(4),
-        onTap: onPressed,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            border: Border.all(color: borderColor, width: 0.6),
-            borderRadius: BorderRadius.circular(32),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: iconColor, size: 24),
-              const SizedBox(width: 2),
-              Text(
-                text,
-                style: TextStyle(color: textColor, fontWeight: FontWeight.w500),
-              ),
-            ],
           ),
         ),
       ),
