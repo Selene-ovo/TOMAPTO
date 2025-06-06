@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:tomapto/controllers/map/transit_map_controller.dart';
-import 'package:tomapto/controllers/map/route_controller.dart';
+import 'package:tomapto/controllers/route/route_main_controller.dart';
 import 'package:tomapto/utils/route_renderer.dart';
-import 'package:tomapto/pages/map/navigation_page.dart';
+import 'package:tomapto/pages/navi/navigation_page.dart';
 import 'dart:math';
 
 class WalkModal extends StatefulWidget {

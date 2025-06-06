@@ -83,7 +83,7 @@ class _ProfilePageState extends State<ProfilePage> {
     // SharedPreferences에서 사용자 ID 가져오기
     final prefs = await SharedPreferences.getInstance();
     final String currentUserId = prefs.getString('user_id') ?? "";
-    
+
     if (currentUserId.isEmpty) {
       // 사용자 ID가 없으면 오류 메시지 표시
       ScaffoldMessenger.of(context).showSnackBar(
@@ -94,28 +94,27 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
       );
       return;
     }
-    
+
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => ProfileEditPage(
-          currentUserId: currentUserId, // SharedPreferences에서 가져온 사용자 ID 전달
-          currentNickname: _controller.userNickname,
-        ),
+        builder:
+            (context) => ProfileEditPage(
+              currentUserId: currentUserId, // SharedPreferences에서 가져온 사용자 ID 전달
+              currentNickname: _controller.userNickname,
+            ),
       ),
     );
 
     // 프로필 편집에서 돌아온 후 데이터가 업데이트 되었으면 새로고침
     if (result != null && result['updated'] == true) {
       await _refreshData();
-      
+
       // 성공 메시지 표시 (선택사항)
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -310,10 +309,13 @@ class _ProfilePageState extends State<ProfilePage> {
                                             width: 1.5,
                                           ),
                                         ),
-                                        child: ClipOval( // 원형으로 클립
+                                        child: ClipOval(
+                                          // 원형으로 클립
                                           child: SvgPicture.asset(
                                             'assets/icons/profile_default.svg',
-                                            fit: BoxFit.cover, // cover로 변경하여 원형에 꽉 채우기
+                                            fit:
+                                                BoxFit
+                                                    .cover, // cover로 변경하여 원형에 꽉 채우기
                                             width: 48 * (screenWidth / 375),
                                             height: 48 * (screenWidth / 375),
                                           ),
@@ -336,7 +338,9 @@ class _ProfilePageState extends State<ProfilePage> {
                                             // 편집 버튼에도 그림자 효과 추가
                                             boxShadow: [
                                               BoxShadow(
-                                                color: Colors.black.withOpacity(0.2),
+                                                color: Colors.black.withOpacity(
+                                                  0.2,
+                                                ),
                                                 blurRadius: 3,
                                                 offset: const Offset(0, 1),
                                               ),
@@ -358,16 +362,19 @@ class _ProfilePageState extends State<ProfilePage> {
                               // 사용자 정보
                               Expanded(
                                 child: GestureDetector(
-                                  onTap: _navigateToProfileEdit, // 닉네임 클릭 시 프로필 편집 페이지로 이동
+                                  onTap:
+                                      _navigateToProfileEdit, // 닉네임 클릭 시 프로필 편집 페이지로 이동
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Row(
                                         children: [
                                           Text(
                                             _controller.userNickname,
                                             style: TextStyle(
-                                              fontSize: 18 * (screenWidth / 375),
+                                              fontSize:
+                                                  18 * (screenWidth / 375),
                                               fontWeight: FontWeight.bold,
                                               color: const Color(0xFF363636),
                                               fontFamily: 'Pretendard',
@@ -382,13 +389,16 @@ class _ProfilePageState extends State<ProfilePage> {
                                           ),
                                         ],
                                       ),
-                                      SizedBox(height: 4 * (screenHeight / 812)),
+                                      SizedBox(
+                                        height: 4 * (screenHeight / 812),
+                                      ),
                                       Row(
                                         children: [
                                           Text(
                                             'Lv.${_controller.userLevel} 씨앗',
                                             style: TextStyle(
-                                              fontSize: 14 * (screenWidth / 375),
+                                              fontSize:
+                                                  14 * (screenWidth / 375),
                                               color: Colors.grey[600],
                                               fontFamily: 'Pretendard',
                                             ),
@@ -459,7 +469,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           margin: cardMargin,
                           title: '캘린더 확인하기',
                           label: '계획',
-                          imagePath: 'assets/icons/calendar_profile2.png',
+                          imagePath: 'assets/icons/default_profile_card.png',
                           labelColor: const Color(0xFFFB233B),
                           onTap: () => _controller.navigateToCalendar(context),
                         ),
@@ -470,7 +480,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           margin: cardMargin,
                           title: '공지사항 확인하기',
                           label: '공지',
-                          imagePath: 'assets/icons/notice_profile2.png',
+                          imagePath: 'assets/icons/default_profile_card.png',
                           labelColor: const Color(0xFFFB233B),
                           onTap: () => _controller.navigateToNotices(context),
                         ),
@@ -482,8 +492,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           margin: cardMargin,
                           title: '고객센터 문의하기',
                           label: '문의',
-                          imagePath:
-                              'assets/icons/calendar_profile2.png', // 실제 앱에서는 support_profile2.png와 같은 고유 이미지 사용 권장
+                          imagePath: 'assets/icons/default_profile_card.png',
                           labelColor: const Color(0xFFFB233B),
                           onTap: () => _controller.navigateToSupport(context),
                         ),

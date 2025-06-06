@@ -277,11 +277,10 @@ class _SearchMainPageState extends State<SearchMainPage>
         onTap: _onCurrentLocationPressed,
         borderRadius: BorderRadius.circular(8),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
           decoration: BoxDecoration(
-            color: const Color(0xFFF8F9FA),
+            color: const Color(0xFFFFFFFF),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xFFE2E2E2), width: 1),
           ),
           child: Row(
             children: [

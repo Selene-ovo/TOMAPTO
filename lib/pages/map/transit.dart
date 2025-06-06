@@ -3,7 +3,7 @@ import 'dart:math';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:tomapto/controllers/map/location_controller.dart';
 import 'package:tomapto/controllers/map/transit_map_controller.dart';
-import 'package:tomapto/controllers/map/route_controller.dart';
+import 'package:tomapto/controllers/route/route_main_controller.dart';
 import 'package:tomapto/widgets/search_bar_widget.dart';
 import 'package:tomapto/widgets/transit_option_widget.dart';
 import 'package:tomapto/modal/car_modal.dart';
