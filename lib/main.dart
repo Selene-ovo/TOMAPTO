@@ -45,7 +45,6 @@ class MyApp extends StatelessWidget {
           color: Color(0xFFFB233B),
           circularTrackColor: Colors.grey.withOpacity(0.2),
         ),
-
         bottomSheetTheme: BottomSheetThemeData(
           backgroundColor: Colors.white,
           modalBackgroundColor: Colors.white,
@@ -53,20 +52,11 @@ class MyApp extends StatelessWidget {
             borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
           ),
         ),
-
-        dialogTheme: DialogTheme(
-          backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-        ),
-
         textSelectionTheme: TextSelectionThemeData(
           cursorColor: Color(0xFF4C9EFC), // 커서 색상을 primaryRed로 설정
           selectionColor: Color(0xFF4C9EFC).withOpacity(0.2), // 선택 영역 색상 (반투명)
           selectionHandleColor: Color(0xFF4C9EFC), // 선택 핸들 색상
         ),
-
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ButtonStyle(
             backgroundColor: WidgetStateProperty.resolveWith<Color>((
@@ -84,13 +74,11 @@ class MyApp extends StatelessWidget {
               if (states.contains(WidgetState.pressed)) {
                 return Colors.green.withOpacity(0.1);
               }
-              return Colors.transparent; // 투명으로 설정하여 보라색 효과 제거
+              return Colors.transparent;
             }),
-            // 스플래시 팩토리 추가
             splashFactory: NoSplash.splashFactory,
           ),
         ),
-
         textButtonTheme: TextButtonThemeData(
           style: ButtonStyle(
             foregroundColor: WidgetStateProperty.resolveWith<Color>((
@@ -101,7 +89,6 @@ class MyApp extends StatelessWidget {
               }
               return Color(0xFF363636);
             }),
-            // TextButton에도 스플래시 효과 제거
             splashFactory: NoSplash.splashFactory,
             overlayColor: WidgetStateProperty.resolveWith<Color>((
               Set<WidgetState> states,
@@ -114,7 +101,7 @@ class MyApp extends StatelessWidget {
           ),
         ),
       ),
-      home: IntroPage(), // NaverMapPage()에서 IntroPage()로 변경
+      home: IntroPage(),
     );
   }
 }

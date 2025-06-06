@@ -104,7 +104,7 @@ class SearchMainController extends ChangeNotifier {
         errorMessage = null;
 
         // 네이버 API로 검색 수행 (더 많은 결과 요청)
-        final naverResults = await searchPlaces(query, display: 50); // 50개로 증가
+        final naverResults = await searchPlaces(query, display: 5);
 
         // 검색 결과 변환 및 거리 계산
         final updatedResults = <SearchResult>[];

@@ -345,23 +345,26 @@ class _SearchResultPageState extends State<SearchResultPage> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         child: Row(
           children: [
-            const Icon(
-              Icons.my_location_rounded,
-              color: Color(0xFF0771EB),
-              size: 24,
+            const SizedBox(width: 100),
+            Text(
+              '현재위치 ',
+              style: const TextStyle(
+                fontFamily: "Pretendard",
+                color: Color(0xFF363636),
+                fontWeight: FontWeight.w400,
+                fontSize: 18,
+              ),
             ),
-            const SizedBox(width: 18),
             Expanded(
               child: Consumer<SearchMainController>(
                 builder: (context, controller, child) {
                   String displayName = _getLocationDisplayName();
-
                   return Text(
                     displayName,
                     style: const TextStyle(
                       fontFamily: "Pretendard",
-                      color: Color(0xFF0771EB),
-                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF363636),
+                      fontWeight: FontWeight.w400,
                       fontSize: 18,
                     ),
                   );
