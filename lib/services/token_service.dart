@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tomapto/pages/profile/login.dart';
-import 'package:tomapto/services/real_time_location_service.dart';
+import 'package:tomapto/services/friends_real_time_service.dart';
 
 class TokenService {
   // JWT 토큰 디코딩 메서드
@@ -152,12 +152,6 @@ class TokenService {
         print('갱신할 토큰이 없습니다.');
         return false;
       }
-
-      // 여기서 실제 API 호출을 통해 새 토큰을 발급받아야 함
-      // ...
-
-      // 토큰 저장
-      // await prefs.setString('token', newToken);
 
       return true;
     } catch (e) {

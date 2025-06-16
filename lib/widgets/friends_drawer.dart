@@ -1,7 +1,7 @@
 // widgets/drawer_widget.dart
 import 'package:flutter/material.dart';
 import 'package:tomapto/pages/friends/friends_add.dart';
-import 'package:tomapto/pages/friends/blacklist_friends.dart';
+import 'package:tomapto/pages/friends/friends_blacklist.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';

@@ -7,7 +7,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:geolocator/geolocator.dart';
 import 'dart:io' show Platform;
 import 'package:tomapto/services/location_service.dart';
-import 'package:tomapto/services/real_time_location_service.dart';
+import 'package:tomapto/services/friends_real_time_service.dart';
 
 class LoginController {
   final TextEditingController idController = TextEditingController();

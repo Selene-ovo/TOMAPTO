@@ -4,7 +4,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
-import 'package:tomapto/services/real_time_location_service.dart';
+import 'package:tomapto/services/friends_real_time_service.dart';
 import 'package:tomapto/services/socket_service.dart';
 
 class ApiService {

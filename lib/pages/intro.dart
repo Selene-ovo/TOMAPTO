@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:tomapto/services/real_time_location_service.dart';
+import 'package:tomapto/services/friends_real_time_service.dart';
 import 'package:tomapto/services/socket_service.dart';
 import 'package:tomapto/services/token_service.dart';
 import 'package:tomapto/pages/map/naver_map.dart';

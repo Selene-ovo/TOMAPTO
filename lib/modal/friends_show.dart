@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:tomapto/pages/friends/real_time_location_sharing.dart';
+import 'package:tomapto/pages/friends/friends_real_time.dart';
 
 class FriendsShowModal extends StatelessWidget {
   final Map<String, dynamic> friend;

@@ -7,7 +7,7 @@ import 'package:tomapto/pages/profile/login.dart';
 import 'package:tomapto/pages/profile/profile.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tomapto/services/token_service.dart';
-import 'package:tomapto/services/real_time_location_service.dart';
+import 'package:tomapto/services/friends_real_time_service.dart';
 import 'package:tomapto/modal/login_services.dart';
 
 class BottomNavBar extends StatelessWidget {

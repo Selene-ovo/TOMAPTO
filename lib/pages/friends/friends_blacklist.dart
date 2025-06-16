@@ -4,7 +4,6 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'dart:io' show Platform;
-import 'package:tomapto/widgets/ad_placeholder.dart';
 import 'package:tomapto/widgets/navbar.dart';
 
 class BlacklistFriends extends StatefulWidget {
@@ -241,13 +240,49 @@ class _BlacklistFriendsState extends State<BlacklistFriends> {
 
                   // 친구 삭제하기 버튼
                   InkWell(
-                    onTap: () {
+                    onTap: () async {
                       Navigator.pop(context);
-                      // 친구 삭제 로직은 이미 구현되어 있지만,
-                      // 차단된 사용자는 이미 친구 관계가 아닐 수 있으므로 스낵바만 표시
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('이미 차단된 사용자이므로 친구 관계가 아닙니다')),
-                      );
+
+                      // 실제 친구 삭제 API 호출
+                      try {
+                        final prefs = await SharedPreferences.getInstance();
+                        final token = prefs.getString('token');
+
+                        if (token == null) {
+                          ScaffoldMessenger.of(
+                            context,
+                          ).showSnackBar(SnackBar(content: Text('로그인이 필요합니다')));
+                          return;
+                        }
+
+                        final apiBaseUrl = _getApiBaseUrl();
+                        final response = await http.post(
+                          Uri.parse('$apiBaseUrl/friends/delete'),
+                          headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': 'Bearer $token',
+                          },
+                          body: json.encode({'friend_id': user['id']}),
+                        );
+
+                        if (response.statusCode == 200) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('관계가 완전히 삭제되었습니다')),
+                          );
+                          _loadBlockedUsers(); // 목록 새로고침
+                        } else {
+                          final data = json.decode(response.body);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(data['error'] ?? '삭제에 실패했습니다'),
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('오류가 발생했습니다: $e')),
+                        );
+                      }
                     },
                     child: Container(
                       width: double.infinity,

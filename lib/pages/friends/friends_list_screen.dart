@@ -1,6 +1,5 @@
 // friends_list_screen.dart
 import 'package:flutter/material.dart';
-import 'package:tomapto/widgets/ad_placeholder.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -14,10 +13,10 @@ import 'package:tomapto/pages/friends/friends_add.dart';
 import 'package:tomapto/services/socket_service.dart';
 import 'package:tomapto/services/token_service.dart';
 import 'package:tomapto/pages/profile/login.dart';
-import 'package:tomapto/services/real_time_location_service.dart';
+import 'package:tomapto/services/friends_real_time_service.dart';
 import 'package:tomapto/pages/map/naver_map.dart';
 import 'package:tomapto/pages/profile/profile.dart';
-import 'package:tomapto/widgets/drawer_widget.dart';
+import 'package:tomapto/widgets/friends_drawer.dart';
 
 class FriendScreen extends StatefulWidget {
   @override
