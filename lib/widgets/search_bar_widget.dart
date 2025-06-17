@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
+import 'package:provider/provider.dart';
 import 'package:tomapto/search/search_main.dart';
 import 'package:tomapto/search/search_return.dart';
 import 'package:tomapto/controllers/search/search_main_controller.dart';
+import 'package:tomapto/controllers/map/transit_provider.dart';
 import 'package:tomapto/pages/map/naver_map.dart';
 
 class SearchBarWidget extends StatelessWidget {
@@ -11,7 +13,7 @@ class SearchBarWidget extends StatelessWidget {
   final Function(String) onOriginChanged;
   final Function(String) onDestinationChanged;
   final VoidCallback onSwapLocations;
-  final VoidCallback onClosePressed; // 이 콜백을 그대로 유지
+  final VoidCallback onClosePressed;
   final Function(Map<String, dynamic>?)? onSearchResultSelected;
 
   final NLatLng? currentOriginCoords;
@@ -30,7 +32,6 @@ class SearchBarWidget extends StatelessWidget {
     this.currentDestinationCoords,
   });
 
-  // 🔥 기본 텍스트인지 확인하는 메서드 추가
   bool _isDefaultOriginText(String text) {
     return text == '출발지 입력' ||
         text == '위치 확인 중...' ||
@@ -44,36 +45,31 @@ class SearchBarWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 화면 크기 가져오기
     final Size screenSize = MediaQuery.of(context).size;
     final double width = screenSize.width;
     final bool isSmallScreen = width < 360;
     final double statusBarHeight = MediaQuery.of(context).padding.top;
 
-    // 반응형 크기 계산
-    final double searchAreaPadding = width * 0.04; // 화면 너비의 4%
-    final double iconSize = isSmallScreen ? 22.0 : 28.0; // 작은 화면에서는 작은 아이콘
+    final double searchAreaPadding = width * 0.04;
+    final double iconSize = isSmallScreen ? 22.0 : 28.0;
 
     return Container(
       color: Color(0xFFFB233B),
       padding: EdgeInsets.only(
-        top: statusBarHeight + 8, // 상태바 높이 + 추가 패딩
-        bottom: width * 0.035, // 화면 너비에 따른 패딩
+        top: statusBarHeight + 8,
+        bottom: width * 0.035,
         left: width * 0.02,
         right: width * 0.02,
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          // 최대 너비 계산
           final maxWidth = constraints.maxWidth;
 
           return Stack(
             children: [
-              // 검색바 영역
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // 화살표 위아래 아이콘
                   Container(
                     margin: EdgeInsets.only(left: maxWidth * 0.000001),
                     child: IconButton(
@@ -87,18 +83,22 @@ class SearchBarWidget extends StatelessWidget {
                     ),
                   ),
 
-                  // 검색바 컨테이너
                   Expanded(
                     child: Column(
                       children: [
                         // 출발지 검색창
                         GestureDetector(
                           onTap: () async {
-                            // 🔥 기본 텍스트인 경우 빈 문자열로 시작
+                            final transitProvider =
+                                Provider.of<TransitProvider>(
+                                  context,
+                                  listen: false,
+                                );
+
                             final initialSearchTerm =
                                 _isDefaultOriginText(originPlace)
-                                    ? '' // 기본 텍스트면 빈 문자열로 시작
-                                    : originPlace; // 실제 장소명이면 그대로 사용
+                                    ? ''
+                                    : originPlace;
 
                             final result = await Navigator.push(
                               context,
@@ -108,8 +108,7 @@ class SearchBarWidget extends StatelessWidget {
                                       initialSearchTerm: initialSearchTerm,
                                       currentOriginPlace: originPlace,
                                       currentDestinationPlace: destinationPlace,
-                                      isSearchingOrigin: true, // 출발지 검색 모드
-                                      // 🔥 추가: 좌표 정보 전달
+                                      isSearchingOrigin: true,
                                       currentOriginCoords: currentOriginCoords,
                                       currentDestinationCoords:
                                           currentDestinationCoords,
@@ -117,26 +116,32 @@ class SearchBarWidget extends StatelessWidget {
                               ),
                             );
 
-                            // 검색 결과 처리
                             if (result != null) {
-                              // 맵 형태인 경우 (출발 또는 도착 버튼에서 넘어온 경우)
                               if (result is Map) {
                                 String? type = result['type'];
                                 String? place = result['place'];
+                                NLatLng? coords = result['coords'];
 
                                 if (type == 'origin' && place != null) {
+                                  transitProvider.setOrigin(place, coords);
                                   onOriginChanged(place);
                                 } else if (type == 'destination' &&
                                     place != null) {
+                                  transitProvider.setDestination(place, coords);
                                   onDestinationChanged(place);
                                 }
-                              }
-                              // SearchResult 객체인 경우 (검색 결과에서 직접 선택한 경우)
-                              else if (result is SearchResult) {
+                              } else if (result is SearchResult) {
+                                final coords = NLatLng(
+                                  result.mapy,
+                                  result.mapx,
+                                );
+                                transitProvider.setSearchResultAsOrigin(
+                                  result.name,
+                                  coords,
+                                );
                                 onOriginChanged(result.name);
-                              }
-                              // 문자열인 경우
-                              else if (result is String) {
+                              } else if (result is String) {
+                                transitProvider.setOrigin(result, null);
                                 onOriginChanged(result);
                               }
                             }
@@ -164,15 +169,12 @@ class SearchBarWidget extends StatelessWidget {
                                         fontFamily: "Pretendard",
                                         fontSize: 18,
                                         fontWeight: FontWeight.w500,
-                                        // 🔥 기본 텍스트인 경우 투명도 적용으로 연하게 표시
                                         color:
                                             _isDefaultOriginText(originPlace)
-                                                ? Color(0xFFFFFFFF).withOpacity(
-                                                  0.7,
-                                                ) // 기본 텍스트는 연하게
-                                                : Color(
+                                                ? Color(
                                                   0xFFFFFFFF,
-                                                ), // 실제 값은 선명하게
+                                                ).withOpacity(0.7)
+                                                : Color(0xFFFFFFFF),
                                       ),
                                       overflow: TextOverflow.ellipsis,
                                     ),
@@ -186,36 +188,26 @@ class SearchBarWidget extends StatelessWidget {
                         // 목적지 검색창
                         GestureDetector(
                           onTap: () async {
-                            // 🔥 기본 텍스트인 경우 빈 문자열로 시작
+                            final transitProvider =
+                                Provider.of<TransitProvider>(
+                                  context,
+                                  listen: false,
+                                );
+
                             final initialSearchTerm =
                                 _isDefaultDestinationText(destinationPlace)
-                                    ? '' // 기본 텍스트면 빈 문자열로 시작
-                                    : destinationPlace; // 실제 장소명이면 그대로 사용
+                                    ? ''
+                                    : destinationPlace;
 
                             final result = await Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (context) {
-                                  print('🏗️ SearchMainPage 생성 중 (도착지 검색)...');
-                                  print(
-                                    '  전달할 currentOriginPlace: $originPlace',
-                                  );
-                                  print(
-                                    '  전달할 currentOriginCoords: $currentOriginCoords',
-                                  ); // 🔥 중요
-                                  print(
-                                    '  전달할 currentDestinationPlace: $destinationPlace',
-                                  );
-                                  print(
-                                    '  전달할 currentDestinationCoords: $currentDestinationCoords',
-                                  );
-
                                   return SearchMainPage(
                                     initialSearchTerm: initialSearchTerm,
                                     currentOriginPlace: originPlace,
                                     currentDestinationPlace: destinationPlace,
-                                    isSearchingOrigin: false, // 도착지 검색 모드
-                                    // 🔥 추가: 좌표 정보 전달
+                                    isSearchingOrigin: false,
                                     currentOriginCoords: currentOriginCoords,
                                     currentDestinationCoords:
                                         currentDestinationCoords,
@@ -224,26 +216,32 @@ class SearchBarWidget extends StatelessWidget {
                               ),
                             );
 
-                            // 검색 결과 처리
                             if (result != null) {
-                              // 맵 형태인 경우 (출발 또는 도착 버튼에서 넘어온 경우)
                               if (result is Map) {
                                 String? type = result['type'];
                                 String? place = result['place'];
+                                NLatLng? coords = result['coords'];
 
                                 if (type == 'origin' && place != null) {
+                                  transitProvider.setOrigin(place, coords);
                                   onOriginChanged(place);
                                 } else if (type == 'destination' &&
                                     place != null) {
+                                  transitProvider.setDestination(place, coords);
                                   onDestinationChanged(place);
                                 }
-                              }
-                              // SearchResult 객체인 경우 (검색 결과에서 직접 선택한 경우)
-                              else if (result is SearchResult) {
+                              } else if (result is SearchResult) {
+                                final coords = NLatLng(
+                                  result.mapy,
+                                  result.mapx,
+                                );
+                                transitProvider.setSearchResultAsDestination(
+                                  result.name,
+                                  coords,
+                                );
                                 onDestinationChanged(result.name);
-                              }
-                              // 문자열인 경우
-                              else if (result is String) {
+                              } else if (result is String) {
+                                transitProvider.setDestination(result, null);
                                 onDestinationChanged(result);
                               }
                             }
@@ -268,17 +266,14 @@ class SearchBarWidget extends StatelessWidget {
                                         fontFamily: "Pretendard",
                                         fontWeight: FontWeight.w500,
                                         fontSize: 18,
-                                        // 🔥 기본 텍스트인 경우 투명도 적용으로 연하게 표시
                                         color:
                                             _isDefaultDestinationText(
                                                   destinationPlace,
                                                 )
-                                                ? Color(0xFFFFFFFF).withOpacity(
-                                                  0.7,
-                                                ) // 기본 텍스트는 연하게
-                                                : Color(
+                                                ? Color(
                                                   0xFFFFFFFF,
-                                                ), // 실제 값은 선명하게
+                                                ).withOpacity(0.7)
+                                                : Color(0xFFFFFFFF),
                                       ),
                                       overflow: TextOverflow.ellipsis,
                                     ),
@@ -292,12 +287,10 @@ class SearchBarWidget extends StatelessWidget {
                     ),
                   ),
 
-                  // X 버튼 자리 공간 확보
                   SizedBox(width: iconSize + 20),
                 ],
               ),
 
-              // X 버튼을 절대 위치로 배치
               Positioned(
                 top: maxWidth * 0.0000009,
                 right: -5,
@@ -307,9 +300,17 @@ class SearchBarWidget extends StatelessWidget {
                     color: Colors.white,
                     size: 28,
                   ),
-                  // onClosePressed 콜백 그대로 사용
-                  // 이제 transit.dart에서 이 콜백은 NaverMapPage로 이동하는 로직을 가지고 있음
-                  onPressed: onClosePressed,
+                  onPressed: () {
+                    // Provider 상태 초기화
+                    final transitProvider = Provider.of<TransitProvider>(
+                      context,
+                      listen: false,
+                    );
+                    transitProvider.reset(); // 모든 상태를 기본값으로 초기화
+
+                    // 기존 onClosePressed 콜백 호출
+                    onClosePressed();
+                  },
                   iconSize: iconSize,
                 ),
               ),

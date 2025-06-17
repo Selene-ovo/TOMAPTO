@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:tomapto/controllers/map/poi_controller.dart';
+import 'package:provider/provider.dart';
+import 'package:tomapto/controllers/map/transit_provider.dart';
 
 class LocationInfoWidget extends StatelessWidget {
   final ClickedLocationInfo locationInfo;
@@ -141,15 +143,16 @@ class LocationInfoWidget extends StatelessWidget {
                     height: 50,
                     child: ElevatedButton(
                       onPressed: () {
-                        // 🎯 핵심 수정: 정확한 좌표값을 사용하여 출발지로 설정
-                        print('=== 출발지로 설정 ===');
-                        print('상가명: ${locationInfo.locationName}');
-                        print(
-                          '정확한 좌표: ${locationInfo.position.latitude}, ${locationInfo.position.longitude}',
+                        // Provider를 통해 POI를 출발지로 설정
+                        final transitProvider = Provider.of<TransitProvider>(
+                          context,
+                          listen: false,
                         );
-                        print('주소: ${locationInfo.address}');
+                        transitProvider.setPoiAsOrigin(
+                          locationInfo.locationName,
+                          locationInfo.position,
+                        );
 
-                        // 정확한 좌표로 출발지 설정 실행
                         onDeparture();
                       },
                       style: ElevatedButton.styleFrom(
@@ -179,15 +182,16 @@ class LocationInfoWidget extends StatelessWidget {
                     height: 50,
                     child: ElevatedButton(
                       onPressed: () {
-                        // 🎯 핵심 수정: 정확한 좌표값을 사용하여 도착지로 설정
-                        print('=== 도착지로 설정 ===');
-                        print('상가명: ${locationInfo.locationName}');
-                        print(
-                          '정확한 좌표: ${locationInfo.position.latitude}, ${locationInfo.position.longitude}',
+                        // Provider를 통해 POI를 도착지로 설정
+                        final transitProvider = Provider.of<TransitProvider>(
+                          context,
+                          listen: false,
                         );
-                        print('주소: ${locationInfo.address}');
+                        transitProvider.setPoiAsDestination(
+                          locationInfo.locationName,
+                          locationInfo.position,
+                        );
 
-                        // 정확한 좌표로 도착지 설정 실행
                         onDirections();
                       },
                       style: ElevatedButton.styleFrom(

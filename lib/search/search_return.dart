@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:tomapto/pages/map/transit.dart';
 import 'package:tomapto/search/search_main.dart';
+import 'package:tomapto/controllers/map/transit_provider.dart';
 
 class SearchResultPage extends StatefulWidget {
   final String searchTerm;
@@ -116,8 +117,15 @@ class _SearchResultPageState extends State<SearchResultPage> {
       Navigator.pop(context);
 
       if (position != null) {
+        final transitProvider = Provider.of<TransitProvider>(
+          context,
+          listen: false,
+        );
         String locationName = _getLocationDisplayName();
         final currentLocation = NLatLng(position.latitude, position.longitude);
+
+        // Provider에 현재 위치 업데이트
+        transitProvider.setCurrentUserLocation(currentLocation, locationName);
 
         _navigateToTransitApp(locationName, currentLocation);
         _controller.addToRecentSearches(locationName);
@@ -165,7 +173,15 @@ class _SearchResultPageState extends State<SearchResultPage> {
   }
 
   void _navigateToTransitApp(String locationName, NLatLng currentLocation) {
+    final transitProvider = Provider.of<TransitProvider>(
+      context,
+      listen: false,
+    );
+
     if (widget.isSearchingOrigin) {
+      // 출발지로 설정
+      transitProvider.setCurrentLocationAsOrigin();
+
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(
@@ -183,6 +199,9 @@ class _SearchResultPageState extends State<SearchResultPage> {
         (route) => false,
       );
     } else {
+      // 도착지로 설정
+      transitProvider.setCurrentLocationAsDestination();
+
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(
@@ -209,7 +228,14 @@ class _SearchResultPageState extends State<SearchResultPage> {
   }
 
   void _setAsOrigin(SearchResult result) {
+    final transitProvider = Provider.of<TransitProvider>(
+      context,
+      listen: false,
+    );
     final originCoords = NLatLng(result.mapy, result.mapx);
+
+    // Provider에 검색 결과를 출발지로 설정
+    transitProvider.setSearchResultAsOrigin(result.name, originCoords);
 
     Navigator.pushAndRemoveUntil(
       context,
@@ -230,7 +256,17 @@ class _SearchResultPageState extends State<SearchResultPage> {
   }
 
   void _setAsDestination(SearchResult result) {
+    final transitProvider = Provider.of<TransitProvider>(
+      context,
+      listen: false,
+    );
     final destinationCoords = NLatLng(result.mapy, result.mapx);
+
+    // Provider에 검색 결과를 도착지로 설정
+    transitProvider.setSearchResultAsDestination(
+      result.name,
+      destinationCoords,
+    );
 
     Navigator.pushAndRemoveUntil(
       context,

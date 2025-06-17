@@ -9,6 +9,8 @@ import 'package:tomapto/widgets/transit_option_widget.dart';
 import 'package:tomapto/modal/car_modal.dart';
 import 'package:tomapto/modal/walk_modal.dart';
 import 'package:tomapto/pages/map/naver_map.dart';
+import 'package:tomapto/controllers/map/transit_provider.dart';
+import 'package:provider/provider.dart';
 
 class TransitApp extends StatefulWidget {
   final String? initialOriginPlace;
@@ -42,9 +44,43 @@ class _TransitAppState extends State<TransitApp> {
   @override
   void initState() {
     super.initState();
+
+    // Provider에 초기 데이터 설정 후 로컬 상태 동기화
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final transitProvider = Provider.of<TransitProvider>(
+        context,
+        listen: false,
+      );
+
+      // Provider에 초기 데이터 설정
+      transitProvider.setInitialData(
+        initialOriginPlace: widget.initialOriginPlace,
+        initialOriginCoords: widget.initialOriginCoords,
+        initialDestinationPlace: widget.initialDestinationPlace,
+        initialDestinationCoords: widget.initialDestinationCoords,
+      );
+
+      // Provider 상태를 로컬 상태와 동기화
+      _syncWithProvider();
+    });
+
     _initializeLocation();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _applyInitialPlaces();
+    });
+  }
+
+  void _syncWithProvider() {
+    final transitProvider = Provider.of<TransitProvider>(
+      context,
+      listen: false,
+    );
+
+    setState(() {
+      _originPlace = transitProvider.originPlace;
+      _destinationPlace = transitProvider.destinationPlace;
+      _originCoords = transitProvider.originCoords;
+      _destinationCoords = transitProvider.destinationCoords;
     });
   }
 
@@ -320,6 +356,11 @@ class _TransitAppState extends State<TransitApp> {
 
   /// 출발지 변경 처리
   void _handleOriginChanged(String value) async {
+    final transitProvider = Provider.of<TransitProvider>(
+      context,
+      listen: false,
+    );
+
     _transitMapController.clearAllMarkersAndRoutes();
     setState(() {
       _originPlace = value;
@@ -327,12 +368,21 @@ class _TransitAppState extends State<TransitApp> {
     _routeController.invalidateCache();
 
     await _getOriginCoordinates();
+
+    // Provider 업데이트
+    transitProvider.setOrigin(value, _originCoords);
+
     await Future.delayed(Duration(milliseconds: 100));
     setState(() {});
   }
 
   /// 도착지 변경 처리
   void _handleDestinationChanged(String value) async {
+    final transitProvider = Provider.of<TransitProvider>(
+      context,
+      listen: false,
+    );
+
     _transitMapController.clearAllMarkersAndRoutes();
     setState(() {
       _destinationPlace = value;
@@ -340,34 +390,32 @@ class _TransitAppState extends State<TransitApp> {
     _routeController.invalidateCache();
 
     await _getDestinationCoordinates();
+
+    // Provider 업데이트
+    transitProvider.setDestination(value, _destinationCoords);
+
     await Future.delayed(Duration(milliseconds: 100));
     setState(() {});
   }
 
   /// 출발지/도착지 위치 교환
   void _handleSwapLocations() async {
+    final transitProvider = Provider.of<TransitProvider>(
+      context,
+      listen: false,
+    );
+
     _transitMapController.clearAllMarkersAndRoutes();
 
-    final tempPlace = _originPlace;
-    final tempCoords = _originCoords;
+    // Provider에서 교환 수행
+    transitProvider.swapLocations();
 
+    // 로컬 상태를 Provider와 동기화
     setState(() {
-      // 텍스트 교체
-      if (_destinationPlace == '도착지 입력') {
-        _originPlace = '출발지 입력';
-      } else {
-        _originPlace = _destinationPlace;
-      }
-
-      if (_isInvalidLocationState(tempPlace)) {
-        _destinationPlace = '도착지 입력';
-      } else {
-        _destinationPlace = tempPlace;
-      }
-
-      // 좌표 교체
-      _originCoords = _destinationCoords;
-      _destinationCoords = tempCoords;
+      _originPlace = transitProvider.originPlace;
+      _destinationPlace = transitProvider.destinationPlace;
+      _originCoords = transitProvider.originCoords;
+      _destinationCoords = transitProvider.destinationCoords;
     });
 
     _routeController.invalidateCache();
@@ -519,82 +567,95 @@ class _TransitAppState extends State<TransitApp> {
     final bool isSmallScreen = width < 360;
     final double iconSize = isSmallScreen ? 22.0 : 28.0;
 
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: Column(
-        children: [
-          SearchBarWidget(
-            originPlace: _originPlace,
-            destinationPlace: _destinationPlace,
-            onOriginChanged: _handleOriginChanged,
-            onDestinationChanged: _handleDestinationChanged,
-            onSwapLocations: _handleSwapLocations,
-            onClosePressed: () {
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(builder: (context) => const NaverMapPage()),
-                (route) => false,
-              );
-            },
-            currentOriginCoords: _originCoords,
-            currentDestinationCoords: _destinationCoords,
+    return Consumer<TransitProvider>(
+      builder: (context, transitProvider, child) {
+        return Scaffold(
+          backgroundColor: Colors.white,
+          body: Column(
+            children: [
+              SearchBarWidget(
+                originPlace: transitProvider.originPlace,
+                destinationPlace: transitProvider.destinationPlace,
+                onOriginChanged: _handleOriginChanged,
+                onDestinationChanged: _handleDestinationChanged,
+                onSwapLocations: _handleSwapLocations,
+                onClosePressed: () {
+                  // Provider 상태 초기화
+                  final transitProvider = Provider.of<TransitProvider>(
+                    context,
+                    listen: false,
+                  );
+                  transitProvider.reset();
+
+                  Navigator.pushAndRemoveUntil(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const NaverMapPage(),
+                    ),
+                    (route) => false,
+                  );
+                },
+                currentOriginCoords: transitProvider.originCoords,
+                currentDestinationCoords: transitProvider.destinationCoords,
+              ),
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    TransitOptionWidget(
+                      index: 0,
+                      selectedIndex: _selectedIndex,
+                      icon: Icons.directions_car,
+                      label: '자동차',
+                      onTap: _handleNavIndexChanged,
+                      iconSize: iconSize,
+                    ),
+                    TransitOptionWidget(
+                      index: 1,
+                      selectedIndex: _selectedIndex,
+                      icon: Icons.directions_walk,
+                      label: '도보',
+                      onTap: _handleNavIndexChanged,
+                      iconSize: iconSize,
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: IndexedStack(
+                  index: _selectedIndex,
+                  children: [
+                    CarModal(
+                      initialPosition: transitProvider.originCoords,
+                      originPlace: transitProvider.originPlace,
+                      destinationPlace: transitProvider.destinationPlace,
+                      transitMapController: _transitMapController,
+                      onLocationUpdated: _handleLocationUpdated,
+                    ),
+                    WalkModal(
+                      initialPosition: transitProvider.originCoords,
+                      originPlace: transitProvider.originPlace,
+                      destinationPlace: transitProvider.destinationPlace,
+                      transitMapController: _transitMapController,
+                      onLocationUpdated: _handleLocationUpdated,
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                TransitOptionWidget(
-                  index: 0,
-                  selectedIndex: _selectedIndex,
-                  icon: Icons.directions_car,
-                  label: '자동차',
-                  onTap: _handleNavIndexChanged,
-                  iconSize: iconSize,
-                ),
-                TransitOptionWidget(
-                  index: 1,
-                  selectedIndex: _selectedIndex,
-                  icon: Icons.directions_walk,
-                  label: '도보',
-                  onTap: _handleNavIndexChanged,
-                  iconSize: iconSize,
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: IndexedStack(
-              index: _selectedIndex,
-              children: [
-                CarModal(
-                  initialPosition: _originCoords,
-                  originPlace: _originPlace,
-                  destinationPlace: _destinationPlace,
-                  transitMapController: _transitMapController,
-                  onLocationUpdated: _handleLocationUpdated,
-                ),
-                WalkModal(
-                  initialPosition: _originCoords,
-                  originPlace: _originPlace,
-                  destinationPlace: _destinationPlace,
-                  transitMapController: _transitMapController,
-                  onLocationUpdated: _handleLocationUpdated,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
