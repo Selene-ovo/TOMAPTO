@@ -6,6 +6,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:tomapto/pages/map/transit.dart';
+import 'package:tomapto/controllers/map/transit_provider.dart';
 
 class SearchMainPage extends StatefulWidget {
   final String initialSearchTerm;
@@ -186,6 +187,11 @@ class _SearchMainPageState extends State<SearchMainPage>
     String locationName,
     NLatLng currentLocation,
   ) {
+    final transitProvider = Provider.of<TransitProvider>(
+      context,
+      listen: false,
+    );
+    transitProvider.setCurrentLocationAsOrigin();
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(
