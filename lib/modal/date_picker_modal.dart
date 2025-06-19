@@ -320,3 +320,303 @@ class _DatePickerModalState extends State<DatePickerModal> {
     );
   }
 }
+
+class YearMonthPickerModal extends StatefulWidget {
+  final DateTime initialDate;
+  final Function(DateTime) onDateSelected;
+
+  const YearMonthPickerModal({
+    super.key,
+    required this.initialDate,
+    required this.onDateSelected,
+  });
+
+  @override
+  _YearMonthPickerModalState createState() => _YearMonthPickerModalState();
+}
+
+class _YearMonthPickerModalState extends State<YearMonthPickerModal> {
+  late int selectedYear;
+  late int selectedMonth;
+  late FixedExtentScrollController _yearController;
+  late FixedExtentScrollController _monthController;
+
+  @override
+  void initState() {
+    super.initState();
+    selectedYear = widget.initialDate.year;
+    selectedMonth = widget.initialDate.month;
+
+    // 현재 년도를 기준으로 초기 위치 계산 (±10년 범위)
+    final currentYear = DateTime.now().year;
+    final yearRange = 20; // 총 20년 범위
+    final initialYearIndex = selectedYear - (currentYear - 10);
+
+    _yearController = FixedExtentScrollController(
+      initialItem: initialYearIndex.clamp(0, yearRange - 1),
+    );
+
+    _monthController = FixedExtentScrollController(
+      initialItem: selectedMonth - 1,
+    );
+  }
+
+  @override
+  void dispose() {
+    _yearController.dispose();
+    _monthController.dispose();
+    super.dispose();
+  }
+
+  // 월 이름 반환
+  String getMonthName(int month) {
+    const months = [
+      '1월',
+      '2월',
+      '3월',
+      '4월',
+      '5월',
+      '6월',
+      '7월',
+      '8월',
+      '9월',
+      '10월',
+      '11월',
+      '12월',
+    ];
+    return months[month - 1];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final currentYear = DateTime.now().year;
+    final yearRange = List.generate(21, (index) => currentYear - 10 + index);
+    final monthRange = List.generate(12, (index) => index + 1);
+
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 30),
+        constraints: const BoxConstraints(maxHeight: 320, maxWidth: 280),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.2),
+              blurRadius: 20,
+              spreadRadius: 2,
+            ),
+          ],
+        ),
+        child: Material(
+          borderRadius: BorderRadius.circular(20),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 헤더 (더 컴팩트하게)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      '년월 선택',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        fontFamily: 'Pretendard',
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 18),
+                      onPressed: () => Navigator.of(context).pop(),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // 년도와 월 선택 영역 (높이 조정)
+                Flexible(
+                  child: Row(
+                    children: [
+                      // 년도 선택
+                      Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text(
+                              '년도',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                fontFamily: 'Pretendard',
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            SizedBox(
+                              height: 120,
+                              child: ListWheelScrollView.useDelegate(
+                                controller: _yearController,
+                                itemExtent: 40,
+                                physics: const FixedExtentScrollPhysics(),
+                                onSelectedItemChanged: (index) {
+                                  setState(() {
+                                    selectedYear = yearRange[index];
+                                  });
+                                },
+                                childDelegate: ListWheelChildBuilderDelegate(
+                                  builder: (context, index) {
+                                    if (index < 0 ||
+                                        index >= yearRange.length) {
+                                      return null;
+                                    }
+
+                                    final year = yearRange[index];
+                                    final isSelected = year == selectedYear;
+
+                                    return Container(
+                                      alignment: Alignment.center,
+                                      child: Text(
+                                        year.toString(),
+                                        style: TextStyle(
+                                          fontSize: isSelected ? 18 : 14,
+                                          fontWeight:
+                                              isSelected
+                                                  ? FontWeight.bold
+                                                  : FontWeight.normal,
+                                          color:
+                                              isSelected
+                                                  ? const Color(0xFFFB233B)
+                                                  : Colors.grey,
+                                          fontFamily: 'Pretendard',
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    );
+                                  },
+                                  childCount: yearRange.length,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(width: 16),
+
+                      // 월 선택
+                      Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text(
+                              '월',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                fontFamily: 'Pretendard',
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            SizedBox(
+                              height: 120,
+                              child: ListWheelScrollView.useDelegate(
+                                controller: _monthController,
+                                itemExtent: 40,
+                                physics: const FixedExtentScrollPhysics(),
+                                onSelectedItemChanged: (index) {
+                                  setState(() {
+                                    selectedMonth = monthRange[index];
+                                  });
+                                },
+                                childDelegate: ListWheelChildBuilderDelegate(
+                                  builder: (context, index) {
+                                    if (index < 0 ||
+                                        index >= monthRange.length) {
+                                      return null;
+                                    }
+
+                                    final month = monthRange[index];
+                                    final isSelected = month == selectedMonth;
+
+                                    return Container(
+                                      alignment: Alignment.center,
+                                      child: Text(
+                                        getMonthName(month),
+                                        style: TextStyle(
+                                          fontSize: isSelected ? 18 : 14,
+                                          fontWeight:
+                                              isSelected
+                                                  ? FontWeight.bold
+                                                  : FontWeight.normal,
+                                          color:
+                                              isSelected
+                                                  ? const Color(0xFFFB233B)
+                                                  : Colors.grey,
+                                          fontFamily: 'Pretendard',
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    );
+                                  },
+                                  childCount: monthRange.length,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+                // 확인 버튼 (폰트 크기 줄이고 패딩 조정)
+                SizedBox(
+                  width: double.infinity,
+                  height: 44,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      final selectedDate = DateTime(
+                        selectedYear,
+                        selectedMonth,
+                        1,
+                      );
+                      widget.onDateSelected(selectedDate);
+                      Navigator.of(context).pop();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFB233B),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 8,
+                        horizontal: 16,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: const Text(
+                      '선택',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        fontFamily: 'Pretendard',
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

@@ -1,11 +1,17 @@
 // lib/modal/add_expense_modal.dart
 import 'package:flutter/material.dart';
 import 'package:tomapto/modal/date_picker_modal.dart';
+import 'package:tomapto/services/car_expense_service.dart';
 
 class AddExpenseModal extends StatefulWidget {
   final Function onClose;
+  final Function? onExpenseAdded; // 지출 추가 완료 후 콜백
 
-  const AddExpenseModal({super.key, required this.onClose});
+  const AddExpenseModal({
+    super.key,
+    required this.onClose,
+    this.onExpenseAdded,
+  });
 
   @override
   _AddExpenseModalState createState() => _AddExpenseModalState();
@@ -16,6 +22,7 @@ class _AddExpenseModalState extends State<AddExpenseModal> {
   final _amountController = TextEditingController();
   final _descriptionController = TextEditingController();
   DateTime _selectedDate = DateTime.now();
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -44,6 +51,85 @@ class _AddExpenseModalState extends State<AddExpenseModal> {
   // 날짜를 월/일 형식으로 포맷팅
   String _formatDateToMonthDay(DateTime date) {
     return '${date.month}/${date.day}';
+  }
+
+  // 입력 유효성 검사
+  bool _validateInputs() {
+    if (_amountController.text.trim().isEmpty) {
+      _showErrorSnackBar('금액을 입력해주세요.');
+      return false;
+    }
+
+    final amount = double.tryParse(_amountController.text.trim());
+    if (amount == null || amount <= 0) {
+      _showErrorSnackBar('유효한 금액을 입력해주세요.');
+      return false;
+    }
+
+    if (_descriptionController.text.trim().isEmpty) {
+      _showErrorSnackBar('설명을 입력해주세요.');
+      return false;
+    }
+
+    return true;
+  }
+
+  // 에러 메시지 표시
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  // 성공 메시지 표시
+  void _showSuccessSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  // 지출 추가 처리
+  Future<void> _addExpense() async {
+    if (!_validateInputs()) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final amount = double.parse(_amountController.text.trim());
+      final description = _descriptionController.text.trim();
+
+      await CarExpenseService.addExpense(
+        expenseType: _selectedType,
+        amount: amount,
+        description: description,
+        expenseDate: _selectedDate,
+      );
+
+      _showSuccessSnackBar('지출이 성공적으로 추가되었습니다.');
+
+      // 부모 위젯에 지출 추가 완료 알림
+      if (widget.onExpenseAdded != null) {
+        widget.onExpenseAdded!();
+      }
+
+      widget.onClose();
+    } catch (e) {
+      _showErrorSnackBar('지출 추가에 실패했습니다: ${e.toString()}');
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   @override
@@ -181,13 +267,7 @@ class _AddExpenseModalState extends State<AddExpenseModal> {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: () {
-                          // 지출 추가 로직
-                          // TODO: 서버에 데이터 전송
-                          // 데이터: _selectedType, _amountController.text, _descriptionController.text, _selectedDate
-
-                          widget.onClose();
-                        },
+                        onPressed: _isLoading ? null : _addExpense,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFFFB233B),
                           foregroundColor: Colors.white,
@@ -197,14 +277,26 @@ class _AddExpenseModalState extends State<AddExpenseModal> {
                           ),
                           elevation: 0,
                         ),
-                        child: const Text(
-                          '추가',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            fontFamily: 'Pretendard',
-                          ),
-                        ),
+                        child:
+                            _isLoading
+                                ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.white,
+                                    ),
+                                  ),
+                                )
+                                : const Text(
+                                  '추가',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    fontFamily: 'Pretendard',
+                                  ),
+                                ),
                       ),
                     ),
 
