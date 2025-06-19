@@ -1,6 +1,7 @@
 // pages/car/car_account_book.dart
 import 'package:flutter/material.dart';
 import 'package:tomapto/modal/add_expense_modal.dart';
+import 'package:tomapto/modal/date_picker_modal.dart';
 import 'package:tomapto/services/car_expense_service.dart';
 
 class CarExpenseTracker extends StatefulWidget {
@@ -15,13 +16,24 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
   bool _showAddExpense = false;
   bool _isLoading = true;
 
-  // 캘린더 관련 상태
-  DateTime _currentDate = DateTime.now();
+  // 홈 탭용 독립적인 년월 관리
+  DateTime _homeCurrentDate = DateTime.now();
+
+  // 캘린더 관련 상태 (캘린더 탭 전용)
+  DateTime _calendarCurrentDate = DateTime.now();
   DateTime? _selectedDate;
 
   // 데이터 상태
   List<Map<String, dynamic>> _recentExpenses = [];
-  Map<String, dynamic> _monthlyStats = {
+  Map<String, dynamic> _homeMonthlyStats = {
+    'total': 0,
+    'fuel': 0,
+    'maintenance': 0,
+    'insurance': 0,
+    'other': 0,
+    'growth_rate': 0.0,
+  };
+  Map<String, dynamic> _statsMonthlyStats = {
     'total': 0,
     'fuel': 0,
     'maintenance': 0,
@@ -58,7 +70,8 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
     try {
       await Future.wait([
         _loadRecentExpenses(),
-        _loadMonthlyStats(),
+        _loadHomeMonthlyStats(),
+        _loadStatsMonthlyStats(),
         _loadDailyExpenses(),
       ]);
     } catch (e) {
@@ -83,28 +96,51 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
     }
   }
 
-  // 월간 통계 로드
-  Future<void> _loadMonthlyStats() async {
+  // 홈 탭 월간 통계 로드
+  Future<void> _loadHomeMonthlyStats() async {
     try {
       final stats = await CarExpenseService.getMonthlyStats(
-        year: _currentDate.year,
-        month: _currentDate.month,
+        year: _homeCurrentDate.year,
+        month: _homeCurrentDate.month,
       );
-      print('받아온 월간 통계 데이터: $stats');
+      print('홈 탭 월간 통계 데이터: $stats');
       setState(() {
-        _monthlyStats = stats;
+        _homeMonthlyStats = stats;
       });
     } catch (e) {
-      print('월간 통계 로드 오류: $e');
+      print('홈 탭 월간 통계 로드 오류: $e');
+    }
+  }
+
+  // 통계 탭 월간 통계 로드
+  Future<void> _loadStatsMonthlyStats() async {
+    try {
+      final stats = await CarExpenseService.getMonthlyStats(
+        year: _calendarCurrentDate.year,
+        month: _calendarCurrentDate.month,
+      );
+      print('통계 탭 월간 통계 데이터: $stats');
+      setState(() {
+        _statsMonthlyStats = stats;
+      });
+    } catch (e) {
+      print('통계 탭 월간 통계 로드 오류: $e');
     }
   }
 
   // 일별 지출 로드 (캘린더용)
   Future<void> _loadDailyExpenses() async {
+    // 캘린더 탭이 아닐 때는 로드하지 않음
+    if (_activeTab != 2) return;
+
     try {
+      print(
+        '일별 지출 데이터 로드 시작: ${_calendarCurrentDate.year}년 ${_calendarCurrentDate.month}월',
+      );
+
       final dailyData = await CarExpenseService.getDailyExpenses(
-        year: _currentDate.year,
-        month: _currentDate.month,
+        year: _calendarCurrentDate.year,
+        month: _calendarCurrentDate.month,
       );
 
       print('=== 일별 지출 데이터 디버깅 ===');
@@ -117,55 +153,28 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
       }
       print('===========================');
 
-      setState(() {
-        _dailyExpenses = dailyData;
-      });
+      // 현재 캘린더 월과 일치하는지 확인 후에만 상태 업데이트
+      if (_activeTab == 2) {
+        setState(() {
+          _dailyExpenses = dailyData;
+        });
 
-      // 캘린더 탭이 활성화되어 있고, 선택된 날짜가 없으며, 현재 월이 오늘과 같다면 오늘을 선택
-      if (_activeTab == 2 && _selectedDate == null) {
-        final today = DateTime.now();
-        if (_currentDate.year == today.year &&
-            _currentDate.month == today.month) {
-          _selectDate(today);
+        // 선택된 날짜가 없으며, 현재 월이 오늘과 같다면 오늘을 선택
+        if (_selectedDate == null) {
+          final today = DateTime.now();
+          if (_calendarCurrentDate.year == today.year &&
+              _calendarCurrentDate.month == today.month) {
+            _selectDate(today);
+          }
         }
       }
     } catch (e) {
       print('일별 지출 로드 오류: $e');
 
-      // 에러 발생 시 테스트 데이터 사용 (실제 지출이 있는 날짜들을 기반으로)
-      final today = DateTime.now();
-      if (_currentDate.year == today.year &&
-          _currentDate.month == today.month) {
-        // 최근 지출에서 날짜를 추출하여 캘린더에 표시
-        Map<String, dynamic> testDailyData = {};
-
-        for (var expense in _recentExpenses) {
-          try {
-            final expenseDate = _formatDate(expense['expense_date'].toString());
-            final expenseDateTime = DateTime.parse(expenseDate);
-
-            if (expenseDateTime.year == _currentDate.year &&
-                expenseDateTime.month == _currentDate.month) {
-              final day = expenseDateTime.day.toString();
-              final amount =
-                  double.tryParse(expense['amount'].toString()) ?? 0.0;
-
-              if (testDailyData.containsKey(day)) {
-                testDailyData[day]['total'] += amount;
-                testDailyData[day]['count'] += 1;
-              } else {
-                testDailyData[day] = {'total': amount, 'count': 1};
-              }
-            }
-          } catch (dateError) {
-            print('날짜 파싱 오류: $dateError');
-          }
-        }
-
-        print('최근 지출에서 생성한 일별 데이터: $testDailyData');
-
+      // 오류 발생 시에도 캘린더 탭에서만 상태 업데이트
+      if (_activeTab == 2) {
         setState(() {
-          _dailyExpenses = testDailyData;
+          _dailyExpenses = {};
         });
       }
     }
@@ -174,15 +183,12 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
   // 특정 날짜의 지출 내역 로드
   Future<void> _loadExpensesForDate(DateTime date) async {
     try {
-      // 새로운 API를 사용하여 특정 날짜의 지출만 가져오기
       final expenses = await CarExpenseService.getExpensesForDate(date);
-
       setState(() {
         _selectedDateExpenses = expenses;
       });
     } catch (e) {
       print('특정 날짜 지출 로드 오류: $e');
-      // 오류 발생 시 빈 리스트로 설정
       setState(() {
         _selectedDateExpenses = [];
       });
@@ -191,26 +197,51 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
 
   // 지출 추가 완료 후 데이터 새로고침
   Future<void> _onExpenseAdded() async {
-    await _loadAllData();
-    // 선택된 날짜가 있으면 해당 날짜의 지출도 새로고침
-    if (_selectedDate != null) {
-      await _loadExpensesForDate(_selectedDate!);
+    await _loadRecentExpenses();
+    await _loadHomeMonthlyStats();
+
+    // 현재 활성 탭에 따라 추가 데이터 로드
+    if (_activeTab == 1) {
+      await _loadStatsMonthlyStats();
+    } else if (_activeTab == 2) {
+      await _loadDailyExpenses();
+      if (_selectedDate != null) {
+        await _loadExpensesForDate(_selectedDate!);
+      }
     }
   }
 
-  // 이전/다음 달로 이동
-  void _changeMonth(int direction) {
+  // 홈 탭 년월 변경
+  void _changeHomeMonth(DateTime newDate) {
     setState(() {
-      _currentDate = DateTime(
-        _currentDate.year,
-        _currentDate.month + direction,
+      _homeCurrentDate = newDate;
+    });
+    _loadHomeMonthlyStats();
+  }
+
+  // 캘린더/통계 탭 년월 변경
+  void _changeCalendarMonth(int direction) {
+    setState(() {
+      _calendarCurrentDate = DateTime(
+        _calendarCurrentDate.year,
+        _calendarCurrentDate.month + direction,
         1,
       );
-      _selectedDate = null; // 선택된 날짜 초기화
+      _selectedDate = null;
       _selectedDateExpenses = [];
+
+      // 캘린더 탭에서 월 변경 시 즉시 일별 지출 데이터 완전 초기화
+      _dailyExpenses = {}; // 이전 월 데이터 즉시 제거
     });
-    _loadMonthlyStats();
-    _loadDailyExpenses();
+
+    // 다음 프레임에서 데이터 로드 (위젯 재빌드 완료 후)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_activeTab == 1) {
+        _loadStatsMonthlyStats();
+      } else if (_activeTab == 2) {
+        _loadDailyExpenses();
+      }
+    });
   }
 
   // 날짜 선택 처리
@@ -219,6 +250,21 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
       _selectedDate = date;
     });
     _loadExpensesForDate(date);
+  }
+
+  // 년월 선택 모달 표시
+  void _showYearMonthPicker() {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.7),
+      builder:
+          (context) => YearMonthPickerModal(
+            initialDate: _homeCurrentDate,
+            onDateSelected: (DateTime newDate) {
+              _changeHomeMonth(newDate);
+            },
+          ),
+    );
   }
 
   // 에러 메시지 표시
@@ -378,13 +424,16 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
       onTap: () {
         setState(() {
           _activeTab = index;
-          // 캘린더 탭으로 처음 이동할 때 오늘 날짜를 기본 선택
-          if (index == 2 && _selectedDate == null) {
-            final today = DateTime.now();
-            // 현재 표시된 월과 오늘이 같은 월인지 확인
-            if (_currentDate.year == today.year &&
-                _currentDate.month == today.month) {
-              _selectDate(today);
+
+          // 캘린더 탭으로 전환할 때 일별 지출 데이터 로드
+          if (index == 2) {
+            _loadDailyExpenses();
+            if (_selectedDate == null) {
+              final today = DateTime.now();
+              if (_calendarCurrentDate.year == today.year &&
+                  _calendarCurrentDate.month == today.month) {
+                _selectDate(today);
+              }
             }
           }
         });
@@ -490,19 +539,23 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
                         ),
                       ],
                     ),
-                    Text(
-                      '${_monthlyStats['month'] ?? DateTime.now().month}월 ${_monthlyStats['year'] ?? DateTime.now().year}',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.9),
-                        fontSize: 14,
-                        fontFamily: 'Pretendard',
+                    // 클릭 가능한 날짜 버튼 (심플한 디자인)
+                    GestureDetector(
+                      onTap: _showYearMonthPicker,
+                      child: Text(
+                        '${_homeCurrentDate.year}년 ${_homeCurrentDate.month}월',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.9),
+                          fontSize: 14,
+                          fontFamily: 'Pretendard',
+                        ),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  '${CarExpenseService.formatAmount(_monthlyStats['total'] ?? 0)}원',
+                  '${CarExpenseService.formatAmount(_homeMonthlyStats['total'] ?? 0)}원',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 28,
@@ -512,7 +565,7 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '전월 대비 ${(_monthlyStats['growth_rate'] ?? 0) >= 0 ? '+' : ''}${(_monthlyStats['growth_rate'] ?? 0).toStringAsFixed(1)}%',
+                  '전월 대비 ${(_homeMonthlyStats['growth_rate'] ?? 0) >= 0 ? '+' : ''}${(_homeMonthlyStats['growth_rate'] ?? 0).toStringAsFixed(1)}%',
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.9),
                     fontSize: 14,
@@ -532,7 +585,7 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
                   '주유비',
                   Icons.local_gas_station,
                   Colors.blue,
-                  _monthlyStats['fuel'] ?? 0,
+                  _homeMonthlyStats['fuel'] ?? 0,
                 ),
               ),
               const SizedBox(width: 12),
@@ -541,7 +594,7 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
                   '정비비',
                   Icons.build,
                   Colors.orange,
-                  _monthlyStats['maintenance'] ?? 0,
+                  _homeMonthlyStats['maintenance'] ?? 0,
                 ),
               ),
             ],
@@ -759,10 +812,10 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
               children: [
                 IconButton(
                   icon: const Icon(Icons.arrow_back_ios, size: 16),
-                  onPressed: () => _changeMonth(-1),
+                  onPressed: () => _changeCalendarMonth(-1),
                 ),
                 Text(
-                  '${_currentDate.year}년 ${_currentDate.month}월',
+                  '${_calendarCurrentDate.year}년 ${_calendarCurrentDate.month}월',
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -771,7 +824,7 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
                 ),
                 IconButton(
                   icon: const Icon(Icons.arrow_forward_ios, size: 16),
-                  onPressed: () => _changeMonth(1),
+                  onPressed: () => _changeCalendarMonth(1),
                 ),
               ],
             ),
@@ -806,7 +859,7 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                if (_monthlyStats['total'] == 0)
+                if (_statsMonthlyStats['total'] == 0)
                   const Center(
                     child: Padding(
                       padding: EdgeInsets.all(20),
@@ -822,41 +875,42 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
                 else ...[
                   _buildProgressBar(
                     '주유비',
-                    _monthlyStats['fuel'] ?? 0,
+                    _statsMonthlyStats['fuel'] ?? 0,
                     Colors.blue,
-                    (_monthlyStats['total'] > 0)
-                        ? (_monthlyStats['fuel'] ?? 0) / _monthlyStats['total']
+                    (_statsMonthlyStats['total'] > 0)
+                        ? (_statsMonthlyStats['fuel'] ?? 0) /
+                            _statsMonthlyStats['total']
                         : 0,
                   ),
                   const SizedBox(height: 12),
                   _buildProgressBar(
                     '정비비',
-                    _monthlyStats['maintenance'] ?? 0,
+                    _statsMonthlyStats['maintenance'] ?? 0,
                     Colors.orange,
-                    (_monthlyStats['total'] > 0)
-                        ? (_monthlyStats['maintenance'] ?? 0) /
-                            _monthlyStats['total']
+                    (_statsMonthlyStats['total'] > 0)
+                        ? (_statsMonthlyStats['maintenance'] ?? 0) /
+                            _statsMonthlyStats['total']
                         : 0,
                   ),
                   const SizedBox(height: 12),
                   _buildProgressBar(
                     '보험료',
-                    _monthlyStats['insurance'] ?? 0,
+                    _statsMonthlyStats['insurance'] ?? 0,
                     Colors.green,
-                    (_monthlyStats['total'] > 0)
-                        ? (_monthlyStats['insurance'] ?? 0) /
-                            _monthlyStats['total']
+                    (_statsMonthlyStats['total'] > 0)
+                        ? (_statsMonthlyStats['insurance'] ?? 0) /
+                            _statsMonthlyStats['total']
                         : 0,
                   ),
-                  if ((_monthlyStats['other'] ?? 0) > 0) ...[
+                  if ((_statsMonthlyStats['other'] ?? 0) > 0) ...[
                     const SizedBox(height: 12),
                     _buildProgressBar(
                       '기타',
-                      _monthlyStats['other'] ?? 0,
+                      _statsMonthlyStats['other'] ?? 0,
                       Colors.grey,
-                      (_monthlyStats['total'] > 0)
-                          ? (_monthlyStats['other'] ?? 0) /
-                              _monthlyStats['total']
+                      (_statsMonthlyStats['total'] > 0)
+                          ? (_statsMonthlyStats['other'] ?? 0) /
+                              _statsMonthlyStats['total']
                           : 0,
                     ),
                   ],
@@ -894,7 +948,7 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
                 ),
                 const SizedBox(height: 20),
                 Text(
-                  '${CarExpenseService.formatAmount(_monthlyStats['total'] ?? 0)}원',
+                  '${CarExpenseService.formatAmount(_statsMonthlyStats['total'] ?? 0)}원',
                   style: const TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.bold,
@@ -904,10 +958,10 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '전월 대비 ${(_monthlyStats['growth_rate'] ?? 0) >= 0 ? '+' : ''}${(_monthlyStats['growth_rate'] ?? 0).toStringAsFixed(1)}%',
+                  '전월 대비 ${(_statsMonthlyStats['growth_rate'] ?? 0) >= 0 ? '+' : ''}${(_statsMonthlyStats['growth_rate'] ?? 0).toStringAsFixed(1)}%',
                   style: TextStyle(
                     color:
-                        (_monthlyStats['growth_rate'] ?? 0) >= 0
+                        (_statsMonthlyStats['growth_rate'] ?? 0) >= 0
                             ? Colors.red
                             : Colors.green,
                     fontFamily: 'Pretendard',
@@ -991,10 +1045,14 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
 
   // 달력 위젯
   Widget _buildCalendar() {
-    final firstDayOfMonth = DateTime(_currentDate.year, _currentDate.month, 1);
+    final firstDayOfMonth = DateTime(
+      _calendarCurrentDate.year,
+      _calendarCurrentDate.month,
+      1,
+    );
     final lastDayOfMonth = DateTime(
-      _currentDate.year,
-      _currentDate.month + 1,
+      _calendarCurrentDate.year,
+      _calendarCurrentDate.month + 1,
       0,
     );
     final firstWeekday = firstDayOfMonth.weekday;
@@ -1022,7 +1080,7 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                '${_currentDate.year}년 ${_currentDate.month}월',
+                '${_calendarCurrentDate.year}년 ${_calendarCurrentDate.month}월',
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -1033,12 +1091,12 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
                 children: [
                   IconButton(
                     icon: const Icon(Icons.arrow_back_ios, size: 16),
-                    onPressed: () => _changeMonth(-1),
+                    onPressed: () => _changeCalendarMonth(-1),
                     splashRadius: 20,
                   ),
                   IconButton(
                     icon: const Icon(Icons.arrow_forward_ios, size: 16),
-                    onPressed: () => _changeMonth(1),
+                    onPressed: () => _changeCalendarMonth(1),
                     splashRadius: 20,
                   ),
                 ],
@@ -1103,8 +1161,8 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
               }
 
               final currentDayDate = DateTime(
-                _currentDate.year,
-                _currentDate.month,
+                _calendarCurrentDate.year,
+                _calendarCurrentDate.month,
                 dayNumber,
               );
               final isToday =
@@ -1117,24 +1175,36 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
                   _selectedDate!.month == currentDayDate.month &&
                   _selectedDate!.day == currentDayDate.day;
 
-              // 해당 날짜에 지출이 있는지 확인 - _dailyExpenses에서 확인
-              final dayString = dayNumber.toString();
-              final dayData = _dailyExpenses[dayString];
+              // 지출 표시 로직을 더 안전하게 수정
               bool hasExpense = false;
 
-              if (dayData != null) {
-                if (dayData is Map) {
+              // _dailyExpenses가 비어있지 않을 때만 확인
+              if (_dailyExpenses.isNotEmpty) {
+                final dayString = dayNumber.toString();
+                final dayData = _dailyExpenses[dayString];
+
+                if (dayData != null && dayData is Map<String, dynamic>) {
                   final total = dayData['total'];
-                  hasExpense = (total != null && total > 0);
-                  // 캘린더가 처음 렌더링될 때만 로그 출력 (과도한 로그 방지)
-                  if (weekIndex == 0 && dayIndex == 0) {
-                    print(
-                      '캘린더 렌더링 - 지출이 있는 날짜들: ${_dailyExpenses.keys.toList()}',
-                    );
+                  final dateStr = dayData['date'];
+
+                  // 총액이 0보다 크고, 날짜 정보가 있는 경우에만 표시
+                  if (total != null &&
+                      total is num &&
+                      total > 0 &&
+                      dateStr != null) {
+                    try {
+                      final expenseDate = DateTime.parse(dateStr.toString());
+                      // 년월일이 모두 일치하는 경우에만 표시
+                      if (expenseDate.year == _calendarCurrentDate.year &&
+                          expenseDate.month == _calendarCurrentDate.month &&
+                          expenseDate.day == dayNumber) {
+                        hasExpense = true;
+                      }
+                    } catch (e) {
+                      // 날짜 파싱 실패 시 표시하지 않음
+                      print('날짜 파싱 오류 ($dayNumber일): $e');
+                    }
                   }
-                } else {
-                  // dayData가 Map이 아닌 경우 (혹시 다른 형태로 올 수 있음)
-                  print('예상과 다른 데이터 형태: ${dayData.runtimeType}');
                 }
               }
 
@@ -1223,7 +1293,7 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
                 fontFamily: 'Pretendard',
               ),
             ),
-            // 지출 표시 점 - 위치를 우상단으로 이동
+            // 지출 표시 점
             if (hasExpense)
               Positioned(
                 top: 4,
@@ -1283,7 +1353,7 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
     final selectedDateString =
         '${_selectedDate!.month}월 ${_selectedDate!.day}일';
 
-    // 총 금액 계산 개선 - 타입 변환 보장
+    // 총 금액 계산 개선
     double totalAmount = 0.0;
     for (var expense in _selectedDateExpenses) {
       var amount = expense['amount'];
@@ -1295,16 +1365,8 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
       } else if (amount is String) {
         totalAmount += double.tryParse(amount) ?? 0.0;
       } else {
-        // 다른 타입인 경우 문자열로 변환 후 파싱
         totalAmount += double.tryParse(amount.toString()) ?? 0.0;
       }
-    }
-
-    // 총 금액이 0이 아닐 때만 로그 출력
-    if (totalAmount > 0) {
-      print(
-        '선택된 날짜의 총 지출: ${CarExpenseService.formatAmount(totalAmount.round())}원 (${_selectedDateExpenses.length}건)',
-      );
     }
 
     return Container(
