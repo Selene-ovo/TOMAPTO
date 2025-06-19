@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tomapto/services/api_service.dart';
 import 'package:tomapto/services/token_service.dart'; // 토큰 서비스 추가
+import 'package:flutter/material.dart';
+import 'package:tomapto/pages/car/car_account_book.dart';
 
 class ProfileController {
   // 사용자 데이터 상태
@@ -120,12 +122,13 @@ class ProfileController {
   }
 
   // 메뉴 네비게이션 처리
-  void navigateToCalendar(BuildContext context) {
+  void navigateToCarAccountBook(BuildContext context) {
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(const SnackBar(content: Text('캘린더 페이지로 이동합니다')));
-    // 실제 구현 시 아래와 같이 페이지 이동
-    // Navigator.of(context).pushNamed('/calendar');
+    ).showSnackBar(const SnackBar(content: Text('차계부 페이지로 이동합니다')));
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (context) => const CarExpenseTracker()));
   }
 
   void navigateToNotices(BuildContext context) {

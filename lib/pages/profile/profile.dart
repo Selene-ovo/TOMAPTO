@@ -6,6 +6,7 @@ import 'package:tomapto/pages/profile/login.dart';
 import 'package:tomapto/setting/setting.dart';
 import 'package:tomapto/pages/profile/profile_edit.dart'; // 프로필 편집 페이지 import 추가
 import 'package:shared_preferences/shared_preferences.dart'; // SharedPreferences import 추가
+import 'package:tomapto/pages/car/car_account_book.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -57,6 +58,13 @@ class _ProfilePageState extends State<ProfilePage> {
   final ProfileController _controller = ProfileController();
   final GlobalKey<RefreshIndicatorState> _refreshKey =
       GlobalKey<RefreshIndicatorState>();
+
+  void _navigateToCarAccountBook(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const CarExpenseTracker()),
+    );
+  }
 
   @override
   void initState() {
@@ -467,11 +475,12 @@ class _ProfilePageState extends State<ProfilePage> {
                         _buildCardWithStack(
                           context: context,
                           margin: cardMargin,
-                          title: '캘린더 확인하기',
-                          label: '계획',
-                          imagePath: 'assets/icons/default_profile_card.png',
+                          title: '차계부 확인하기',
+                          label: '차량',
+                          imagePath:
+                              'assets/icons/default_profile_card.png', // 차량 관련 이미지로 변경하면 더 좋음
                           labelColor: const Color(0xFFFB233B),
-                          onTap: () => _controller.navigateToCalendar(context),
+                          onTap: () => _navigateToCarAccountBook(context),
                         ),
 
                         // 네비게이션 카드 - 공지사항
