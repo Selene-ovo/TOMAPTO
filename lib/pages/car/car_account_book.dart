@@ -1,8 +1,23 @@
 // pages/car/car_account_book.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:tomapto/modal/add_expense_modal.dart';
 import 'package:tomapto/modal/date_picker_modal.dart';
 import 'package:tomapto/services/car_expense_service.dart';
+import 'package:tomapto/modal/edit_expense_modal.dart';
+import 'package:tomapto/controllers/car/car_account_controller.dart';
+
+// 오버스크롤 glow 효과 제거를 위한 커스텀 클래스
+class NoGlowScrollBehavior extends ScrollBehavior {
+  @override
+  Widget buildOverscrollIndicator(
+    BuildContext context,
+    Widget child,
+    ScrollableDetails details,
+  ) {
+    return child; // 오버스크롤 효과 제거
+  }
+}
 
 class CarExpenseTracker extends StatefulWidget {
   const CarExpenseTracker({super.key});
@@ -12,259 +27,19 @@ class CarExpenseTracker extends StatefulWidget {
 }
 
 class _CarExpenseTrackerState extends State<CarExpenseTracker> {
-  int _activeTab = 0; // 0: 홈, 1: 통계, 2: 캘린더
-  bool _showAddExpense = false;
-  bool _isLoading = true;
-
-  // 홈 탭용 독립적인 년월 관리
-  DateTime _homeCurrentDate = DateTime.now();
-
-  // 캘린더 관련 상태 (캘린더 탭 전용)
-  DateTime _calendarCurrentDate = DateTime.now();
-  DateTime? _selectedDate;
-
-  // 데이터 상태
-  List<Map<String, dynamic>> _recentExpenses = [];
-  Map<String, dynamic> _homeMonthlyStats = {
-    'total': 0,
-    'fuel': 0,
-    'maintenance': 0,
-    'insurance': 0,
-    'other': 0,
-    'growth_rate': 0.0,
-  };
-  Map<String, dynamic> _statsMonthlyStats = {
-    'total': 0,
-    'fuel': 0,
-    'maintenance': 0,
-    'insurance': 0,
-    'other': 0,
-    'growth_rate': 0.0,
-  };
-  Map<String, dynamic> _dailyExpenses = {};
-  List<Map<String, dynamic>> _selectedDateExpenses = [];
+  late CarAccountController controller;
 
   @override
   void initState() {
     super.initState();
-    _loadAllData();
+    controller = CarAccountController();
+    controller.initialize(setState);
   }
 
-  // 날짜 포맷팅 함수 - ISO 문자열을 일반 날짜로 변환
-  String _formatDate(String isoDateString) {
-    try {
-      DateTime date = DateTime.parse(isoDateString);
-      return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-    } catch (e) {
-      print('날짜 파싱 오류: $e');
-      return isoDateString.split('T')[0]; // T가 있으면 앞부분만 반환
-    }
-  }
-
-  // 모든 데이터 로드
-  Future<void> _loadAllData() async {
-    setState(() {
-      _isLoading = true;
-    });
-
-    try {
-      await Future.wait([
-        _loadRecentExpenses(),
-        _loadHomeMonthlyStats(),
-        _loadStatsMonthlyStats(),
-        _loadDailyExpenses(),
-      ]);
-    } catch (e) {
-      print('데이터 로드 오류: $e');
-      _showErrorSnackBar('데이터를 불러오는데 실패했습니다.');
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
-
-  // 최근 지출 내역 로드
-  Future<void> _loadRecentExpenses() async {
-    try {
-      final expenses = await CarExpenseService.getRecentExpenses(limit: 10);
-      setState(() {
-        _recentExpenses = expenses;
-      });
-    } catch (e) {
-      print('최근 지출 로드 오류: $e');
-    }
-  }
-
-  // 홈 탭 월간 통계 로드
-  Future<void> _loadHomeMonthlyStats() async {
-    try {
-      final stats = await CarExpenseService.getMonthlyStats(
-        year: _homeCurrentDate.year,
-        month: _homeCurrentDate.month,
-      );
-      print('홈 탭 월간 통계 데이터: $stats');
-      setState(() {
-        _homeMonthlyStats = stats;
-      });
-    } catch (e) {
-      print('홈 탭 월간 통계 로드 오류: $e');
-    }
-  }
-
-  // 통계 탭 월간 통계 로드
-  Future<void> _loadStatsMonthlyStats() async {
-    try {
-      final stats = await CarExpenseService.getMonthlyStats(
-        year: _calendarCurrentDate.year,
-        month: _calendarCurrentDate.month,
-      );
-      print('통계 탭 월간 통계 데이터: $stats');
-      setState(() {
-        _statsMonthlyStats = stats;
-      });
-    } catch (e) {
-      print('통계 탭 월간 통계 로드 오류: $e');
-    }
-  }
-
-  // 일별 지출 로드 (캘린더용)
-  Future<void> _loadDailyExpenses() async {
-    // 캘린더 탭이 아닐 때는 로드하지 않음
-    if (_activeTab != 2) return;
-
-    try {
-      print(
-        '일별 지출 데이터 로드 시작: ${_calendarCurrentDate.year}년 ${_calendarCurrentDate.month}월',
-      );
-
-      final dailyData = await CarExpenseService.getDailyExpenses(
-        year: _calendarCurrentDate.year,
-        month: _calendarCurrentDate.month,
-      );
-
-      print('=== 일별 지출 데이터 디버깅 ===');
-      print('API 응답 데이터: $dailyData');
-      print('데이터 타입: ${dailyData.runtimeType}');
-      if (dailyData.isNotEmpty) {
-        print(
-          '첫 번째 키의 데이터: ${dailyData.keys.first} -> ${dailyData[dailyData.keys.first]}',
-        );
-      }
-      print('===========================');
-
-      // 현재 캘린더 월과 일치하는지 확인 후에만 상태 업데이트
-      if (_activeTab == 2) {
-        setState(() {
-          _dailyExpenses = dailyData;
-        });
-
-        // 선택된 날짜가 없으며, 현재 월이 오늘과 같다면 오늘을 선택
-        if (_selectedDate == null) {
-          final today = DateTime.now();
-          if (_calendarCurrentDate.year == today.year &&
-              _calendarCurrentDate.month == today.month) {
-            _selectDate(today);
-          }
-        }
-      }
-    } catch (e) {
-      print('일별 지출 로드 오류: $e');
-
-      // 오류 발생 시에도 캘린더 탭에서만 상태 업데이트
-      if (_activeTab == 2) {
-        setState(() {
-          _dailyExpenses = {};
-        });
-      }
-    }
-  }
-
-  // 특정 날짜의 지출 내역 로드
-  Future<void> _loadExpensesForDate(DateTime date) async {
-    try {
-      final expenses = await CarExpenseService.getExpensesForDate(date);
-      setState(() {
-        _selectedDateExpenses = expenses;
-      });
-    } catch (e) {
-      print('특정 날짜 지출 로드 오류: $e');
-      setState(() {
-        _selectedDateExpenses = [];
-      });
-    }
-  }
-
-  // 지출 추가 완료 후 데이터 새로고침
-  Future<void> _onExpenseAdded() async {
-    await _loadRecentExpenses();
-    await _loadHomeMonthlyStats();
-
-    // 현재 활성 탭에 따라 추가 데이터 로드
-    if (_activeTab == 1) {
-      await _loadStatsMonthlyStats();
-    } else if (_activeTab == 2) {
-      await _loadDailyExpenses();
-      if (_selectedDate != null) {
-        await _loadExpensesForDate(_selectedDate!);
-      }
-    }
-  }
-
-  // 홈 탭 년월 변경
-  void _changeHomeMonth(DateTime newDate) {
-    setState(() {
-      _homeCurrentDate = newDate;
-    });
-    _loadHomeMonthlyStats();
-  }
-
-  // 캘린더/통계 탭 년월 변경
-  void _changeCalendarMonth(int direction) {
-    setState(() {
-      _calendarCurrentDate = DateTime(
-        _calendarCurrentDate.year,
-        _calendarCurrentDate.month + direction,
-        1,
-      );
-      _selectedDate = null;
-      _selectedDateExpenses = [];
-
-      // 캘린더 탭에서 월 변경 시 즉시 일별 지출 데이터 완전 초기화
-      _dailyExpenses = {}; // 이전 월 데이터 즉시 제거
-    });
-
-    // 다음 프레임에서 데이터 로드 (위젯 재빌드 완료 후)
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_activeTab == 1) {
-        _loadStatsMonthlyStats();
-      } else if (_activeTab == 2) {
-        _loadDailyExpenses();
-      }
-    });
-  }
-
-  // 날짜 선택 처리
-  void _selectDate(DateTime date) {
-    setState(() {
-      _selectedDate = date;
-    });
-    _loadExpensesForDate(date);
-  }
-
-  // 년월 선택 모달 표시
-  void _showYearMonthPicker() {
-    showDialog(
-      context: context,
-      barrierColor: Colors.black.withOpacity(0.7),
-      builder:
-          (context) => YearMonthPickerModal(
-            initialDate: _homeCurrentDate,
-            onDateSelected: (DateTime newDate) {
-              _changeHomeMonth(newDate);
-            },
-          ),
-    );
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
   }
 
   // 에러 메시지 표시
@@ -278,166 +53,185 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
     );
   }
 
-  // 지출 유형에 따른 아이콘 반환
-  IconData _getExpenseIcon(String type) {
-    switch (type) {
-      case 'fuel':
-        return Icons.local_gas_station;
-      case 'maintenance':
-        return Icons.build;
-      case 'insurance':
-        return Icons.shield;
-      default:
-        return Icons.receipt_long;
-    }
-  }
-
-  // 지출 유형에 따른 색상 반환
-  Color _getExpenseColor(String type) {
-    switch (type) {
-      case 'fuel':
-        return Colors.blue;
-      case 'maintenance':
-        return Colors.orange;
-      case 'insurance':
-        return Colors.green;
-      default:
-        return Colors.grey;
-    }
+  // 년월 선택 모달 표시
+  void _showYearMonthPicker() {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.7),
+      builder:
+          (context) => YearMonthPickerModal(
+            initialDate: controller.homeCurrentDate,
+            onDateSelected: (DateTime newDate) {
+              controller.changeHomeMonth(newDate);
+            },
+          ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => FocusScope.of(context).unfocus(),
-      child: Stack(
-        children: [
-          // 메인 스캐폴드
-          Scaffold(
-            backgroundColor: Colors.grey[50],
-            resizeToAvoidBottomInset: false,
-            appBar: AppBar(
-              title: const Text(
-                '차계부',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontFamily: 'Pretendard',
-                ),
-              ),
-              backgroundColor: Colors.white,
-              elevation: 0,
-              automaticallyImplyLeading: false,
-            ),
-            body:
-                _isLoading
-                    ? const Center(
-                      child: CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          Color(0xFFFB233B),
+    return MaterialApp(
+      home: Builder(
+        builder:
+            (context) => ScrollConfiguration(
+              behavior: NoGlowScrollBehavior(),
+              child: GestureDetector(
+                onTap: () => FocusScope.of(context).unfocus(),
+                child: Stack(
+                  children: [
+                    // 메인 스캐폴드
+                    Scaffold(
+                      backgroundColor: Colors.grey[50],
+                      resizeToAvoidBottomInset: false,
+                      appBar: AppBar(
+                        title: const Text(
+                          '차계부',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontFamily: 'Pretendard',
+                          ),
+                        ),
+                        backgroundColor: Colors.white,
+                        elevation: 0,
+                        automaticallyImplyLeading: false,
+                        systemOverlayStyle: const SystemUiOverlayStyle(
+                          statusBarColor: Colors.transparent,
+                          statusBarIconBrightness: Brightness.dark,
+                          statusBarBrightness: Brightness.light,
+                        ),
+                        scrolledUnderElevation: 0,
+                        surfaceTintColor: Colors.transparent,
+                      ),
+                      body:
+                          controller.isLoading
+                              ? const Center(
+                                child: CircularProgressIndicator(
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Color(0xFFFB233B),
+                                  ),
+                                ),
+                              )
+                              : NotificationListener<
+                                OverscrollIndicatorNotification
+                              >(
+                                onNotification: (notification) {
+                                  notification.disallowIndicator();
+                                  return true;
+                                },
+                                child: RefreshIndicator(
+                                  onRefresh: () async {
+                                    try {
+                                      await controller.loadAllData();
+                                    } catch (e) {
+                                      _showErrorSnackBar('데이터를 불러오는데 실패했습니다.');
+                                    }
+                                  },
+                                  color: const Color(0xFFFB233B),
+                                  child: Column(
+                                    children: [
+                                      Expanded(
+                                        child:
+                                            controller.activeTab == 0
+                                                ? _buildHomeTab()
+                                                : controller.activeTab == 1
+                                                ? _buildStatsTab()
+                                                : _buildCalendarTab(),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                      bottomNavigationBar: Container(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 20,
+                          horizontal: 20,
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(25),
+                          child: Container(
+                            height: 60,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.2),
+                                  blurRadius: 15,
+                                  spreadRadius: 1,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Material(
+                              elevation: 8,
+                              borderRadius: BorderRadius.circular(25),
+                              color: Colors.white,
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceEvenly,
+                                children: [
+                                  _buildBackButton(),
+                                  _buildAddButton(),
+                                  _buildNavItem(0, Icons.directions_car, '홈'),
+                                  _buildNavItem(1, Icons.pie_chart, '통계'),
+                                  _buildNavItem(2, Icons.calendar_today, '캘린더'),
+                                ],
+                              ),
+                            ),
+                          ),
                         ),
                       ),
-                    )
-                    : RefreshIndicator(
-                      onRefresh: _loadAllData,
-                      color: const Color(0xFFFB233B),
-                      child: Column(
-                        children: [
-                          Expanded(
-                            child:
-                                _activeTab == 0
-                                    ? _buildHomeTab()
-                                    : _activeTab == 1
-                                    ? _buildStatsTab()
-                                    : _buildCalendarTab(),
-                          ),
-                        ],
-                      ),
                     ),
-            bottomNavigationBar: Container(
-              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(25),
-                child: Container(
-                  height: 60,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.2),
-                        blurRadius: 15,
-                        spreadRadius: 1,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Material(
-                    elevation: 8,
-                    borderRadius: BorderRadius.circular(25),
-                    color: Colors.white,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        _buildBackButton(),
-                        _buildAddButton(),
-                        _buildNavItem(0, Icons.directions_car, '홈'),
-                        _buildNavItem(1, Icons.pie_chart, '통계'),
-                        _buildNavItem(2, Icons.calendar_today, '캘린더'),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
 
-          // 지출 추가 모달
-          if (_showAddExpense)
-            Positioned.fill(
-              child: Material(
-                color: Colors.black.withOpacity(0.7),
-                child: GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _showAddExpense = false;
-                    });
-                  },
-                  child: AddExpenseModal(
-                    onClose: () {
-                      setState(() {
-                        _showAddExpense = false;
-                      });
-                    },
-                    onExpenseAdded: _onExpenseAdded,
-                  ),
+                    // 지출 추가 모달
+                    if (controller.showAddExpense)
+                      Positioned.fill(
+                        child: Material(
+                          color: Colors.black.withOpacity(0.7),
+                          child: GestureDetector(
+                            onTap:
+                                () => controller.toggleAddExpenseModal(false),
+                            child: AddExpenseModal(
+                              onClose:
+                                  () => controller.toggleAddExpenseModal(false),
+                              onExpenseAdded: controller.onExpenseChanged,
+                            ),
+                          ),
+                        ),
+                      ),
+
+                    // 지출 수정 모달
+                    if (controller.showEditExpense &&
+                        controller.selectedExpenseForEdit != null)
+                      Positioned.fill(
+                        child: Material(
+                          color: Colors.black.withOpacity(0.7),
+                          child: GestureDetector(
+                            onTap:
+                                () => controller.toggleEditExpenseModal(false),
+                            child: EditExpenseModal(
+                              expense: controller.selectedExpenseForEdit!,
+                              onClose:
+                                  () =>
+                                      controller.toggleEditExpenseModal(false),
+                              onExpenseUpdated: controller.onExpenseChanged,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),
-        ],
       ),
+      debugShowCheckedModeBanner: false,
     );
   }
 
   // 하단 네비게이션 아이템 위젯
   Widget _buildNavItem(int index, IconData icon, String label) {
-    bool isActive = _activeTab == index;
+    bool isActive = controller.activeTab == index;
     return InkWell(
-      onTap: () {
-        setState(() {
-          _activeTab = index;
-
-          // 캘린더 탭으로 전환할 때 일별 지출 데이터 로드
-          if (index == 2) {
-            _loadDailyExpenses();
-            if (_selectedDate == null) {
-              final today = DateTime.now();
-              if (_calendarCurrentDate.year == today.year &&
-                  _calendarCurrentDate.month == today.month) {
-                _selectDate(today);
-              }
-            }
-          }
-        });
-      },
+      onTap: () => controller.changeTab(index),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
         child: Column(
@@ -483,11 +277,7 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
   // 추가 버튼 위젯
   Widget _buildAddButton() {
     return InkWell(
-      onTap: () {
-        setState(() {
-          _showAddExpense = true;
-        });
-      },
+      onTap: () => controller.toggleAddExpenseModal(true),
       child: Container(
         width: 35,
         height: 35,
@@ -502,156 +292,160 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
 
   // 홈 탭 위젯
   Widget _buildHomeTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 월간 요약
-          Container(
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFFFB233B), Color(0xFFFF5C5C)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+    return ScrollConfiguration(
+      behavior: NoGlowScrollBehavior(),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 월간 요약
+            Container(
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFFB233B), Color(0xFFFF5C5C)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(16),
               ),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            padding: const EdgeInsets.all(20),
-            width: double.infinity,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.directions_car, color: Colors.white),
-                        const SizedBox(width: 8),
-                        const Text(
-                          '이번 달 지출',
+              padding: const EdgeInsets.all(20),
+              width: double.infinity,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.directions_car, color: Colors.white),
+                          const SizedBox(width: 8),
+                          const Text(
+                            '이 달 지출',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontFamily: 'Pretendard',
+                            ),
+                          ),
+                        ],
+                      ),
+                      GestureDetector(
+                        onTap: _showYearMonthPicker,
+                        child: Text(
+                          '${controller.homeCurrentDate.year}년 ${controller.homeCurrentDate.month}월',
                           style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
+                            color: Colors.white.withOpacity(0.9),
+                            fontSize: 14,
                             fontFamily: 'Pretendard',
                           ),
                         ),
-                      ],
-                    ),
-                    // 클릭 가능한 날짜 버튼 (심플한 디자인)
-                    GestureDetector(
-                      onTap: _showYearMonthPicker,
-                      child: Text(
-                        '${_homeCurrentDate.year}년 ${_homeCurrentDate.month}월',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.9),
-                          fontSize: 14,
-                          fontFamily: 'Pretendard',
-                        ),
                       ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    '${CarExpenseService.formatAmount(controller.homeMonthlyStats['total'] ?? 0)}원',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'Pretendard',
                     ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  '${CarExpenseService.formatAmount(_homeMonthlyStats['total'] ?? 0)}원',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'Pretendard',
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '전월 대비 ${(_homeMonthlyStats['growth_rate'] ?? 0) >= 0 ? '+' : ''}${(_homeMonthlyStats['growth_rate'] ?? 0).toStringAsFixed(1)}%',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.9),
-                    fontSize: 14,
-                    fontFamily: 'Pretendard',
+                  const SizedBox(height: 4),
+                  Text(
+                    '전월 대비 ${(controller.homeMonthlyStats['growth_rate'] ?? 0) >= 0 ? '+' : ''}${(controller.homeMonthlyStats['growth_rate'] ?? 0).toStringAsFixed(1)}%',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.9),
+                      fontSize: 14,
+                      fontFamily: 'Pretendard',
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          // 카테고리별 요약
-          Row(
-            children: [
-              Expanded(
-                child: _buildCategoryCard(
-                  '주유비',
-                  Icons.local_gas_station,
-                  Colors.blue,
-                  _homeMonthlyStats['fuel'] ?? 0,
-                ),
+                ],
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildCategoryCard(
-                  '정비비',
-                  Icons.build,
-                  Colors.orange,
-                  _homeMonthlyStats['maintenance'] ?? 0,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-
-          // 최근 지출 내역
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  spreadRadius: 0,
-                  offset: const Offset(0, 2),
-                ),
-              ],
             ),
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            const SizedBox(height: 20),
+
+            // 카테고리별 요약
+            Row(
               children: [
-                const Text(
-                  '최근 지출',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'Pretendard',
+                Expanded(
+                  child: _buildCategoryCard(
+                    '주유비',
+                    Icons.local_gas_station,
+                    Colors.blue,
+                    controller.homeMonthlyStats['fuel'] ?? 0,
                   ),
                 ),
-                const SizedBox(height: 12),
-                if (_recentExpenses.isEmpty)
-                  const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(20),
-                      child: Text(
-                        '아직 지출 내역이 없습니다.\n+ 버튼을 눌러 지출을 추가해보세요!',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.grey,
-                          fontFamily: 'Pretendard',
-                        ),
-                      ),
-                    ),
-                  )
-                else
-                  // 최대 10개의 최근 지출 표시
-                  ...List.generate(
-                    _recentExpenses.length > 10 ? 10 : _recentExpenses.length,
-                    (index) => _buildExpenseItem(_recentExpenses[index]),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildCategoryCard(
+                    '정비비',
+                    Icons.build,
+                    Colors.orange,
+                    controller.homeMonthlyStats['maintenance'] ?? 0,
                   ),
+                ),
               ],
             ),
-          ),
-        ],
+            const SizedBox(height: 20),
+
+            // 최근 지출 내역
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    spreadRadius: 0,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '최근 지출',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'Pretendard',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  if (controller.recentExpenses.isEmpty)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Text(
+                          '아직 지출 내역이 없습니다.\n+ 버튼을 눌러 지출을 추가해보세요!',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontFamily: 'Pretendard',
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    ...List.generate(
+                      controller.recentExpenses.length > 10
+                          ? 10
+                          : controller.recentExpenses.length,
+                      (index) =>
+                          _buildExpenseItem(controller.recentExpenses[index]),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -711,266 +505,270 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
 
   // 지출 항목 위젯
   Widget _buildExpenseItem(Map<String, dynamic> expense) {
-    Color bgColor = _getExpenseColor(expense['expense_type']).withOpacity(0.1);
-    Color borderColor = _getExpenseColor(
-      expense['expense_type'],
-    ).withOpacity(0.3);
+    Color bgColor = controller
+        .getExpenseColor(expense['expense_type'])
+        .withOpacity(0.1);
+    Color borderColor = controller
+        .getExpenseColor(expense['expense_type'])
+        .withOpacity(0.3);
 
-    // 날짜 포맷팅
-    final formattedDate = _formatDate(expense['expense_date'].toString());
+    final formattedDate = controller.formatDate(
+      expense['expense_date'].toString(),
+    );
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: borderColor),
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 아이콘
-          Icon(
-            _getExpenseIcon(expense['expense_type']),
-            color: _getExpenseColor(expense['expense_type']),
-            size: 24,
-          ),
-          const SizedBox(width: 12),
-
-          // 설명과 날짜 (확장 가능)
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  expense['description'],
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'Pretendard',
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  formattedDate,
-                  style: const TextStyle(
-                    color: Colors.grey,
-                    fontSize: 12,
-                    fontFamily: 'Pretendard',
-                  ),
-                ),
-              ],
+    return GestureDetector(
+      onTap: () => controller.onExpenseItemTap(expense),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: borderColor),
+        ),
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              controller.getExpenseIcon(expense['expense_type']),
+              color: controller.getExpenseColor(expense['expense_type']),
+              size: 24,
             ),
-          ),
-
-          const SizedBox(width: 8),
-
-          // 금액 (고정 너비)
-          Container(
-            constraints: const BoxConstraints(maxWidth: 100),
-            child: Text(
-              '${CarExpenseService.formatAmount(expense['amount'])}원',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontFamily: 'Pretendard',
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    expense['description'],
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'Pretendard',
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    formattedDate,
+                    style: const TextStyle(
+                      color: Colors.grey,
+                      fontSize: 12,
+                      fontFamily: 'Pretendard',
+                    ),
+                  ),
+                ],
               ),
-              textAlign: TextAlign.right,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
             ),
-          ),
-        ],
+            const SizedBox(width: 8),
+            Container(
+              constraints: const BoxConstraints(maxWidth: 100),
+              child: Text(
+                '${CarExpenseService.formatAmount(expense['amount'])}원',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'Pretendard',
+                ),
+                textAlign: TextAlign.right,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   // 통계 탭 위젯
   Widget _buildStatsTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        children: [
-          // 월 선택 헤더
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  spreadRadius: 0,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.arrow_back_ios, size: 16),
-                  onPressed: () => _changeCalendarMonth(-1),
-                ),
-                Text(
-                  '${_calendarCurrentDate.year}년 ${_calendarCurrentDate.month}월',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'Pretendard',
+    return ScrollConfiguration(
+      behavior: NoGlowScrollBehavior(),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            // 월 선택 헤더
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    spreadRadius: 0,
+                    offset: const Offset(0, 2),
                   ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.arrow_forward_ios, size: 16),
-                  onPressed: () => _changeCalendarMonth(1),
-                ),
-              ],
+                ],
+              ),
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back_ios, size: 16),
+                    onPressed: () => controller.changeCalendarMonth(-1),
+                  ),
+                  Text(
+                    '${controller.calendarCurrentDate.year}년 ${controller.calendarCurrentDate.month}월',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'Pretendard',
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.arrow_forward_ios, size: 16),
+                    onPressed: () => controller.changeCalendarMonth(1),
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 20),
+            const SizedBox(height: 20),
 
-          // 월별 지출 분석
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  spreadRadius: 0,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            padding: const EdgeInsets.all(20),
-            width: double.infinity,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  '월별 지출 분석',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'Pretendard',
+            // 월별 지출 분석
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    spreadRadius: 0,
+                    offset: const Offset(0, 2),
                   ),
-                ),
-                const SizedBox(height: 16),
-                if (_statsMonthlyStats['total'] == 0)
-                  const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(20),
-                      child: Text(
-                        '이번 달 지출 내역이 없습니다.',
-                        style: TextStyle(
-                          color: Colors.grey,
-                          fontFamily: 'Pretendard',
+                ],
+              ),
+              padding: const EdgeInsets.all(20),
+              width: double.infinity,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '월별 지출 분석',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'Pretendard',
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  if (controller.statsMonthlyStats['total'] == 0)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Text(
+                          '이 달 지출 내역이 없습니다.',
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontFamily: 'Pretendard',
+                          ),
                         ),
                       ),
-                    ),
-                  )
-                else ...[
-                  _buildProgressBar(
-                    '주유비',
-                    _statsMonthlyStats['fuel'] ?? 0,
-                    Colors.blue,
-                    (_statsMonthlyStats['total'] > 0)
-                        ? (_statsMonthlyStats['fuel'] ?? 0) /
-                            _statsMonthlyStats['total']
-                        : 0,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildProgressBar(
-                    '정비비',
-                    _statsMonthlyStats['maintenance'] ?? 0,
-                    Colors.orange,
-                    (_statsMonthlyStats['total'] > 0)
-                        ? (_statsMonthlyStats['maintenance'] ?? 0) /
-                            _statsMonthlyStats['total']
-                        : 0,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildProgressBar(
-                    '보험료',
-                    _statsMonthlyStats['insurance'] ?? 0,
-                    Colors.green,
-                    (_statsMonthlyStats['total'] > 0)
-                        ? (_statsMonthlyStats['insurance'] ?? 0) /
-                            _statsMonthlyStats['total']
-                        : 0,
-                  ),
-                  if ((_statsMonthlyStats['other'] ?? 0) > 0) ...[
-                    const SizedBox(height: 12),
+                    )
+                  else ...[
                     _buildProgressBar(
-                      '기타',
-                      _statsMonthlyStats['other'] ?? 0,
-                      Colors.grey,
-                      (_statsMonthlyStats['total'] > 0)
-                          ? (_statsMonthlyStats['other'] ?? 0) /
-                              _statsMonthlyStats['total']
+                      '주유비',
+                      controller.statsMonthlyStats['fuel'] ?? 0,
+                      Colors.blue,
+                      (controller.statsMonthlyStats['total'] > 0)
+                          ? (controller.statsMonthlyStats['fuel'] ?? 0) /
+                              controller.statsMonthlyStats['total']
                           : 0,
                     ),
+                    const SizedBox(height: 12),
+                    _buildProgressBar(
+                      '정비비',
+                      controller.statsMonthlyStats['maintenance'] ?? 0,
+                      Colors.orange,
+                      (controller.statsMonthlyStats['total'] > 0)
+                          ? (controller.statsMonthlyStats['maintenance'] ?? 0) /
+                              controller.statsMonthlyStats['total']
+                          : 0,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildProgressBar(
+                      '보험료',
+                      controller.statsMonthlyStats['insurance'] ?? 0,
+                      Colors.green,
+                      (controller.statsMonthlyStats['total'] > 0)
+                          ? (controller.statsMonthlyStats['insurance'] ?? 0) /
+                              controller.statsMonthlyStats['total']
+                          : 0,
+                    ),
+                    if ((controller.statsMonthlyStats['other'] ?? 0) > 0) ...[
+                      const SizedBox(height: 12),
+                      _buildProgressBar(
+                        '기타',
+                        controller.statsMonthlyStats['other'] ?? 0,
+                        Colors.grey,
+                        (controller.statsMonthlyStats['total'] > 0)
+                            ? (controller.statsMonthlyStats['other'] ?? 0) /
+                                controller.statsMonthlyStats['total']
+                            : 0,
+                      ),
+                    ],
                   ],
                 ],
-              ],
+              ),
             ),
-          ),
-          const SizedBox(height: 20),
+            const SizedBox(height: 20),
 
-          // 월간 요약
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  spreadRadius: 0,
-                  offset: const Offset(0, 2),
-                ),
-              ],
+            // 월간 요약
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    spreadRadius: 0,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              padding: const EdgeInsets.all(20),
+              width: double.infinity,
+              child: Column(
+                children: [
+                  const Text(
+                    '이 달 총 지출',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'Pretendard',
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    '${CarExpenseService.formatAmount(controller.statsMonthlyStats['total'] ?? 0)}원',
+                    style: const TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFFFB233B),
+                      fontFamily: 'Pretendard',
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '전월 대비 ${(controller.statsMonthlyStats['growth_rate'] ?? 0) >= 0 ? '+' : ''}${(controller.statsMonthlyStats['growth_rate'] ?? 0).toStringAsFixed(1)}%',
+                    style: TextStyle(
+                      color:
+                          (controller.statsMonthlyStats['growth_rate'] ?? 0) >=
+                                  0
+                              ? Colors.red
+                              : Colors.green,
+                      fontFamily: 'Pretendard',
+                    ),
+                  ),
+                ],
+              ),
             ),
-            padding: const EdgeInsets.all(20),
-            width: double.infinity,
-            child: Column(
-              children: [
-                const Text(
-                  '이번 달 총 지출',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'Pretendard',
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  '${CarExpenseService.formatAmount(_statsMonthlyStats['total'] ?? 0)}원',
-                  style: const TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFFFB233B),
-                    fontFamily: 'Pretendard',
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '전월 대비 ${(_statsMonthlyStats['growth_rate'] ?? 0) >= 0 ? '+' : ''}${(_statsMonthlyStats['growth_rate'] ?? 0).toStringAsFixed(1)}%',
-                  style: TextStyle(
-                    color:
-                        (_statsMonthlyStats['growth_rate'] ?? 0) >= 0
-                            ? Colors.red
-                            : Colors.green,
-                    fontFamily: 'Pretendard',
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1030,15 +828,18 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
 
   // 캘린더 탭 위젯
   Widget _buildCalendarTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildCalendar(),
-          const SizedBox(height: 20),
-          _buildSelectedDateExpenses(),
-        ],
+    return ScrollConfiguration(
+      behavior: NoGlowScrollBehavior(),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildCalendar(),
+            const SizedBox(height: 20),
+            _buildSelectedDateExpenses(),
+          ],
+        ),
       ),
     );
   }
@@ -1046,13 +847,13 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
   // 달력 위젯
   Widget _buildCalendar() {
     final firstDayOfMonth = DateTime(
-      _calendarCurrentDate.year,
-      _calendarCurrentDate.month,
+      controller.calendarCurrentDate.year,
+      controller.calendarCurrentDate.month,
       1,
     );
     final lastDayOfMonth = DateTime(
-      _calendarCurrentDate.year,
-      _calendarCurrentDate.month + 1,
+      controller.calendarCurrentDate.year,
+      controller.calendarCurrentDate.month + 1,
       0,
     );
     final firstWeekday = firstDayOfMonth.weekday;
@@ -1080,7 +881,7 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                '${_calendarCurrentDate.year}년 ${_calendarCurrentDate.month}월',
+                '${controller.calendarCurrentDate.year}년 ${controller.calendarCurrentDate.month}월',
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -1091,12 +892,12 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
                 children: [
                   IconButton(
                     icon: const Icon(Icons.arrow_back_ios, size: 16),
-                    onPressed: () => _changeCalendarMonth(-1),
+                    onPressed: () => controller.changeCalendarMonth(-1),
                     splashRadius: 20,
                   ),
                   IconButton(
                     icon: const Icon(Icons.arrow_forward_ios, size: 16),
-                    onPressed: () => _changeCalendarMonth(1),
+                    onPressed: () => controller.changeCalendarMonth(1),
                     splashRadius: 20,
                   ),
                 ],
@@ -1161,8 +962,8 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
               }
 
               final currentDayDate = DateTime(
-                _calendarCurrentDate.year,
-                _calendarCurrentDate.month,
+                controller.calendarCurrentDate.year,
+                controller.calendarCurrentDate.month,
                 dayNumber,
               );
               final isToday =
@@ -1170,38 +971,35 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
                   currentDayDate.month == today.month &&
                   currentDayDate.day == today.day;
               final isSelected =
-                  _selectedDate != null &&
-                  _selectedDate!.year == currentDayDate.year &&
-                  _selectedDate!.month == currentDayDate.month &&
-                  _selectedDate!.day == currentDayDate.day;
+                  controller.selectedDate != null &&
+                  controller.selectedDate!.year == currentDayDate.year &&
+                  controller.selectedDate!.month == currentDayDate.month &&
+                  controller.selectedDate!.day == currentDayDate.day;
 
-              // 지출 표시 로직을 더 안전하게 수정
+              // 지출 표시 로직
               bool hasExpense = false;
-
-              // _dailyExpenses가 비어있지 않을 때만 확인
-              if (_dailyExpenses.isNotEmpty) {
+              if (controller.dailyExpenses.isNotEmpty) {
                 final dayString = dayNumber.toString();
-                final dayData = _dailyExpenses[dayString];
+                final dayData = controller.dailyExpenses[dayString];
 
                 if (dayData != null && dayData is Map<String, dynamic>) {
                   final total = dayData['total'];
                   final dateStr = dayData['date'];
 
-                  // 총액이 0보다 크고, 날짜 정보가 있는 경우에만 표시
                   if (total != null &&
                       total is num &&
                       total > 0 &&
                       dateStr != null) {
                     try {
                       final expenseDate = DateTime.parse(dateStr.toString());
-                      // 년월일이 모두 일치하는 경우에만 표시
-                      if (expenseDate.year == _calendarCurrentDate.year &&
-                          expenseDate.month == _calendarCurrentDate.month &&
+                      if (expenseDate.year ==
+                              controller.calendarCurrentDate.year &&
+                          expenseDate.month ==
+                              controller.calendarCurrentDate.month &&
                           expenseDate.day == dayNumber) {
                         hasExpense = true;
                       }
                     } catch (e) {
-                      // 날짜 파싱 실패 시 표시하지 않음
                       print('날짜 파싱 오류 ($dayNumber일): $e');
                     }
                   }
@@ -1220,7 +1018,7 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
                 isSelected: isSelected,
                 hasExpense: hasExpense,
                 textColor: dayColor,
-                onTap: () => _selectDate(currentDayDate),
+                onTap: () => controller.selectDate(currentDayDate),
               );
             }),
           ),
@@ -1277,7 +1075,6 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
         child: Stack(
           alignment: Alignment.center,
           children: [
-            // 날짜 숫자
             Text(
               day.toString(),
               style: TextStyle(
@@ -1293,7 +1090,6 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
                 fontFamily: 'Pretendard',
               ),
             ),
-            // 지출 표시 점
             if (hasExpense)
               Positioned(
                 top: 4,
@@ -1315,7 +1111,7 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
 
   // 선택된 날짜의 지출 목록
   Widget _buildSelectedDateExpenses() {
-    if (_selectedDate == null) {
+    if (controller.selectedDate == null) {
       return Container(
         decoration: BoxDecoration(
           color: Colors.white,
@@ -1351,13 +1147,12 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
     }
 
     final selectedDateString =
-        '${_selectedDate!.month}월 ${_selectedDate!.day}일';
+        '${controller.selectedDate!.month}월 ${controller.selectedDate!.day}일';
 
-    // 총 금액 계산 개선
+    // 총 금액 계산
     double totalAmount = 0.0;
-    for (var expense in _selectedDateExpenses) {
+    for (var expense in controller.selectedDateExpenses) {
       var amount = expense['amount'];
-
       if (amount is int) {
         totalAmount += amount.toDouble();
       } else if (amount is double) {
@@ -1401,7 +1196,7 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
                       fontFamily: 'Pretendard',
                     ),
                   ),
-                  if (_selectedDateExpenses.isNotEmpty)
+                  if (controller.selectedDateExpenses.isNotEmpty)
                     Text(
                       '총 ${CarExpenseService.formatAmount(totalAmount.round())}원',
                       style: const TextStyle(
@@ -1413,7 +1208,7 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
                     ),
                 ],
               ),
-              if (_selectedDateExpenses.isNotEmpty)
+              if (controller.selectedDateExpenses.isNotEmpty)
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
@@ -1424,7 +1219,7 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    '${_selectedDateExpenses.length}건',
+                    '${controller.selectedDateExpenses.length}건',
                     style: const TextStyle(
                       color: Color(0xFFFB233B),
                       fontWeight: FontWeight.bold,
@@ -1437,7 +1232,7 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
           const SizedBox(height: 16),
 
           // 지출 목록
-          if (_selectedDateExpenses.isEmpty)
+          if (controller.selectedDateExpenses.isEmpty)
             const Center(
               child: Padding(
                 padding: EdgeInsets.all(20),
@@ -1460,7 +1255,7 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
           else
             Column(
               children:
-                  _selectedDateExpenses
+                  controller.selectedDateExpenses
                       .map(
                         (expense) => Padding(
                           padding: const EdgeInsets.only(bottom: 12),
