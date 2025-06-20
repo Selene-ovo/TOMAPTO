@@ -57,18 +57,18 @@ class _FriendsSettingModalState extends State<FriendsSettingModal> {
     return baseUrl;
   }
 
-  // 위치 공유 상태 확인
+  // 위치 공유 상태 확인 - 내 공유 상태만 체크하도록 수정
   Future<void> _checkLocationSharingStatus() async {
     try {
       setState(() {
         _isLoading = true;
       });
 
-      // SharedPreferences에서 토큰 가져오기
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token');
+      final myUserId = prefs.getString('user_id'); // 내 사용자 ID 가져오기
 
-      if (token == null) {
+      if (token == null || myUserId == null) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('로그인이 필요합니다')));
@@ -78,7 +78,6 @@ class _FriendsSettingModalState extends State<FriendsSettingModal> {
         return;
       }
 
-      // API 호출하여 현재 위치 공유 상태 확인
       final apiBaseUrl = _getApiBaseUrl();
       final response = await http.get(
         Uri.parse('$apiBaseUrl/location/active-sharings'),
@@ -88,15 +87,15 @@ class _FriendsSettingModalState extends State<FriendsSettingModal> {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
 
-        // 해당 친구와의 위치 공유 상태 확인
-        final sharingActive = data.any(
+        // 🔥 핵심 변경: 양방향 체크 → 내가 친구에게 공유하는지만 체크
+        final iAmSharingToFriend = data.any(
           (sharing) =>
-              (sharing['sharer_id'] == widget.friend['id'] ||
-                  sharing['sharee_id'] == widget.friend['id']),
+              sharing['sharer_id'] == myUserId && // 내가 공유자이고
+              sharing['sharee_id'] == widget.friend['id'], // 친구가 수신자인 경우만
         );
 
         setState(() {
-          _isLocationSharingActive = sharingActive;
+          _isLocationSharingActive = iAmSharingToFriend; // 내 공유 상태만 표시
           _isLoading = false;
         });
       } else {
@@ -115,6 +114,12 @@ class _FriendsSettingModalState extends State<FriendsSettingModal> {
 
   // 위치 공유 토글 (활성화/비활성화)
   Future<void> _toggleLocationSharing() async {
+    // 🔥 중복 요청 방지
+    if (_isLoading) {
+      print('이미 처리 중입니다. 중복 요청을 무시합니다.');
+      return;
+    }
+
     try {
       setState(() {
         _isLoading = true;
@@ -142,83 +147,48 @@ class _FriendsSettingModalState extends State<FriendsSettingModal> {
 
       // 공유 상태에 따라 시작 또는 종료
       if (_isLocationSharingActive) {
-        // 위치 공유 종료
+        // 위치 공유 종료 - 소켓만 사용
         socketService.stopLocationSharing(widget.friend['id']);
 
-        // API 호출
-        final apiBaseUrl = _getApiBaseUrl();
-        final response = await http.post(
-          Uri.parse('$apiBaseUrl/location/end-sharing'),
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer $token',
-          },
-          body: json.encode({'friend_id': widget.friend['id']}),
-        );
+        // 🔥 소켓 성공을 기다림 (API 호출 제거)
+        await Future.delayed(Duration(seconds: 1));
 
-        if (response.statusCode == 200) {
-          setState(() {
-            _isLocationSharingActive = false;
-            _isLoading = false;
-          });
+        setState(() {
+          _isLocationSharingActive = false;
+          _isLoading = false;
+        });
 
-          // 콜백 호출
-          widget.onShareStatusChanged(false);
+        // 콜백 호출
+        widget.onShareStatusChanged(false);
 
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('위치 공유가 비활성화되었습니다')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('위치 공유가 비활성화되었습니다')));
 
-          // 모달 닫기
-          Navigator.pop(context);
-        } else {
-          final errorData = json.decode(response.body);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(errorData['message'] ?? '위치 공유 비활성화 실패')),
-          );
-          setState(() {
-            _isLoading = false;
-          });
-        }
+        // 모달 닫기
+        Navigator.pop(context);
       } else {
-        // 위치 공유 시작 (시간 제한 없음 - null 전달)
+        // 위치 공유 시작 - 소켓만 사용
         socketService.startLocationSharing(widget.friend['id'], null);
 
-        // API 호출
-        final apiBaseUrl = _getApiBaseUrl();
-        final response = await http.post(
-          Uri.parse('$apiBaseUrl/location/share'),
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer $token',
-          },
-          body: json.encode({'friend_id': widget.friend['id']}),
-        );
+        // 🔥 소켓 성공 이벤트를 기다림 (API 호출 제거)
+        // 소켓 응답을 기다리거나 타이머로 처리
+        await Future.delayed(Duration(seconds: 1));
 
-        if (response.statusCode == 200) {
-          setState(() {
-            _isLocationSharingActive = true;
-            _isLoading = false;
-          });
+        setState(() {
+          _isLocationSharingActive = true;
+          _isLoading = false;
+        });
 
-          // 콜백 호출
-          widget.onShareStatusChanged(true);
+        // 콜백 호출
+        widget.onShareStatusChanged(true);
 
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('위치 공유가 활성화되었습니다')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('위치 공유가 활성화되었습니다')));
 
-          // 모달 닫기
-          Navigator.pop(context);
-        } else {
-          final errorData = json.decode(response.body);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(errorData['message'] ?? '위치 공유 활성화 실패')),
-          );
-          setState(() {
-            _isLoading = false;
-          });
-        }
+        // 모달 닫기
+        Navigator.pop(context);
       }
     } catch (e) {
       print('위치 공유 상태 변경 오류: $e');

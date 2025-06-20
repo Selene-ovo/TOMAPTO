@@ -13,7 +13,7 @@ class SocketService {
   // 소켓 객체
   IO.Socket? _socket;
 
-  // 이벤트 스트림 컨트롤러
+  // 기존 이벤트 스트림 컨트롤러
   final _friendRequestController =
       StreamController<Map<String, dynamic>>.broadcast();
   final _friendAcceptController =
@@ -27,7 +27,17 @@ class SocketService {
   final _friendStatusChangeController =
       StreamController<Map<String, dynamic>>.broadcast();
 
-  // 이벤트 스트림 게터
+  // 새로운 따라가기 관련 이벤트 스트림 컨트롤러
+  final _followRequestReceivedController =
+      StreamController<Map<String, dynamic>>.broadcast();
+  final _followRequestRespondedController =
+      StreamController<Map<String, dynamic>>.broadcast();
+  final _followRequestCancelledController =
+      StreamController<Map<String, dynamic>>.broadcast();
+  final _followStoppedController =
+      StreamController<Map<String, dynamic>>.broadcast();
+
+  // 기존 이벤트 스트림 게터
   Stream<Map<String, dynamic>> get onFriendRequest =>
       _friendRequestController.stream;
   Stream<Map<String, dynamic>> get onFriendAccept =>
@@ -41,31 +51,37 @@ class SocketService {
   Stream<Map<String, dynamic>> get onFriendStatusChange =>
       _friendStatusChangeController.stream;
 
+  // 새로운 따라가기 관련 이벤트 스트림 게터
+  Stream<Map<String, dynamic>> get onFollowRequestReceived =>
+      _followRequestReceivedController.stream;
+  Stream<Map<String, dynamic>> get onFollowRequestResponded =>
+      _followRequestRespondedController.stream;
+  Stream<Map<String, dynamic>> get onFollowRequestCancelled =>
+      _followRequestCancelledController.stream;
+  Stream<Map<String, dynamic>> get onFollowStopped =>
+      _followStoppedController.stream;
+
+  // 소켓 객체 직접 접근 (이벤트 리스너 추가용)
+  IO.Socket? get socket => _socket;
+
   // 소켓 서버 URL 가져오기
   String _getSocketUrl() {
-    // 먼저 SOCKET_URL 환경변수를 확인
     String socketUrl = dotenv.env['SOCKET_URL'] ?? '';
 
-    // SOCKET_URL이 없으면 API_BASE_URL에서 파생
     if (socketUrl.isEmpty) {
       String baseUrl =
           dotenv.env['API_BASE_URL'] ?? 'http://localhost:8080/api';
-      // API URL에서 /api 부분 제거
       socketUrl = baseUrl.replaceAll('/api', '');
 
       String? localIp = dotenv.env['LOCAL_IP'];
 
-      // 안드로이드 에뮬레이터에서 실행 중인 경우
       if (Platform.isAndroid) {
-        // localhost를 사용 중이고 LOCAL_IP가 설정되어 있다면
         if (socketUrl.contains('localhost') &&
             localIp != null &&
             localIp.isNotEmpty) {
-          // localhost를 LOCAL_IP로 대체
           socketUrl = socketUrl.replaceAll('localhost', localIp);
         }
 
-        // 에뮬레이터 특정 주소 처리
         if (socketUrl.contains('localhost')) {
           socketUrl = socketUrl.replaceAll('localhost', '10.0.2.2');
         }
@@ -84,7 +100,6 @@ class SocketService {
     }
 
     try {
-      // 토큰 가져오기
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token');
 
@@ -96,26 +111,22 @@ class SocketService {
       final socketUrl = _getSocketUrl();
       print('소켓 서버 연결 시도: $socketUrl');
 
-      // 소켓 객체 생성 및 설정
       _socket = IO.io(
         socketUrl,
         IO.OptionBuilder()
-            .setTransports(['websocket', 'polling']) // polling 폴백 추가
+            .setTransports(['websocket', 'polling'])
             .disableAutoConnect()
-            .setExtraHeaders({'Authorization': 'Bearer $token'}) // 헤더에도 토큰 추가
-            .setAuth({'token': token}) // auth 객체에 토큰 전달
-            .enableForceNew() // 새 연결 강제
-            .enableReconnection() // 재연결 활성화
-            .setReconnectionAttempts(5) // 최대 5번 재시도
-            .setReconnectionDelay(3000) // 3초마다 재연결 시도
-            .setTimeout(30000) // 타임아웃 시간을 30초로 증가
+            .setExtraHeaders({'Authorization': 'Bearer $token'})
+            .setAuth({'token': token})
+            .enableForceNew()
+            .enableReconnection()
+            .setReconnectionAttempts(5)
+            .setReconnectionDelay(3000)
+            .setTimeout(30000)
             .build(),
       );
 
-      // 소켓 이벤트 리스너 설정
       _setupSocketListeners();
-
-      // 소켓 연결
       _socket!.connect();
 
       print('소켓 연결 초기화 성공');
@@ -146,45 +157,60 @@ class SocketService {
       print('소켓 오류: $error');
     });
 
-    // 친구 요청 이벤트
+    // 기존 이벤트들
     _socket!.on('friend_request', (data) {
       print('친구 요청 수신: $data');
       _friendRequestController.add(Map<String, dynamic>.from(data));
     });
 
-    // 친구 수락 이벤트
     _socket!.on('friend_accept', (data) {
       print('친구 수락 수신: $data');
       _friendAcceptController.add(Map<String, dynamic>.from(data));
     });
 
-    // 위치 업데이트 이벤트
     _socket!.on('location_update', (data) {
       print('위치 업데이트 수신: $data');
       _locationUpdateController.add(Map<String, dynamic>.from(data));
     });
 
-    // 위치 공유 시작 이벤트
     _socket!.on('location_sharing_started', (data) {
       print('위치 공유 시작 수신: $data');
       _locationSharingStartedController.add(Map<String, dynamic>.from(data));
     });
 
-    // 위치 공유 종료 이벤트
     _socket!.on('location_sharing_stopped', (data) {
       print('위치 공유 종료 수신: $data');
       _locationSharingStoppedController.add(Map<String, dynamic>.from(data));
     });
 
-    // 친구 상태 변경 이벤트 (온라인/오프라인)
     _socket!.on('friend_status_change', (data) {
       print('친구 상태 변경 수신: $data');
       _friendStatusChangeController.add(Map<String, dynamic>.from(data));
     });
 
-    // 연결 성공 이벤트
     _socket!.on('connect_success', (data) {
       print('연결 성공 이벤트: $data');
+    });
+
+    // 새로운 따라가기 관련 이벤트들
+    _socket!.on('follow_request_received', (data) {
+      print('따라가기 요청 수신: $data');
+      _followRequestReceivedController.add(Map<String, dynamic>.from(data));
+    });
+
+    _socket!.on('follow_request_responded', (data) {
+      print('따라가기 요청 응답 수신: $data');
+      _followRequestRespondedController.add(Map<String, dynamic>.from(data));
+    });
+
+    _socket!.on('follow_request_cancelled', (data) {
+      print('따라가기 요청 취소 수신: $data');
+      _followRequestCancelledController.add(Map<String, dynamic>.from(data));
+    });
+
+    _socket!.on('follow_stopped', (data) {
+      print('따라가기 중단 수신: $data');
+      _followStoppedController.add(Map<String, dynamic>.from(data));
     });
   }
 
@@ -206,7 +232,6 @@ class SocketService {
       return;
     }
 
-    // requestId를 문자열로 변환하여 사용
     String stringRequestId = requestId?.toString() ?? '';
     if (stringRequestId.isEmpty) {
       print('유효하지 않은 요청 ID입니다.');
@@ -224,7 +249,6 @@ class SocketService {
       return;
     }
 
-    // requestId를 문자열로 변환하여 사용
     String stringRequestId = requestId?.toString() ?? '';
     if (stringRequestId.isEmpty) {
       print('유효하지 않은 요청 ID입니다.');
@@ -235,39 +259,83 @@ class SocketService {
     print('친구 요청 거절: $stringRequestId');
   }
 
-  // 위치 공유 시작 (durationMinutes가 null이면 무제한 공유)
+  // 위치 공유 시작 - unidirectional 플래그 추가
   void startLocationSharing(String friendId, int? durationMinutes) {
     if (_socket == null || !_socket!.connected) {
       print('소켓이 연결되어 있지 않습니다.');
       return;
     }
 
-    // 소켓으로 위치 공유 시작 이벤트 전송 - 일방향 공유로 설정
-    // 명확한 매핑으로 방향성 지정
     _socket!.emit('start_location_sharing', {
       'friend_id': friendId,
-      'duration_minutes': durationMinutes, // null일 경우 무제한
-      'unidirectional': true, // 일방향 공유 플래그 추가
-      'direction': 'me_to_friend', // 명확히 방향 지정 - 내가 친구에게 공유
-      'sender_id': '', // 현재 사용자 ID - 서버에서 socket.user.id로 대체
-      'receiver_id': friendId, // 수신자 ID - 명확하게 전달
+      'duration_minutes': durationMinutes,
+      'unidirectional': true, // 🔥 개별 제어는 단방향으로
+      'direction': 'me_to_friend', // 내가 친구에게 공유
     });
 
-    print(
-      '위치 공유 시작 요청: $friendId, 기간: ${durationMinutes ?? "무제한"}, 일방향: true, 방향: me_to_friend',
-    );
+    print('단방향 위치 공유 시작: $friendId, 기간: ${durationMinutes ?? "무제한"}');
   }
 
-  // 위치 공유 종료
+  // 위치 공유 종료 - unidirectional 플래그 추가
   void stopLocationSharing(String friendId) {
     if (_socket == null || !_socket!.connected) {
       print('소켓이 연결되어 있지 않습니다.');
       return;
     }
 
-    // 소켓으로 위치 공유 종료 이벤트 전송
-    _socket!.emit('stop_location_sharing', {'friend_id': friendId});
-    print('위치 공유 종료: $friendId');
+    _socket!.emit('stop_location_sharing', {
+      'friend_id': friendId,
+      'unidirectional': true, // 🔥 개별 제어는 단방향으로
+    });
+
+    print('단방향 위치 공유 종료: $friendId');
+  }
+
+  // 따라가기 요청 전송
+  void sendFollowRequest(String friendId) {
+    if (_socket == null || !_socket!.connected) {
+      print('소켓이 연결되어 있지 않습니다.');
+      return;
+    }
+
+    _socket!.emit('send_follow_request', {'friend_id': friendId});
+    print('따라가기 요청 전송: $friendId');
+  }
+
+  // 따라가기 요청 응답
+  void respondToFollowRequest(int requestId, String response) {
+    if (_socket == null || !_socket!.connected) {
+      print('소켓이 연결되어 있지 않습니다.');
+      return;
+    }
+
+    _socket!.emit('respond_follow_request', {
+      'request_id': requestId,
+      'response': response, // 'accept' or 'reject'
+    });
+    print('따라가기 요청 응답: $requestId, 응답: $response');
+  }
+
+  // 따라가기 요청 취소
+  void cancelFollowRequest(String friendId) {
+    if (_socket == null || !_socket!.connected) {
+      print('소켓이 연결되어 있지 않습니다.');
+      return;
+    }
+
+    _socket!.emit('cancel_follow_request', {'friend_id': friendId});
+    print('따라가기 요청 취소: $friendId');
+  }
+
+  // 따라가기 중단
+  void stopFollowing(String friendId) {
+    if (_socket == null || !_socket!.connected) {
+      print('소켓이 연결되어 있지 않습니다.');
+      return;
+    }
+
+    _socket!.emit('stop_following', {'friend_id': friendId});
+    print('따라가기 중단: $friendId');
   }
 
   // 위치 업데이트 전송
@@ -279,14 +347,12 @@ class SocketService {
   ) {
     if (_socket == null || !_socket!.connected) {
       print('소켓이 연결되어 있지 않습니다. 위치 업데이트를 보낼 수 없습니다.');
-      initSocket(); // 연결이 끊어졌으면 다시 연결 시도
+      initSocket();
       return;
     }
 
-    // 모든 속성이 null이 아닌지 확인
     Map<String, dynamic> data = {'latitude': latitude, 'longitude': longitude};
 
-    // 선택적 속성은 null이 아닐 때만 추가
     if (heading != null) data['heading'] = heading;
     if (accuracy != null) data['accuracy'] = accuracy;
 
@@ -306,12 +372,19 @@ class SocketService {
   // 자원 해제
   void dispose() {
     disconnect();
+    // 기존 스트림 컨트롤러 해제
     _friendRequestController.close();
     _friendAcceptController.close();
     _locationUpdateController.close();
     _locationSharingStartedController.close();
     _locationSharingStoppedController.close();
     _friendStatusChangeController.close();
+
+    // 새로운 따라가기 관련 스트림 컨트롤러 해제
+    _followRequestReceivedController.close();
+    _followRequestRespondedController.close();
+    _followRequestCancelledController.close();
+    _followStoppedController.close();
   }
 
   // 연결 상태 확인
