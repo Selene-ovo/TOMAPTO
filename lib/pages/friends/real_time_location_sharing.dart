@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -6,6 +7,12 @@ import 'package:tomapto/services/socket_service.dart';
 import 'package:tomapto/services/location_service.dart';
 import 'package:tomapto/services/token_service.dart';
 import 'package:tomapto/services/real_time_location_service.dart';
+import 'package:tomapto/modal/follow_modal.dart';
+import 'package:tomapto/modal/follow_request_modal.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'dart:io' show Platform;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class RealTimeLocationSharingPage extends StatefulWidget {
   final Map<String, dynamic> selectedFriend;
@@ -19,14 +26,16 @@ class RealTimeLocationSharingPage extends StatefulWidget {
 }
 
 class _RealTimeLocationSharingPageState
-    extends State<RealTimeLocationSharingPage> {
+    extends State<RealTimeLocationSharingPage>
+    with TickerProviderStateMixin {
+  // 애니메이션을 위해 추가
   NaverMapController? _mapController;
   NLatLng? _myPosition;
   NLatLng? _friendPosition;
   final Set<NMarker> _markers = {};
   bool _isInitialCameraSet = false;
-  bool _isLoading = true; // 초기 로딩 상태만 true로 설정
-  bool _isInitialLoadComplete = false; // 초기 로딩 완료 여부 추적
+  bool _isLoading = true;
+  bool _isInitialLoadComplete = false;
   String _errorMessage = '';
 
   // 소켓 서비스 인스턴스
@@ -35,40 +44,223 @@ class _RealTimeLocationSharingPageState
   Timer? _locationUpdateTimer;
   // 소켓 이벤트 구독자
   StreamSubscription? _locationUpdateSubscription;
+  StreamSubscription? _followRequestSubscription;
+  StreamSubscription? _followResponseSubscription;
+  StreamSubscription? _followCancelledSubscription;
+  StreamSubscription? _followStoppedSubscription;
 
   // 위치 공유 상태 추적 변수들
-  bool _isLocationSharingActive = false; // 전체적인 공유 상태 (주로 내가 공유 중인지)
-  bool _iAmSharingLocation = false; // 내가 상대방에게 위치 공유 중인지
-  bool _friendIsSharingLocation = false; // 상대방이 나에게 위치 공유 중인지
+  bool _isLocationSharingActive = false;
+  bool _iAmSharingLocation = false;
+  bool _friendIsSharingLocation = false;
+
+  // 따라가기 상태 추적 변수들
+  String _followStatus = 'none'; // 'none', 'pending', 'accepted'
+  bool _isRequester = false; // 내가 요청자인지 여부
+  int? _currentRequestId; // 현재 요청 ID
+
+  // 네이버맵 길찾기 관련 변수들
+  Set<NPathOverlay> _pathOverlays = {};
+  bool _isNavigating = false; // 길찾기 진행 중인지
 
   // 마지막 업데이트 시간
   DateTime? _lastUpdateTime;
 
+  // 카메라 상태 관리 변수들 추가
+  bool _userManuallyControlledCamera = false;
+  DateTime? _lastManualCameraControl;
+  double _currentZoom = 15.0;
+
+  // 파동 애니메이션 컨트롤러들 추가
+  late AnimationController _waveController1;
+  late AnimationController _waveController2;
+  late AnimationController _waveController3;
+  late Animation<double> _waveAnimation1;
+  late Animation<double> _waveAnimation2;
+  late Animation<double> _waveAnimation3;
+
   @override
   void initState() {
     super.initState();
+
+    // 파동 애니메이션 초기화
+    _waveController1 = AnimationController(
+      duration: const Duration(milliseconds: 2000),
+      vsync: this,
+    )..repeat();
+
+    _waveController2 = AnimationController(
+      duration: const Duration(milliseconds: 2000),
+      vsync: this,
+    )..repeat();
+
+    _waveController3 = AnimationController(
+      duration: const Duration(milliseconds: 2000),
+      vsync: this,
+    )..repeat();
+
+    _waveAnimation1 = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _waveController1, curve: Curves.easeOut));
+
+    _waveAnimation2 = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _waveController2,
+        curve: Interval(0.3, 1.0, curve: Curves.easeOut),
+      ),
+    );
+
+    _waveAnimation3 = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _waveController3,
+        curve: Interval(0.6, 1.0, curve: Curves.easeOut),
+      ),
+    );
+
     _socketService = SocketService();
     _initSocket();
     _loadLocations();
+    _loadFollowStatus(); // 따라가기 상태 로드
 
-    // 1초마다 위치 정보 갱신 (API 호출) - 로딩 표시 없이 실시간 업데이트 유지
+    // 1초마다 위치 정보 갱신 (카메라 줌 유지)
     _locationUpdateTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      // 마지막 업데이트 후 1초 이상 지났으면 API로 다시 로드
       final now = DateTime.now();
       if (_lastUpdateTime == null ||
           now.difference(_lastUpdateTime!).inSeconds > 1) {
-        _refreshLocations(); // 로딩 표시 없이 새로고침하는 함수 사용
+        _refreshLocations();
       }
     });
   }
 
   @override
   void dispose() {
-    // 타이머 정리
     _locationUpdateTimer?.cancel();
-    // 소켓 이벤트 구독 취소
     _locationUpdateSubscription?.cancel();
+    _followRequestSubscription?.cancel();
+    _followResponseSubscription?.cancel();
+    _followCancelledSubscription?.cancel();
+    _followStoppedSubscription?.cancel();
+
+    // 애니메이션 컨트롤러 정리
+    _waveController1.dispose();
+    _waveController2.dispose();
+    _waveController3.dispose();
+
     super.dispose();
+  }
+
+  // API 서버 기본 URL 가져오기
+  String _getApiBaseUrl() {
+    String baseUrl = dotenv.env['API_BASE_URL'] ?? 'http://localhost:8080/api';
+    String? localIp = dotenv.env['LOCAL_IP'];
+
+    if (Platform.isAndroid) {
+      if (baseUrl.contains('localhost') &&
+          localIp != null &&
+          localIp.isNotEmpty) {
+        return baseUrl.replaceAll('localhost', localIp);
+      }
+      if (baseUrl.contains('localhost')) {
+        return baseUrl.replaceAll('localhost', '10.0.2.2');
+      }
+    }
+    return baseUrl;
+  }
+
+  // 따라가기 상태 로드
+  Future<void> _loadFollowStatus() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+
+      if (token == null) return;
+
+      final apiBaseUrl = _getApiBaseUrl();
+      final response = await http.get(
+        Uri.parse('$apiBaseUrl/follow/status/${widget.selectedFriend['id']}'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        setState(() {
+          _followStatus = data['status'] ?? 'none';
+          _isRequester = data['is_requester'] ?? false;
+          _currentRequestId = data['request_id'];
+        });
+
+        // 수락된 상태이면 길찾기 시작
+        if (_followStatus == 'accepted') {
+          _startNavigation();
+        }
+      }
+    } catch (e) {
+      print('따라가기 상태 로드 오류: $e');
+    }
+  }
+
+  // 길찾기 시작
+  void _startNavigation() {
+    if (_myPosition != null && _friendPosition != null) {
+      setState(() {
+        _isNavigating = true;
+      });
+      _updateNavigationRoute();
+    }
+  }
+
+  // 길찾기 중단
+  void _stopNavigation() {
+    setState(() {
+      _isNavigating = false;
+    });
+    _clearNavigationRoute();
+  }
+
+  // 네비게이션 경로 업데이트
+  Future<void> _updateNavigationRoute() async {
+    if (!_isNavigating ||
+        _myPosition == null ||
+        _friendPosition == null ||
+        _mapController == null) {
+      return;
+    }
+
+    try {
+      // 기존 경로 제거
+      _clearNavigationRoute();
+
+      // 네이버 방향 API 호출 (간단한 직선 경로로 대체)
+      // 실제 구현시에는 네이버 Direction API를 사용해야 합니다
+      final pathOverlay = NPathOverlay(
+        id: 'navigation_path',
+        coords: [_myPosition!, _friendPosition!],
+        color: Colors.blue,
+        width: 5,
+      );
+
+      setState(() {
+        _pathOverlays.add(pathOverlay);
+      });
+
+      _mapController!.addOverlay(pathOverlay);
+      print('네비게이션 경로 업데이트됨');
+    } catch (e) {
+      print('네비게이션 경로 업데이트 오류: $e');
+    }
+  }
+
+  // 네비게이션 경로 제거
+  void _clearNavigationRoute() {
+    if (_mapController != null) {
+      for (final overlay in _pathOverlays) {
+        _mapController!.deleteOverlay(overlay.info);
+      }
+    }
+    setState(() {
+      _pathOverlays.clear();
+    });
   }
 
   // 소켓 초기화 및 이벤트 리스너 설정
@@ -78,30 +270,35 @@ class _RealTimeLocationSharingPageState
         await _socketService.initSocket();
       }
 
-      // 위치 업데이트 이벤트 구독
+      // 기존 위치 관련 이벤트들
       _locationUpdateSubscription = _socketService.onLocationUpdate.listen((
         data,
       ) {
-        // 친구 ID가 선택한 친구의 ID와 일치하고 친구가 위치 공유 중인 경우에만 업데이트
         if (data['user_id'] == widget.selectedFriend['id'] &&
             _friendIsSharingLocation) {
           setState(() {
             _friendPosition = NLatLng(data['latitude'], data['longitude']);
             _lastUpdateTime = DateTime.now();
           });
-          _updateMapMarkers(); // 마커 업데이트
+          _updateMapMarkersWithoutCameraChange();
+
+          // 길찾기 중이면 경로 업데이트
+          if (_isNavigating) {
+            _updateNavigationRoute();
+          }
+
           print('소켓으로 친구 위치 업데이트: ${data['latitude']}, ${data['longitude']}');
         }
       });
 
-      // 위치 공유 종료 이벤트 리스너
       _socketService.onLocationSharingStopped.listen((data) {
         if (data['user_id'] == widget.selectedFriend['id']) {
           setState(() {
-            _friendIsSharingLocation = false; // 친구의 위치 공유 비활성화
-            _friendPosition = null; // 중요: 친구 위치 정보 제거
+            _friendIsSharingLocation = false;
+            _friendPosition = null;
           });
-          _updateMapMarkers(); // 마커 업데이트
+          _updateMapMarkersWithoutCameraChange();
+          _stopNavigation(); // 위치 공유 중단시 네비게이션도 중단
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('${widget.selectedFriend['name']}님이 위치 공유를 종료했습니다'),
@@ -110,13 +307,11 @@ class _RealTimeLocationSharingPageState
         }
       });
 
-      // 위치 공유 시작 이벤트 리스너
       _socketService.onLocationSharingStarted.listen((data) {
         if (data['user_id'] == widget.selectedFriend['id']) {
           setState(() {
-            _friendIsSharingLocation = true; // 친구의 위치 공유 활성화
+            _friendIsSharingLocation = true;
           });
-          // 위치 정보 새로고침 (로딩 표시 없이)
           _refreshLocations();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -126,10 +321,117 @@ class _RealTimeLocationSharingPageState
         }
       });
 
+      // 새로운 따라가기 관련 이벤트들
+      _followRequestSubscription =
+          _socketService.socket?.on('follow_request_received', (data) {
+                if (data['target_id'] == widget.selectedFriend['id']) {
+                  _showFollowRequestModal(
+                    data['request_id'],
+                    data['requester_name'],
+                  );
+                }
+              })
+              as StreamSubscription?;
+
+      _followResponseSubscription =
+          _socketService.socket?.on('follow_request_responded', (data) {
+                if (data['requester_id'] == widget.selectedFriend['id']) {
+                  final response = data['response'];
+                  final message =
+                      response == 'accept'
+                          ? '${data['target_name']}님이 따라가기 요청을 수락했습니다'
+                          : '${data['target_name']}님이 따라가기 요청을 거절했습니다';
+
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text(message)));
+
+                  if (response == 'accept') {
+                    setState(() {
+                      _followStatus = 'accepted';
+                    });
+                    _startNavigation();
+                  } else {
+                    setState(() {
+                      _followStatus = 'none';
+                      _isRequester = false;
+                      _currentRequestId = null;
+                    });
+                  }
+                }
+              })
+              as StreamSubscription?;
+
+      _followCancelledSubscription =
+          _socketService.socket?.on('follow_request_cancelled', (data) {
+                if (data['target_id'] == widget.selectedFriend['id']) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        '${data['requester_name']}님이 따라가기 요청을 취소했습니다',
+                      ),
+                    ),
+                  );
+                }
+              })
+              as StreamSubscription?;
+
+      _followStoppedSubscription =
+          _socketService.socket?.on('follow_stopped', (data) {
+                if (data['other_user_id'] == widget.selectedFriend['id']) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        '${data['stopped_by_name']}님이 따라가기를 중단했습니다',
+                      ),
+                    ),
+                  );
+                  setState(() {
+                    _followStatus = 'none';
+                    _isRequester = false;
+                    _currentRequestId = null;
+                  });
+                  _stopNavigation();
+                }
+              })
+              as StreamSubscription?;
+
       print('소켓 이벤트 리스너 설정 완료');
     } catch (e) {
       print('소켓 초기화 오류: $e');
     }
+  }
+
+  // 따라가기 요청 모달 표시
+  void _showFollowRequestModal(int requestId, String requesterName) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder:
+          (context) => FollowRequestModal(
+            requestId: requestId,
+            requesterName: requesterName,
+            onResponseSent: () {
+              _loadFollowStatus(); // 상태 다시 로드
+            },
+          ),
+    );
+  }
+
+  // 친구 마커 클릭 시 따라가기 모달 표시
+  void _showFollowModal() {
+    showDialog(
+      context: context,
+      builder:
+          (context) => FollowModal(
+            friend: widget.selectedFriend,
+            currentStatus: _followStatus,
+            isRequester: _isRequester,
+            onStatusChanged: () {
+              _loadFollowStatus(); // 상태 다시 로드
+            },
+          ),
+    );
   }
 
   // 초기 로딩 시에만 로딩 표시와 함께 데이터 로드
@@ -141,7 +443,6 @@ class _RealTimeLocationSharingPageState
 
     try {
       await _fetchLocationData();
-
       setState(() {
         _isLoading = false;
         _isInitialLoadComplete = true;
@@ -163,13 +464,11 @@ class _RealTimeLocationSharingPageState
       await _fetchLocationData();
     } catch (e) {
       print('위치 정보 새로고침 오류: $e');
-      // 오류가 발생해도 UI에 표시하지 않음
     }
   }
 
   // 실제 위치 데이터를 가져오는 공통 로직
   Future<void> _fetchLocationData() async {
-    // 토큰 유효성 확인
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('token');
     final userId = prefs.getString('user_id');
@@ -193,8 +492,8 @@ class _RealTimeLocationSharingPageState
         );
       });
 
-      // 내 위치를 가져온 후 바로 카메라 이동
-      if (_mapController != null) {
+      // 초기 진입 시에만 카메라 이동
+      if (_mapController != null && !_isInitialCameraSet) {
         _mapController!.updateCamera(
           NCameraUpdate.withParams(target: _myPosition!, zoom: 15),
         );
@@ -202,28 +501,18 @@ class _RealTimeLocationSharingPageState
       }
     }
 
-    // 2. 중요: 두 가지 위치 공유 상태를 별도로 확인
     final friendId = widget.selectedFriend['id'];
 
-    // 2-1. 내가 위치 공유 중인지 확인 (내가 공유자, 친구가 수신자)
+    // 2. 위치 공유 상태 확인
     final iAmSharing = await LocationService.checkIAmSharingWith(friendId);
-    print('내가 위치 공유 중인지 확인 결과: $iAmSharing');
-
-    // 2-2. 친구가 위치 공유 중인지 확인 (친구가 공유자, 내가 수신자)
     final friendIsSharing = await LocationService.checkFriendIsSharingWith(
       friendId,
     );
-    print('친구가 위치 공유 중인지 확인 결과: $friendIsSharing');
 
-    // 3. 위치 공유 상태 업데이트
     setState(() {
-      // 내가 위치 공유 중인지 여부 (나 -> 친구)
       _iAmSharingLocation = iAmSharing;
-
-      // 친구가 위치 공유 중인지 여부 (친구 -> 나)
       _friendIsSharingLocation = friendIsSharing;
 
-      // 중요: 친구가 공유하지 않는 경우 친구 위치 정보 제거
       if (!friendIsSharing) {
         _friendPosition = null;
       }
@@ -231,14 +520,13 @@ class _RealTimeLocationSharingPageState
 
     print('위치 공유 상태: 내가 공유 중: $iAmSharing, 친구가 공유 중: $friendIsSharing');
 
-    // 4. 친구 위치 정보 가져오기 - 친구가 공유 중인 경우에만
+    // 3. 친구 위치 정보 가져오기 - 친구가 공유 중인 경우에만
     if (friendIsSharing) {
       final friendLocationData = await LocationService.getFriendLocation(
         friendId,
       );
 
       if (friendLocationData != null) {
-        // 문자열을 double로 변환하여 저장
         setState(() {
           _friendPosition = NLatLng(
             double.parse(friendLocationData['latitude'].toString()),
@@ -246,6 +534,12 @@ class _RealTimeLocationSharingPageState
           );
           _lastUpdateTime = DateTime.now();
         });
+
+        // 길찾기 중이면 경로 업데이트
+        if (_isNavigating) {
+          _updateNavigationRoute();
+        }
+
         print(
           '친구 위치 정보 로드 성공: ${friendLocationData['latitude']}, ${friendLocationData['longitude']}',
         );
@@ -256,25 +550,21 @@ class _RealTimeLocationSharingPageState
 
     // 위치 데이터를 얻은 후 마커 업데이트
     if (_mapController != null) {
-      _updateMapMarkers();
+      if (!_isInitialCameraSet) {
+        _updateMapMarkers(); // 초기에는 카메라 포함 업데이트
+      } else {
+        _updateMapMarkersWithoutCameraChange(); // 이후에는 마커만 업데이트
+      }
     }
   }
 
   // 내 위치 마커 생성 함수
   NMarker _createMyLocationMarker() {
     final marker = NMarker(id: 'my_location', position: _myPosition!);
-
-    // 에셋 이미지를 마커 아이콘으로 설정 - 경로 수정
     final overlayImage = NOverlayImage.fromAssetImage('assets/icons/me.png');
     marker.setIcon(overlayImage);
-
-    // 마커 크기 설정 (이미지 크기에 맞게 조정)
     marker.setSize(NSize(48, 48));
-
-    // 마커 앵커 포인트 설정 - 이미지의 하단 중앙이 좌표에 위치하도록
     marker.setAnchor(NPoint(0.5, 1.0));
-
-    // 캡션 설정 (선택적)
     marker.setCaption(
       NOverlayCaption(
         text: '내 위치',
@@ -283,27 +573,18 @@ class _RealTimeLocationSharingPageState
         haloColor: Colors.white,
       ),
     );
-
     return marker;
   }
 
   // 친구 위치 마커 생성 함수
   NMarker _createFriendLocationMarker() {
     final marker = NMarker(id: 'friend_location', position: _friendPosition!);
-
-    // 에셋 이미지를 마커 아이콘으로 설정 - 경로 수정
     final overlayImage = NOverlayImage.fromAssetImage(
       'assets/icons/friends.png',
     );
     marker.setIcon(overlayImage);
-
-    // 마커 크기 설정 (이미지 크기에 맞게 조정)
     marker.setSize(NSize(48, 48));
-
-    // 마커 앵커 포인트 설정
     marker.setAnchor(NPoint(0.5, 1.0));
-
-    // 캡션 설정 (친구 이름 표시)
     marker.setCaption(
       NOverlayCaption(
         text: widget.selectedFriend['name'],
@@ -312,12 +593,11 @@ class _RealTimeLocationSharingPageState
         haloColor: Colors.white,
       ),
     );
-
     return marker;
   }
 
-  // 지도 마커 업데이트
-  Future<void> _updateMapMarkers() async {
+  // 카메라 변경 없이 마커만 업데이트하는 함수 추가
+  Future<void> _updateMapMarkersWithoutCameraChange() async {
     if (_mapController == null) return;
 
     // 기존 마커 모두 제거
@@ -328,46 +608,48 @@ class _RealTimeLocationSharingPageState
       _markers.clear();
     }
 
-    // 내 위치 마커 추가 - 항상 내 위치 마커는 표시
+    // 내 위치 마커 추가
     if (_myPosition != null) {
       final myMarker = _createMyLocationMarker();
-
       myMarker.setOnTapListener((NMarker marker) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('내 현재 위치')));
       });
-
       _mapController!.addOverlay(myMarker);
       _markers.add(myMarker);
     }
 
-    // 친구 위치 마커 추가 - 위치 공유가 활성화되고 친구 위치가 있는 경우에만
+    // 친구 위치 마커 추가
     if (_friendPosition != null && _friendIsSharingLocation) {
-      // 추가 검증: 친구 위치 좌표가 유효한지 확인
       if (_friendPosition!.latitude != 0 && _friendPosition!.longitude != 0) {
         final friendMarker = _createFriendLocationMarker();
 
+        // 친구 마커 클릭 시 따라가기 모달 표시
         friendMarker.setOnTapListener((NMarker marker) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('${widget.selectedFriend['name']}님의 위치')),
-          );
+          _showFollowModal();
         });
 
         _mapController!.addOverlay(friendMarker);
         _markers.add(friendMarker);
       }
     }
+  }
 
-    // 최초 카메라 위치 조정
-    if (!_isInitialCameraSet) {
+  // 지도 마커 업데이트 (카메라 포함)
+  Future<void> _updateMapMarkers() async {
+    if (_mapController == null) return;
+
+    // 마커 업데이트
+    await _updateMapMarkersWithoutCameraChange();
+
+    // 최초 카메라 위치 조정 (수동 조작하지 않은 경우에만)
+    if (!_isInitialCameraSet && !_userManuallyControlledCamera) {
       if (_myPosition != null &&
           _friendPosition != null &&
           _friendIsSharingLocation) {
-        // 내 위치와 친구 위치 모두 있고 공유 활성화된 경우: 두 마커가 모두 보이도록
         _fitBoundsToShowBothMarkers();
       } else if (_myPosition != null) {
-        // 내 위치만 있는 경우: 내 위치로 카메라 조정
         _mapController!.updateCamera(
           NCameraUpdate.withParams(target: _myPosition!, zoom: 15),
         );
@@ -376,133 +658,89 @@ class _RealTimeLocationSharingPageState
     }
   }
 
-  // 두 마커가 모두 보이도록 카메라 조정
+  // 두 위치 간 거리 계산 (미터 단위)
+  double _calculateDistance(NLatLng point1, NLatLng point2) {
+    const double earthRadius = 6371000; // 지구 반지름 (미터)
+
+    double lat1Rad = point1.latitude * pi / 180;
+    double lat2Rad = point2.latitude * pi / 180;
+    double deltaLatRad = (point2.latitude - point1.latitude) * pi / 180;
+    double deltaLngRad = (point2.longitude - point1.longitude) * pi / 180;
+
+    double a =
+        sin(deltaLatRad / 2) * sin(deltaLatRad / 2) +
+        cos(lat1Rad) *
+            cos(lat2Rad) *
+            sin(deltaLngRad / 2) *
+            sin(deltaLngRad / 2);
+    double c = 2 * atan2(sqrt(a), sqrt(1 - a));
+
+    return earthRadius * c;
+  }
+
+  // 두 마커가 모두 보이도록 카메라 조정 (거리에 따라 유동적 줌)
   void _fitBoundsToShowBothMarkers() {
     if (_myPosition == null ||
         _friendPosition == null ||
         _mapController == null)
       return;
 
-    // 두 위치의 경계 계산
-    double minLat =
-        _myPosition!.latitude < _friendPosition!.latitude
-            ? _myPosition!.latitude
-            : _friendPosition!.latitude;
-    double maxLat =
-        _myPosition!.latitude > _friendPosition!.latitude
-            ? _myPosition!.latitude
-            : _friendPosition!.latitude;
-    double minLng =
-        _myPosition!.longitude < _friendPosition!.longitude
-            ? _myPosition!.longitude
-            : _friendPosition!.longitude;
-    double maxLng =
-        _myPosition!.longitude > _friendPosition!.longitude
-            ? _myPosition!.longitude
-            : _friendPosition!.longitude;
+    // 두 위치 간 거리 계산
+    double distance = _calculateDistance(_myPosition!, _friendPosition!);
 
-    // 패딩 추가
-    minLat -= 0.01;
-    maxLat += 0.01;
-    minLng -= 0.01;
-    maxLng += 0.01;
+    // 거리에 따른 적절한 줌 레벨 결정
+    double targetZoom;
+    if (distance < 100) {
+      targetZoom = 17.0; // 100m 이내 - 확대
+    } else if (distance < 500) {
+      targetZoom = 15.0; // 500m 이내 - 중간 줌
+    } else if (distance < 1000) {
+      targetZoom = 14.0; // 1km 이내
+    } else {
+      targetZoom = 13.0; // 1km 이상 - 전체 보기
+    }
 
-    // 경계 객체 생성
-    final bounds = NLatLngBounds(
-      southWest: NLatLng(minLat, minLng),
-      northEast: NLatLng(maxLat, maxLng),
-    );
+    // 두 위치의 중심점 계산
+    double centerLat = (_myPosition!.latitude + _friendPosition!.latitude) / 2;
+    double centerLng =
+        (_myPosition!.longitude + _friendPosition!.longitude) / 2;
+    NLatLng centerPosition = NLatLng(centerLat, centerLng);
 
-    // 경계에 맞게 카메라 조정 - 패딩을 EdgeInsets 객체로 전달
+    // 카메라 이동
     _mapController!.updateCamera(
-      NCameraUpdate.fitBounds(bounds, padding: EdgeInsets.all(50.0)),
+      NCameraUpdate.withParams(target: centerPosition, zoom: targetZoom),
     );
+
+    // 현재 줌 레벨 업데이트
+    _currentZoom = targetZoom;
   }
 
-  // 위치 공유 시작 요청 - 내 위치만 공유 (상대방에게 보내는 것)
-  Future<void> _startLocationSharing() async {
-    try {
-      setState(() {
-        _isLoading = true;
-      });
-
-      // 시작 확인 다이얼로그
-      final result =
-          await showDialog<bool>(
-            context: context,
-            builder:
-                (context) => AlertDialog(
-                  title: Text('위치 공유 시작'),
-                  content: Text(
-                    '${widget.selectedFriend['name']}님에게 내 위치를 공유하시겠습니까?\n\n상대방은 위치 공유를 시작해야 상대방의 위치를 볼 수 있습니다.',
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(false),
-                      child: Text('취소'),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(true),
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.green,
-                      ),
-                      child: Text('시작'),
-                    ),
-                  ],
+  // 위치 공유 시작 요청이 아닌 뒤로가기 유도 모달
+  Future<void> _showLocationSharingRequiredModal() async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder:
+          (context) => AlertDialog(
+            title: Text('위치 공유 필요'),
+            content: Text(
+              '실시간 위치가 활성화되어 있지 않습니다.\n친구 설정에서 위치 공유를 활성화하고 다시 시도해주세요.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop(); // 다이얼로그 닫기
+                  Navigator.of(context).pop(); // 실시간 위치 페이지 나가기
+                },
+                style: TextButton.styleFrom(
+                  backgroundColor: const Color(0xFFFB233B),
+                  foregroundColor: Colors.white,
                 ),
-          ) ??
-          false;
-
-      if (!result) {
-        setState(() {
-          _isLoading = false;
-        });
-        return;
-      }
-
-      // 소켓을 통한 위치 공유 시작 요청
-      if (!_socketService.isConnected) {
-        await _socketService.initSocket();
-      }
-      _socketService.startLocationSharing(widget.selectedFriend['id'], null);
-
-      // API를 통한 위치 공유 시작 요청
-      final success = await LocationService.requestLocationSharing(
-        widget.selectedFriend['id'],
-      );
-
-      // 위치 공유 활성화 - 추가된 부분
-      if (success) {
-        final realTimeLocationService = RealTimeLocationService();
-        realTimeLocationService.enableSharing();
-        print('위치 공유 기능 활성화됨');
-      }
-
-      setState(() {
-        _isLoading = false;
-        if (success) {
-          _iAmSharingLocation = true; // 내 위치 공유 활성화 (중요: 내가 공유하는 것만 활성화)
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('내 위치 공유가 활성화되었습니다')));
-
-          // 위치 정보 새로고침 (로딩 표시 없음)
-          _refreshLocations();
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('위치 공유 시작 요청 실패. 나중에 다시 시도하세요.')),
-          );
-        }
-      });
-    } catch (e) {
-      print('위치 공유 시작 오류: $e');
-      setState(() {
-        _isLoading = false;
-      });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('위치 공유 시작 중 오류가 발생했습니다.')));
-    }
+                child: Text('활성화 하러가기'),
+              ),
+            ],
+          ),
+    );
   }
 
   // 마지막 업데이트 시간 포맷팅
@@ -521,6 +759,12 @@ class _RealTimeLocationSharingPageState
     }
   }
 
+  // 카메라 수동 조작 감지 함수
+  void _onCameraChanged() {
+    _userManuallyControlledCamera = true;
+    _lastManualCameraControl = DateTime.now();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -536,17 +780,16 @@ class _RealTimeLocationSharingPageState
       ),
       body: Stack(
         children: [
-          // 네이버 맵 - 초기 카메라 위치를 내 위치로 설정
+          // 네이버 맵
           NaverMap(
             options: NaverMapViewOptions(
               initialCameraPosition: NCameraPosition(
-                target:
-                    _myPosition ?? NLatLng(37.5666805, 126.9784147), // 내 위치 우선
+                target: _myPosition ?? NLatLng(37.5666805, 126.9784147),
                 zoom: 15,
               ),
               mapType: NMapType.basic,
               contentPadding: EdgeInsets.zero,
-              locationButtonEnable: false, // 위치 버튼 활성화
+              locationButtonEnable: false,
             ),
             onMapReady: (controller) {
               setState(() {
@@ -554,7 +797,6 @@ class _RealTimeLocationSharingPageState
               });
               _updateMapMarkers();
 
-              // 맵이 준비되면 즉시 내 위치로 이동
               if (_myPosition != null) {
                 controller.updateCamera(
                   NCameraUpdate.withParams(target: _myPosition!, zoom: 15),
@@ -562,6 +804,37 @@ class _RealTimeLocationSharingPageState
                 _isInitialCameraSet = true;
               }
             },
+            onCameraIdle: () {
+              _onCameraChanged(); // 카메라 수동 조작 감지
+              if (_mapController != null) {
+                _mapController!.getCameraPosition().then((position) {
+                  _currentZoom = position.zoom;
+                });
+              }
+            },
+          ),
+
+          // 두 위치 보기 버튼 (👥 아이콘)
+          Positioned(
+            bottom: 80, // 내 위치 버튼 위에
+            right: 16,
+            child: FloatingActionButton(
+              backgroundColor: Colors.white,
+              mini: true,
+              heroTag: "both_locations",
+              child: Text('👥', style: TextStyle(fontSize: 20)),
+              onPressed: () {
+                if (_myPosition != null &&
+                    _friendPosition != null &&
+                    _friendIsSharingLocation) {
+                  _fitBoundsToShowBothMarkers();
+                } else {
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text('친구의 위치 정보가 없습니다.')));
+                }
+              },
+            ),
           ),
 
           // 현재 위치 버튼
@@ -571,11 +844,15 @@ class _RealTimeLocationSharingPageState
             child: FloatingActionButton(
               backgroundColor: Colors.white,
               mini: true,
+              heroTag: "my_location",
               child: Icon(Icons.my_location, color: Colors.black),
               onPressed: () {
                 if (_myPosition != null && _mapController != null) {
                   _mapController!.updateCamera(
-                    NCameraUpdate.withParams(target: _myPosition!, zoom: 15),
+                    NCameraUpdate.withParams(
+                      target: _myPosition!,
+                      zoom: _currentZoom,
+                    ),
                   );
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -628,33 +905,283 @@ class _RealTimeLocationSharingPageState
               ),
             ),
 
-          // 위치 공유 상태 메시지 - 친구가 공유 중이 아니고, 로딩/에러 상태가 아니고, 내가 공유 중이 아닐 때만 표시
+          // 위치 공유 상태 메시지 - 트렌디한 레이더 디자인으로 개선
           if (!_friendIsSharingLocation &&
               !_isLoading &&
               _errorMessage.isEmpty &&
-              !_iAmSharingLocation)
+              !_iAmSharingLocation &&
+              _isInitialLoadComplete)
             Container(
-              color: Colors.white.withOpacity(0.7),
+              color: Colors.transparent, // 전체 배경 투명 (지도 보임)
               child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(20.0),
+                child: Container(
+                  margin: const EdgeInsets.all(20.0),
+                  padding: const EdgeInsets.all(32.0),
+                  decoration: BoxDecoration(
+                    // 지도가 안 보이도록 불투명한 색상 + 트렌디한 그라데이션
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Color(0xFF1F2937), // gray-800 (불투명)
+                        Color(0xFF111827), // gray-900 (불투명)
+                        Color(0xFF0F172A), // slate-900 (불투명)
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.2),
+                      width: 1,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.5),
+                        blurRadius: 20,
+                        spreadRadius: 5,
+                      ),
+                      BoxShadow(
+                        color: Color(0xFF3B82F6).withOpacity(0.1),
+                        blurRadius: 40,
+                        spreadRadius: 10,
+                      ),
+                    ],
+                  ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.location_off, color: Colors.orange, size: 48),
-                      SizedBox(height: 12),
-                      Text(
-                        '${widget.selectedFriend['name']}님과 위치 공유가 활성화되지 않았습니다.',
-                        style: TextStyle(fontSize: 16),
-                        textAlign: TextAlign.center,
+                      // 파동 효과와 중앙 아이콘 - 실제 애니메이션 적용
+                      AnimatedBuilder(
+                        animation: Listenable.merge([
+                          _waveAnimation1,
+                          _waveAnimation2,
+                          _waveAnimation3,
+                        ]),
+                        builder: (context, child) {
+                          return Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              // 파동 효과 1 - 가장 큰 원
+                              Transform.scale(
+                                scale: 0.5 + (_waveAnimation1.value * 0.5),
+                                child: Container(
+                                  width: 128,
+                                  height: 128,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: Color(0xFF3B82F6).withOpacity(
+                                        0.4 * (1 - _waveAnimation1.value),
+                                      ),
+                                      width: 2,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              // 파동 효과 2 - 중간 원
+                              Transform.scale(
+                                scale: 0.6 + (_waveAnimation2.value * 0.4),
+                                child: Container(
+                                  width: 96,
+                                  height: 96,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: Color(0xFF8B5CF6).withOpacity(
+                                        0.5 * (1 - _waveAnimation2.value),
+                                      ),
+                                      width: 2,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              // 파동 효과 3 - 작은 원
+                              Transform.scale(
+                                scale: 0.7 + (_waveAnimation3.value * 0.3),
+                                child: Container(
+                                  width: 64,
+                                  height: 64,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: Color(0xFFEC4899).withOpacity(
+                                        0.7 * (1 - _waveAnimation3.value),
+                                      ),
+                                      width: 2,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              // 중앙 아이콘 - 맥박 효과
+                              AnimatedContainer(
+                                duration: Duration(milliseconds: 1200),
+                                curve: Curves.easeInOut,
+                                width: 80,
+                                height: 80,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [
+                                      Color(0xFF3B82F6), // blue-500
+                                      Color(0xFF8B5CF6), // purple-600
+                                    ],
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Color(0xFF3B82F6).withOpacity(0.4),
+                                      blurRadius: 20,
+                                      spreadRadius: 5,
+                                    ),
+                                    BoxShadow(
+                                      color: Color(0xFF8B5CF6).withOpacity(0.3),
+                                      blurRadius: 40,
+                                      spreadRadius: 10,
+                                    ),
+                                  ],
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    '📡',
+                                    style: TextStyle(fontSize: 32),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
                       ),
-                      SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: _startLocationSharing,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
+
+                      SizedBox(height: 24),
+
+                      // 제목
+                      Column(
+                        children: [
+                          Text(
+                            'CONNECTION STATUS',
+                            style: TextStyle(
+                              color: Colors.grey[400],
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                              letterSpacing: 2,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            '위치 공유 대기중',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      SizedBox(height: 20),
+
+                      // 상태 박스
+                      Container(
+                        width: double.infinity,
+                        padding: EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.1),
+                            width: 1,
+                          ),
                         ),
-                        child: Text('위치 공유 시작하기'),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    color: Colors.red,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Disconnected',
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.8),
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: 12),
+                            Text(
+                              '친구 설정에서 위치 공유를 활성화하면\n실시간 추적이 시작됩니다',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.7),
+                                fontSize: 12,
+                                height: 1.4,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      SizedBox(height: 24),
+
+                      // 버튼
+                      Container(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.of(context).pop(); // 뒤로가기
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            padding: EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ).copyWith(
+                            backgroundColor: MaterialStateProperty.all(
+                              Colors.transparent,
+                            ),
+                          ),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Color(0xFF2563EB), // blue-600
+                                  Color(0xFF8B5CF6), // purple-600
+                                  Color(0xFFEC4899), // pink-600
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Color(0xFF3B82F6).withOpacity(0.3),
+                                  blurRadius: 20,
+                                  spreadRadius: 2,
+                                ),
+                              ],
+                            ),
+                            padding: EdgeInsets.symmetric(vertical: 16),
+                            child: Center(
+                              child: Text(
+                                '🔗 연결하러 가기',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -714,6 +1241,62 @@ class _RealTimeLocationSharingPageState
                     '${widget.selectedFriend['name']}님은 아직 위치를 공유하고 있지 않습니다',
                     style: TextStyle(fontSize: 12, color: Colors.orange[700]),
                   ),
+                ),
+              ),
+            ),
+
+          // 따라가기 상태 표시
+          if (_followStatus == 'pending' && _isRequester)
+            Positioned(
+              bottom: 80,
+              left: 16,
+              right: 16,
+              child: Container(
+                padding: EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.blue[50],
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.blue[300]!),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.pending, color: Colors.blue),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        '${widget.selectedFriend['name']}님에게 따라가기 요청을 보냈습니다',
+                        style: TextStyle(color: Colors.blue[700]),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+          // 길찾기 진행 중 표시
+          if (_isNavigating)
+            Positioned(
+              bottom: 80,
+              left: 16,
+              right: 16,
+              child: Container(
+                padding: EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.green[50],
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.green[300]!),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.navigation, color: Colors.green),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        '${widget.selectedFriend['name']}님을 따라가는 중입니다',
+                        style: TextStyle(color: Colors.green[700]),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),

@@ -1,40 +1,22 @@
-// Enhanced location_service.dart
+// services/location_service.dart - 완전 수정된 버전
 import 'dart:convert';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:io' show Platform;
-import 'package:geolocator/geolocator.dart';
-import 'dart:async';
 import 'package:tomapto/services/token_service.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class LocationService {
+  // API 서버 기본 URL 가져오기
   static String getApiBaseUrl() {
-    // 기본 URL 가져오기
-    String baseUrl = dotenv.env['API_BASE_URL'] ?? 'http://localhost:8080/api';
-    String? localIp = dotenv.env['LOCAL_IP'];
-
-    // 안드로이드 플랫폼인 경우
-    if (Platform.isAndroid) {
-      // localhost를 사용 중이고 LOCAL_IP가 설정되어 있다면
-      if (baseUrl.contains('localhost') &&
-          localIp != null &&
-          localIp.isNotEmpty) {
-        // localhost를 LOCAL_IP로 대체
-        return baseUrl.replaceAll('localhost', localIp);
-      }
-
-      // 에뮬레이터 특정 주소 처리
-      if (baseUrl.contains('localhost')) {
-        return baseUrl.replaceAll('localhost', '10.0.2.2');
-      }
+    String baseUrl = dotenv.env['API_BASE_URL'] ?? 'http://172.30.1.42:8080';
+    if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
+      baseUrl = 'http://$baseUrl';
     }
-
-    // 그 외의 경우 원래 URL 반환
     return baseUrl;
   }
 
-  // 내 위치 업데이트 - 실제 위치 데이터 사용하도록 수정
+  // 내 위치 업데이트
   static Future<bool> updateMyLocation(
     double latitude,
     double longitude,
@@ -85,9 +67,6 @@ class LocationService {
 
       if (response.statusCode == 200) {
         print('위치 업데이트 성공: $latitude, $longitude');
-
-        // 위치 히스토리 DB에 기록 - 서버 측에서 자동으로 이루어지므로 클라이언트에서는 별도 작업 불필요
-
         return true;
       } else if (response.statusCode == 401) {
         print('위치 업데이트 실패: 인증 오류 - 다시 로그인이 필요합니다');
@@ -136,7 +115,7 @@ class LocationService {
     }
   }
 
-  // 친구 위치 조회
+  // 친구 위치 조회 - 안전한 파싱 버전
   static Future<Map<String, dynamic>?> getFriendLocation(
     String friendId,
   ) async {
@@ -157,30 +136,41 @@ class LocationService {
         return null;
       }
 
-      // 먼저 친구가 나에게 위치를 공유 중인지 확인
-      final friendIsSharing = await checkFriendIsSharingWith(friendId);
-      if (!friendIsSharing) {
-        print('친구가 나에게 위치를 공유하고 있지 않습니다.');
-        return null;
-      }
-
       final apiBaseUrl = getApiBaseUrl();
       final response = await http.get(
         Uri.parse('$apiBaseUrl/location/friend/$friendId'),
         headers: {'Authorization': 'Bearer $token'},
       );
 
-      // 응답 상태 코드에 따른 처리
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         print('친구 위치 조회 성공: $data');
-        return data;
+
+        // 안전한 데이터 검증
+        if (data['latitude'] != null && data['longitude'] != null) {
+          // 위도/경도 데이터 타입 검증
+          final lat = data['latitude'];
+          final lng = data['longitude'];
+
+          if ((lat is double ||
+                  lat is int ||
+                  (lat is String && lat.isNotEmpty)) &&
+              (lng is double ||
+                  lng is int ||
+                  (lng is String && lng.isNotEmpty))) {
+            return data;
+          } else {
+            print('친구 위치 데이터가 유효하지 않습니다: lat=$lat, lng=$lng');
+            return null;
+          }
+        } else {
+          print('친구 위치 데이터가 누락되었습니다');
+          return null;
+        }
       } else if (response.statusCode == 403) {
-        // 위치 공유가 되어있지 않은 경우
         print('친구 위치 조회 실패: 위치 공유 관계가 없습니다');
         return null;
       } else if (response.statusCode == 404) {
-        // 친구의 위치 정보가 없는 경우
         print('친구 위치 정보가 없습니다.');
         return null;
       } else {
@@ -202,7 +192,6 @@ class LocationService {
       // 토큰 가져오기
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token');
-      final userId = prefs.getString('user_id');
 
       if (token == null) {
         print('로그인이 필요합니다');
@@ -216,22 +205,11 @@ class LocationService {
       }
 
       final apiBaseUrl = getApiBaseUrl();
+      final requestData = <String, dynamic>{'friend_id': friendId};
 
-      // 요청 바디 생성 - 명확한 방향성 지정
-      final Map<String, dynamic> requestBody = {
-        'friend_id': friendId,
-        'unidirectional': true, // 일방향 공유 플래그 추가
-        'direction': 'me_to_friend', // 방향성 명확히 지정
-        'sharer_id': userId, // 명시적으로 내가 공유자임을 지정
-        'sharee_id': friendId, // 명시적으로 친구가 수신자임을 지정
-      };
-
-      // durationMinutes가 null이 아니고 양수인 경우에만 추가
-      if (durationMinutes != null && durationMinutes > 0) {
-        requestBody['duration_minutes'] = durationMinutes;
+      if (durationMinutes != null) {
+        requestData['duration_minutes'] = durationMinutes;
       }
-
-      print('위치 공유 요청 데이터: $requestBody');
 
       final response = await http.post(
         Uri.parse('$apiBaseUrl/location/share'),
@@ -239,12 +217,12 @@ class LocationService {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
-        body: json.encode(requestBody),
+        body: json.encode(requestData),
       );
 
-      // 응답 상태 코드에 따른 처리
       if (response.statusCode == 200) {
-        print('위치 공유 요청 성공 - 내가 친구에게 공유');
+        final data = json.decode(response.body);
+        print('위치 공유 요청 성공: ${data['message']}');
         return true;
       } else {
         print('위치 공유 요청 실패: ${response.statusCode} - ${response.body}');
@@ -284,13 +262,10 @@ class LocationService {
         body: json.encode({'friend_id': friendId}),
       );
 
-      // 응답 상태 코드에 따른 처리
       if (response.statusCode == 200) {
-        print('위치 공유 종료 성공');
+        final data = json.decode(response.body);
+        print('위치 공유 종료 성공: ${data['message']}');
         return true;
-      } else if (response.statusCode == 404) {
-        print('활성화된 위치 공유가 없습니다.');
-        return false;
       } else {
         print('위치 공유 종료 실패: ${response.statusCode} - ${response.body}');
         return false;
@@ -301,10 +276,103 @@ class LocationService {
     }
   }
 
-  // 활성화된 위치 공유 목록 조회
-  static Future<List<Map<String, dynamic>>?> getActiveLocationSharings() async {
+  // 내가 특정 친구에게 위치 공유 중인지 확인
+  static Future<bool> checkIAmSharingWith(String friendId) async {
     try {
-      // 토큰 가져오기
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+      final myUserId = prefs.getString('user_id');
+
+      if (token == null || myUserId == null) {
+        print('로그인이 필요합니다');
+        return false;
+      }
+
+      if (TokenService.isTokenExpired(token)) {
+        print('토큰이 만료되었습니다');
+        return false;
+      }
+
+      final apiBaseUrl = getApiBaseUrl();
+      final response = await http.get(
+        Uri.parse('$apiBaseUrl/location/active-sharings'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (response.statusCode == 200) {
+        final List<dynamic> sharings = json.decode(response.body);
+
+        // 내가 해당 친구에게 공유하고 있는지 확인
+        for (var sharing in sharings) {
+          if (sharing['sharer_id'] == myUserId &&
+              sharing['sharee_id'] == friendId) {
+            print('내가 $friendId에게 위치 공유 중입니다.');
+            return true;
+          }
+        }
+
+        print('내가 $friendId에게 위치 공유 중이 아닙니다.');
+        return false;
+      } else {
+        print('위치 공유 상태 조회 실패: ${response.statusCode} - ${response.body}');
+        return false;
+      }
+    } catch (e) {
+      print('위치 공유 상태 확인 오류: $e');
+      return false;
+    }
+  }
+
+  // 특정 친구가 나에게 위치 공유 중인지 확인
+  static Future<bool> checkFriendIsSharingWith(String friendId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+      final myUserId = prefs.getString('user_id');
+
+      if (token == null || myUserId == null) {
+        print('로그인이 필요합니다');
+        return false;
+      }
+
+      if (TokenService.isTokenExpired(token)) {
+        print('토큰이 만료되었습니다');
+        return false;
+      }
+
+      final apiBaseUrl = getApiBaseUrl();
+      final response = await http.get(
+        Uri.parse('$apiBaseUrl/location/active-sharings'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (response.statusCode == 200) {
+        final List<dynamic> sharings = json.decode(response.body);
+
+        // 친구가 나에게 공유하고 있는지 확인
+        for (var sharing in sharings) {
+          if (sharing['sharer_id'] == friendId &&
+              sharing['sharee_id'] == myUserId) {
+            print('$friendId님이 나에게 위치 공유 중입니다.');
+            return true;
+          }
+        }
+
+        print('$friendId님이 나에게 위치 공유 중이 아닙니다.');
+        return false;
+      } else {
+        print('위치 공유 상태 조회 실패: ${response.statusCode} - ${response.body}');
+        return false;
+      }
+    } catch (e) {
+      print('위치 공유 상태 확인 오류: $e');
+      return false;
+    }
+  }
+
+  // 활성 위치 공유 목록 조회
+  static Future<List<Map<String, dynamic>>?> getActiveSharings() async {
+    try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token');
 
@@ -313,7 +381,6 @@ class LocationService {
         return null;
       }
 
-      // 토큰 유효성 검사
       if (TokenService.isTokenExpired(token)) {
         print('토큰이 만료되었습니다. 다시 로그인해주세요.');
         return null;
@@ -325,7 +392,6 @@ class LocationService {
         headers: {'Authorization': 'Bearer $token'},
       );
 
-      // 응답 상태 코드에 따른 처리
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
         print('위치 공유 목록 조회 성공: 총 ${data.length}개');
@@ -390,11 +456,10 @@ class LocationService {
         headers: {'Authorization': 'Bearer $token'},
       );
 
-      // 응답 상태 코드에 따른 처리
       if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body);
-        print('위치 히스토리 조회 성공: 총 ${data.length}개 기록');
-        return data.cast<Map<String, dynamic>>();
+        final data = json.decode(response.body);
+        print('위치 히스토리 조회 성공: ${data['history'].length}개');
+        return (data['history'] as List).cast<Map<String, dynamic>>();
       } else {
         print('위치 히스토리 조회 실패: ${response.statusCode} - ${response.body}');
         return null;
@@ -402,174 +467,6 @@ class LocationService {
     } catch (e) {
       print('위치 히스토리 조회 오류: $e');
       return null;
-    }
-  }
-
-  // 위치 공유 상태만 확인하는 메서드
-  static Future<bool> checkLocationSharingActive(String friendId) async {
-    try {
-      // 토큰 가져오기
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('token');
-      final userId = prefs.getString('user_id');
-
-      if (token == null || userId == null) {
-        print('로그인이 필요합니다');
-        return false;
-      }
-
-      // 토큰 유효성 검사
-      if (TokenService.isTokenExpired(token)) {
-        print('토큰이 만료되었습니다. 다시 로그인해주세요.');
-        return false;
-      }
-
-      // 활성화된 위치 공유 목록 조회
-      final apiBaseUrl = getApiBaseUrl();
-      final response = await http.get(
-        Uri.parse('$apiBaseUrl/location/active-sharings'),
-        headers: {'Authorization': 'Bearer $token'},
-      );
-
-      // 응답 상태 코드에 따른 처리
-      if (response.statusCode == 200) {
-        final List<dynamic> sharings = json.decode(response.body);
-
-        // 내가 공유자(sharer_id)인 경우만 확인 - 수정된 부분
-        for (var sharing in sharings) {
-          if (sharing['sharer_id'] == userId &&
-              sharing['sharee_id'] == friendId &&
-              sharing['status'] == 'active') {
-            // 종료 시간이 없거나 현재 시간보다 미래인 경우만 활성화로 간주
-            if (sharing['end_time'] == null ||
-                DateTime.parse(sharing['end_time']).isAfter(DateTime.now())) {
-              print('내가 ${friendId}에게 위치 공유 중입니다.');
-              return true;
-            }
-          }
-        }
-
-        print('내가 ${friendId}에게 위치 공유 중이 아닙니다.');
-        return false;
-      } else {
-        print('위치 공유 상태 조회 실패: ${response.statusCode} - ${response.body}');
-        return false;
-      }
-    } catch (e) {
-      print('위치 공유 상태 확인 오류: $e');
-      return false;
-    }
-  }
-
-  // 내가 특정 친구에게 위치를 공유 중인지 확인하는 메서드
-  static Future<bool> checkIAmSharingWith(String friendId) async {
-    try {
-      // 토큰 가져오기
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('token');
-      final userId = prefs.getString('user_id');
-
-      if (token == null || userId == null) {
-        print('로그인이 필요합니다');
-        return false;
-      }
-
-      // 토큰 만료 확인
-      if (TokenService.isTokenExpired(token)) {
-        print('토큰이 만료되었습니다. 다시 로그인해주세요.');
-        return false;
-      }
-
-      // 활성화된 위치 공유 목록 조회
-      final apiBaseUrl = getApiBaseUrl();
-      final response = await http.get(
-        Uri.parse('$apiBaseUrl/location/active-sharings'),
-        headers: {'Authorization': 'Bearer $token'},
-      );
-
-      if (response.statusCode == 200) {
-        final List<dynamic> sharings = json.decode(response.body);
-
-        // 내가 공유자(sharer_id), 친구가 수신자(sharee_id)인 경우만 확인
-        // 즉, 내가 -> 친구에게 공유 중인 방향성
-        for (var sharing in sharings) {
-          if (sharing['sharer_id'] == userId &&
-              sharing['sharee_id'] == friendId &&
-              sharing['status'] == 'active') {
-            // 종료 시간이 없거나 현재 시간보다 미래인 경우만 활성화로 간주
-            if (sharing['end_time'] == null ||
-                DateTime.parse(sharing['end_time']).isAfter(DateTime.now())) {
-              print('내가 $friendId에게 위치 공유 중입니다.');
-              return true;
-            }
-          }
-        }
-
-        print('내가 $friendId에게 위치 공유 중이 아닙니다.');
-        return false;
-      } else {
-        print('위치 공유 상태 조회 실패: ${response.statusCode} - ${response.body}');
-        return false;
-      }
-    } catch (e) {
-      print('위치 공유 상태 확인 오류: $e');
-      return false;
-    }
-  }
-
-  // 친구가 나에게 위치를 공유 중인지 확인하는 메서드 (친구 -> 나)
-  static Future<bool> checkFriendIsSharingWith(String friendId) async {
-    try {
-      // 토큰 가져오기
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('token');
-      final userId = prefs.getString('user_id');
-
-      if (token == null || userId == null) {
-        print('로그인이 필요합니다');
-        return false;
-      }
-
-      // 토큰 만료 확인
-      if (TokenService.isTokenExpired(token)) {
-        print('토큰이 만료되었습니다. 다시 로그인해주세요.');
-        return false;
-      }
-
-      // 활성화된 위치 공유 목록 조회
-      final apiBaseUrl = getApiBaseUrl();
-      final response = await http.get(
-        Uri.parse('$apiBaseUrl/location/active-sharings'),
-        headers: {'Authorization': 'Bearer $token'},
-      );
-
-      if (response.statusCode == 200) {
-        final List<dynamic> sharings = json.decode(response.body);
-
-        // 친구가 공유자(sharer_id), 내가 수신자(sharee_id)인 경우만 확인
-        // 즉, 친구 -> 나에게 공유 중인 방향성
-        for (var sharing in sharings) {
-          if (sharing['sharer_id'] == friendId &&
-              sharing['sharee_id'] == userId &&
-              sharing['status'] == 'active') {
-            // 종료 시간이 없거나 현재 시간보다 미래인 경우만 활성화로 간주
-            if (sharing['end_time'] == null ||
-                DateTime.parse(sharing['end_time']).isAfter(DateTime.now())) {
-              print('$friendId님이 나에게 위치 공유 중입니다.');
-              return true;
-            }
-          }
-        }
-
-        print('$friendId님이 나에게 위치 공유 중이 아닙니다.');
-        return false;
-      } else {
-        print('위치 공유 상태 조회 실패: ${response.statusCode} - ${response.body}');
-        return false;
-      }
-    } catch (e) {
-      print('위치 공유 상태 확인 오류: $e');
-      return false;
     }
   }
 }
