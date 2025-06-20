@@ -330,6 +330,55 @@ class CarExpenseService {
     }
   }
 
+  // 지출 수정
+  static Future<Map<String, dynamic>> updateExpense({
+    required int expenseId,
+    required String expenseType,
+    required double amount,
+    required String description,
+    required DateTime expenseDate,
+  }) async {
+    try {
+      final apiBaseUrl = getApiBaseUrl();
+      final token = await getToken();
+
+      if (token == null) {
+        throw Exception('인증 토큰이 없습니다.');
+      }
+
+      print('지출 수정 API 호출: $apiBaseUrl/car-expenses/$expenseId');
+
+      final response = await http.put(
+        Uri.parse('$apiBaseUrl/car-expenses/$expenseId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode({
+          'expense_type': expenseType,
+          'amount': amount,
+          'description': description,
+          'expense_date':
+              '${expenseDate.year}-${expenseDate.month.toString().padLeft(2, '0')}-${expenseDate.day.toString().padLeft(2, '0')}',
+        }),
+      );
+
+      print('지출 수정 API 응답 코드: ${response.statusCode}');
+      print('지출 수정 API 응답 데이터: ${response.body}');
+
+      final responseData = json.decode(response.body);
+
+      if (response.statusCode != 200) {
+        throw Exception(responseData['message'] ?? '지출 수정에 실패했습니다.');
+      }
+
+      return responseData;
+    } catch (e) {
+      print('지출 수정 API 호출 오류: $e');
+      rethrow;
+    }
+  }
+
   // 금액 포맷팅 유틸리티 (개선된 버전)
   static String formatAmount(dynamic amount) {
     if (amount == null) return '0';

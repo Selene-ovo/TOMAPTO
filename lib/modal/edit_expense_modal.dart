@@ -1,28 +1,69 @@
-// lib/modal/add_expense_modal.dart
+// lib/modal/edit_expense_modal.dart
 import 'package:flutter/material.dart';
 import 'package:tomapto/modal/date_picker_modal.dart';
 import 'package:tomapto/services/car_expense_service.dart';
 
-class AddExpenseModal extends StatefulWidget {
+class EditExpenseModal extends StatefulWidget {
+  final Map<String, dynamic> expense; // 수정할 지출 데이터
   final Function onClose;
-  final Function? onExpenseAdded; // 지출 추가 완료 후 콜백
+  final Function? onExpenseUpdated; // 지출 수정/삭제 완료 후 콜백
 
-  const AddExpenseModal({
+  const EditExpenseModal({
     super.key,
+    required this.expense,
     required this.onClose,
-    this.onExpenseAdded,
+    this.onExpenseUpdated,
   });
 
   @override
-  _AddExpenseModalState createState() => _AddExpenseModalState();
+  _EditExpenseModalState createState() => _EditExpenseModalState();
 }
 
-class _AddExpenseModalState extends State<AddExpenseModal> {
+class _EditExpenseModalState extends State<EditExpenseModal> {
   String _selectedType = 'fuel';
   final _amountController = TextEditingController();
   final _descriptionController = TextEditingController();
   DateTime _selectedDate = DateTime.now();
   bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeData();
+  }
+
+  // 기존 지출 데이터로 폼 초기화
+  void _initializeData() {
+    final expense = widget.expense;
+
+    _selectedType = expense['expense_type'] ?? 'fuel';
+    _amountController.text = (expense['amount'] ?? 0).toString();
+    _descriptionController.text = expense['description'] ?? '';
+
+    // 날짜 파싱
+    try {
+      final dateString = expense['expense_date']?.toString() ?? '';
+      if (dateString.isNotEmpty) {
+        // YYYY-MM-DD 형식의 날짜 파싱
+        if (dateString.contains('T')) {
+          _selectedDate = DateTime.parse(dateString);
+        } else {
+          // YYYY-MM-DD 형식인 경우
+          final parts = dateString.split('-');
+          if (parts.length == 3) {
+            _selectedDate = DateTime(
+              int.parse(parts[0]),
+              int.parse(parts[1]),
+              int.parse(parts[2]),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      print('날짜 파싱 오류: $e');
+      _selectedDate = DateTime.now();
+    }
+  }
 
   @override
   void dispose() {
@@ -96,8 +137,8 @@ class _AddExpenseModalState extends State<AddExpenseModal> {
     );
   }
 
-  // 지출 추가 처리
-  Future<void> _addExpense() async {
+  // 지출 수정 처리
+  Future<void> _updateExpense() async {
     if (!_validateInputs()) return;
 
     setState(() {
@@ -107,24 +148,93 @@ class _AddExpenseModalState extends State<AddExpenseModal> {
     try {
       final amount = double.parse(_amountController.text.trim());
       final description = _descriptionController.text.trim();
+      final expenseId = widget.expense['expense_id'];
 
-      await CarExpenseService.addExpense(
+      // CarExpenseService의 updateExpense 메서드 사용
+      await CarExpenseService.updateExpense(
+        expenseId: expenseId,
         expenseType: _selectedType,
         amount: amount,
         description: description,
         expenseDate: _selectedDate,
       );
 
-      _showSuccessSnackBar('지출이 성공적으로 추가되었습니다.');
+      _showSuccessSnackBar('지출이 성공적으로 수정되었습니다.');
 
-      // 부모 위젯에 지출 추가 완료 알림
-      if (widget.onExpenseAdded != null) {
-        widget.onExpenseAdded!();
+      // 부모 위젯에 지출 수정 완료 알림
+      if (widget.onExpenseUpdated != null) {
+        widget.onExpenseUpdated!();
       }
 
       widget.onClose();
     } catch (e) {
-      _showErrorSnackBar('지출 추가에 실패했습니다: ${e.toString()}');
+      _showErrorSnackBar('지출 수정에 실패했습니다: ${e.toString()}');
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  // 지출 삭제 처리
+  Future<void> _deleteExpense() async {
+    // 삭제 확인 다이얼로그
+    final bool confirmDelete =
+        await showDialog(
+          context: context,
+          builder:
+              (context) => AlertDialog(
+                title: const Text(
+                  '지출 삭제',
+                  style: TextStyle(fontFamily: 'Pretendard'),
+                ),
+                content: const Text(
+                  '이 지출을 정말 삭제하시겠습니까?\n삭제된 지출은 복구할 수 없습니다.',
+                  style: TextStyle(fontFamily: 'Pretendard'),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    child: const Text(
+                      '취소',
+                      style: TextStyle(fontFamily: 'Pretendard'),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(true),
+                    child: const Text(
+                      '삭제',
+                      style: TextStyle(
+                        color: Colors.red,
+                        fontFamily: 'Pretendard',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+        ) ??
+        false;
+
+    if (!confirmDelete) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final expenseId = widget.expense['expense_id'];
+      await CarExpenseService.deleteExpense(expenseId);
+
+      _showSuccessSnackBar('지출이 성공적으로 삭제되었습니다.');
+
+      // 부모 위젯에 지출 삭제 완료 알림
+      if (widget.onExpenseUpdated != null) {
+        widget.onExpenseUpdated!();
+      }
+
+      widget.onClose();
+    } catch (e) {
+      _showErrorSnackBar('지출 삭제에 실패했습니다: ${e.toString()}');
     } finally {
       setState(() {
         _isLoading = false;
@@ -142,7 +252,7 @@ class _AddExpenseModalState extends State<AddExpenseModal> {
       child: Center(
         child: Container(
           margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
-          constraints: const BoxConstraints(maxHeight: 530, maxWidth: 400),
+          constraints: const BoxConstraints(maxHeight: 580, maxWidth: 400),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(20),
@@ -172,7 +282,7 @@ class _AddExpenseModalState extends State<AddExpenseModal> {
                         Row(
                           children: [
                             const Text(
-                              '지출 추가',
+                              '지출 수정',
                               style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
@@ -264,41 +374,83 @@ class _AddExpenseModalState extends State<AddExpenseModal> {
                     ),
                     const SizedBox(height: 20),
 
-                    // 추가 버튼
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: _isLoading ? null : _addExpense,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFFB233B),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          elevation: 0,
-                        ),
-                        child:
-                            _isLoading
-                                ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white,
+                    // 수정/삭제 버튼 행
+                    Row(
+                      children: [
+                        // 삭제 버튼
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: _isLoading ? null : _deleteExpense,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.grey[600],
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              elevation: 0,
+                            ),
+                            child:
+                                _isLoading
+                                    ? const SizedBox(
+                                      height: 20,
+                                      width: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                              Colors.white,
+                                            ),
+                                      ),
+                                    )
+                                    : const Text(
+                                      '삭제',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        fontFamily: 'Pretendard',
+                                      ),
                                     ),
-                                  ),
-                                )
-                                : const Text(
-                                  '추가',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                    fontFamily: 'Pretendard',
-                                  ),
-                                ),
-                      ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        // 수정 버튼
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: _isLoading ? null : _updateExpense,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFFB233B),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              elevation: 0,
+                            ),
+                            child:
+                                _isLoading
+                                    ? const SizedBox(
+                                      height: 20,
+                                      width: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                              Colors.white,
+                                            ),
+                                      ),
+                                    )
+                                    : const Text(
+                                      '수정',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        fontFamily: 'Pretendard',
+                                      ),
+                                    ),
+                          ),
+                        ),
+                      ],
                     ),
 
                     // 고정된 하단 여백
