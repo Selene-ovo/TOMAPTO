@@ -75,8 +75,6 @@ class LoginController {
       await LocationService.updateMyLocation(
         position.latitude,
         position.longitude,
-        position.heading,
-        position.accuracy,
       );
 
       print('로그인 후 위치 업데이트 성공: ${position.latitude}, ${position.longitude}');

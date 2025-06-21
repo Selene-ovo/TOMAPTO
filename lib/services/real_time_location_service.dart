@@ -130,11 +130,9 @@ class RealTimeLocationService {
     print('실시간 위치 업데이트 서비스 중지됨');
   }
 
-  // 위치 변경 이벤트 핸들러 (수정됨)
+  // 위치 변경 이벤트 핸들러
   void _onPositionUpdate(Position position) async {
-    print(
-      '새 위치 수신: ${position.latitude}, ${position.longitude}, 정확도: ${position.accuracy}, 방향: ${position.heading}',
-    );
+    print('새 위치 수신: ${position.latitude}, ${position.longitude}');
 
     // 서버에 위치 업데이트 전송
     try {
@@ -142,8 +140,6 @@ class RealTimeLocationService {
       bool success = await LocationService.updateMyLocation(
         position.latitude,
         position.longitude,
-        position.heading,
-        position.accuracy,
       );
 
       if (success) {
@@ -164,8 +160,6 @@ class RealTimeLocationService {
           socketService.sendLocationUpdate(
             position.latitude,
             position.longitude,
-            position.heading,
-            position.accuracy,
           );
           print('소켓을 통한 실시간 위치 공유 업데이트 전송');
         }
@@ -236,8 +230,6 @@ class RealTimeLocationService {
       bool success = await LocationService.updateMyLocation(
         position.latitude,
         position.longitude,
-        position.heading,
-        position.accuracy,
       );
 
       // 위치 공유가 활성화된 경우에만 소켓으로 전송
@@ -252,8 +244,6 @@ class RealTimeLocationService {
           socketService.sendLocationUpdate(
             position.latitude,
             position.longitude,
-            position.heading,
-            position.accuracy,
           );
         }
       }

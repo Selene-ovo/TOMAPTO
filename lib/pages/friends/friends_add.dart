@@ -12,7 +12,7 @@ import 'package:tomapto/controllers/friends/friends_controller.dart';
 
 class FriendsAddPage extends StatefulWidget {
   final String initialSearchTerm;
-  final int initialTabIndex; // 새로 추가된 파라미터
+  final int initialTabIndex;
 
   const FriendsAddPage({
     Key? key,
@@ -32,7 +32,7 @@ class _FriendsAddPageState extends State<FriendsAddPage>
   List<Map<String, dynamic>> _searchResults = [];
   List<Map<String, dynamic>> _friendRequests = [];
 
-  // 컨트롤러 인스턴스 추가
+  // 컨트롤러 인스턴스
   final FriendsController _friendsController = FriendsController();
 
   // 소켓 서비스 인스턴스
@@ -734,21 +734,17 @@ class _FriendsAddPageState extends State<FriendsAddPage>
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // 거절 버튼 (테두리만 있는 버튼) - 크기 축소
+                    // 거절 버튼 (테두리만 있는 버튼)
                     Container(
-                      width: 36, // 크기 축소
-                      height: 36, // 크기 축소
+                      width: 36,
+                      height: 36,
                       decoration: BoxDecoration(
                         border: Border.all(color: Colors.grey[300]!),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: IconButton(
-                        padding: EdgeInsets.zero, // 패딩 제거로 아이콘 위치 조정
-                        icon: Icon(
-                          Icons.close,
-                          color: Colors.red,
-                          size: 20,
-                        ), // 아이콘 크기 유지
+                        padding: EdgeInsets.zero,
+                        icon: Icon(Icons.close, color: Colors.red, size: 20),
                         onPressed: () {
                           if (request.containsKey('request_id')) {
                             _rejectFriendRequest(request['request_id']);
@@ -757,20 +753,20 @@ class _FriendsAddPageState extends State<FriendsAddPage>
                       ),
                     ),
                     SizedBox(width: 8),
-                    // 수락 버튼 - 사람 + 아이콘 이미지로 변경 - 크기 축소
+                    // 수락 버튼 - 사람 + 아이콘 이미지
                     Container(
-                      width: 36, // 크기 축소
-                      height: 36, // 크기 축소
+                      width: 36,
+                      height: 36,
                       decoration: BoxDecoration(
                         border: Border.all(color: Colors.grey[300]!),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: IconButton(
-                        padding: EdgeInsets.zero, // 패딩 제거
+                        padding: EdgeInsets.zero,
                         icon: Image.asset(
                           'assets/icons/person_add.png',
-                          width: 24, // 아이콘 크기 유지
-                          height: 24, // 아이콘 크기 유지
+                          width: 24,
+                          height: 24,
                         ),
                         onPressed: () {
                           if (request.containsKey('request_id')) {
@@ -892,16 +888,16 @@ class _FriendsAddPageState extends State<FriendsAddPage>
               labelColor: Colors.black,
               unselectedLabelColor: Colors.grey,
               indicatorColor: Colors.red,
-              indicatorSize: TabBarIndicatorSize.tab, // 탭 너비에 맞춤
-              indicatorWeight: 3.0, // 인디케이터 두께
-              labelPadding: EdgeInsets.zero, // 패딩 제거
+              indicatorSize: TabBarIndicatorSize.tab,
+              indicatorWeight: 3.0,
+              labelPadding: EdgeInsets.zero,
               tabs: [
                 Container(
                   width: MediaQuery.of(context).size.width / 2, // 화면 너비의 50%
                   child: const Tab(text: '검색 결과'),
                 ),
                 Container(
-                  width: MediaQuery.of(context).size.width / 2, // 화면 너비의 50%
+                  width: MediaQuery.of(context).size.width / 2,
                   child: const Tab(text: '요청 알림'),
                 ),
               ],

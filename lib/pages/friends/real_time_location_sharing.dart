@@ -609,7 +609,7 @@ class _RealTimeLocationSharingPageState
     }
 
     // 내 위치 마커 추가
-    if (_myPosition != null) {
+    if (_myPosition != null && _iAmSharingLocation) {
       final myMarker = _createMyLocationMarker();
       myMarker.setOnTapListener((NMarker marker) {
         ScaffoldMessenger.of(
@@ -621,7 +621,9 @@ class _RealTimeLocationSharingPageState
     }
 
     // 친구 위치 마커 추가
-    if (_friendPosition != null && _friendIsSharingLocation) {
+    if (_friendPosition != null &&
+        _friendIsSharingLocation &&
+        _iAmSharingLocation) {
       if (_friendPosition!.latitude != 0 && _friendPosition!.longitude != 0) {
         final friendMarker = _createFriendLocationMarker();
 
@@ -713,34 +715,6 @@ class _RealTimeLocationSharingPageState
 
     // 현재 줌 레벨 업데이트
     _currentZoom = targetZoom;
-  }
-
-  // 위치 공유 시작 요청이 아닌 뒤로가기 유도 모달
-  Future<void> _showLocationSharingRequiredModal() async {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder:
-          (context) => AlertDialog(
-            title: Text('위치 공유 필요'),
-            content: Text(
-              '실시간 위치가 활성화되어 있지 않습니다.\n친구 설정에서 위치 공유를 활성화하고 다시 시도해주세요.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop(); // 다이얼로그 닫기
-                  Navigator.of(context).pop(); // 실시간 위치 페이지 나가기
-                },
-                style: TextButton.styleFrom(
-                  backgroundColor: const Color(0xFFFB233B),
-                  foregroundColor: Colors.white,
-                ),
-                child: Text('활성화 하러가기'),
-              ),
-            ],
-          ),
-    );
   }
 
   // 마지막 업데이트 시간 포맷팅
@@ -906,8 +880,7 @@ class _RealTimeLocationSharingPageState
             ),
 
           // 위치 공유 상태 메시지 - 트렌디한 레이더 디자인으로 개선
-          if (!_friendIsSharingLocation &&
-              !_isLoading &&
+          if (!_isLoading &&
               _errorMessage.isEmpty &&
               !_iAmSharingLocation &&
               _isInitialLoadComplete)
@@ -1190,7 +1163,9 @@ class _RealTimeLocationSharingPageState
             ),
 
           // 위치 공유 시간 정보
-          if (_friendIsSharingLocation && _lastUpdateTime != null)
+          if (_friendIsSharingLocation &&
+              _lastUpdateTime != null &&
+              _iAmSharingLocation)
             Positioned(
               top: 8,
               left: 0,
@@ -1248,7 +1223,7 @@ class _RealTimeLocationSharingPageState
           // 따라가기 상태 표시
           if (_followStatus == 'pending' && _isRequester)
             Positioned(
-              bottom: 80,
+              bottom: 140,
               left: 16,
               right: 16,
               child: Container(
@@ -1276,7 +1251,7 @@ class _RealTimeLocationSharingPageState
           // 길찾기 진행 중 표시
           if (_isNavigating)
             Positioned(
-              bottom: 80,
+              bottom: 140,
               left: 16,
               right: 16,
               child: Container(

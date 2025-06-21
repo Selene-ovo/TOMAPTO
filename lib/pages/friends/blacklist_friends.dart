@@ -22,7 +22,7 @@ class _BlacklistFriendsState extends State<BlacklistFriends> {
   // 아이디 마스킹 함수 추가
   String _maskUserId(String userId) {
     if (userId.length < 5) {
-      return userId; // 기존 사용자 대응
+      return userId;
     }
 
     String visiblePart = userId.substring(0, userId.length - 4);
@@ -140,7 +140,6 @@ class _BlacklistFriendsState extends State<BlacklistFriends> {
       );
 
       if (response.statusCode == 200) {
-        // 성공 메시지
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('차단이 해제되었습니다')));
@@ -243,7 +242,6 @@ class _BlacklistFriendsState extends State<BlacklistFriends> {
                   InkWell(
                     onTap: () {
                       Navigator.pop(context);
-                      // 친구 삭제 로직은 이미 구현되어 있지만,
                       // 차단된 사용자는 이미 친구 관계가 아닐 수 있으므로 스낵바만 표시
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(content: Text('이미 차단된 사용자이므로 친구 관계가 아닙니다')),

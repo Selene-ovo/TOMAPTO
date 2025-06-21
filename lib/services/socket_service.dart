@@ -339,12 +339,7 @@ class SocketService {
   }
 
   // 위치 업데이트 전송
-  void sendLocationUpdate(
-    double latitude,
-    double longitude,
-    double? heading,
-    double? accuracy,
-  ) {
+  void sendLocationUpdate(double latitude, double longitude) {
     if (_socket == null || !_socket!.connected) {
       print('소켓이 연결되어 있지 않습니다. 위치 업데이트를 보낼 수 없습니다.');
       initSocket();
@@ -352,9 +347,6 @@ class SocketService {
     }
 
     Map<String, dynamic> data = {'latitude': latitude, 'longitude': longitude};
-
-    if (heading != null) data['heading'] = heading;
-    if (accuracy != null) data['accuracy'] = accuracy;
 
     print('위치 업데이트 전송: $data');
     _socket!.emit('update_location', data);
