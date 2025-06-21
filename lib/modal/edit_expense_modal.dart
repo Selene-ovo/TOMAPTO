@@ -37,7 +37,27 @@ class _EditExpenseModalState extends State<EditExpenseModal> {
     final expense = widget.expense;
 
     _selectedType = expense['expense_type'] ?? 'fuel';
-    _amountController.text = (expense['amount'] ?? 0).toString();
+
+    // 금액 처리 - 소수점 제거
+    final amount = expense['amount'];
+    if (amount != null) {
+      if (amount is int) {
+        _amountController.text = amount.toString();
+      } else if (amount is double) {
+        _amountController.text = amount.round().toString(); // 반올림 후 정수로 변환
+      } else if (amount is String) {
+        final parsedAmount = double.tryParse(amount) ?? 0.0;
+        _amountController.text =
+            parsedAmount.round().toString(); // 반올림 후 정수로 변환
+      } else {
+        final parsedAmount = double.tryParse(amount.toString()) ?? 0.0;
+        _amountController.text =
+            parsedAmount.round().toString(); // 반올림 후 정수로 변환
+      }
+    } else {
+      _amountController.text = '0';
+    }
+
     _descriptionController.text = expense['description'] ?? '';
 
     // 날짜 파싱

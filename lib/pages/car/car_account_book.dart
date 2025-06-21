@@ -102,7 +102,9 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
                         scrolledUnderElevation: 0,
                         surfaceTintColor: Colors.transparent,
                       ),
-                      body:
+                      body: Stack(
+                        children: [
+                          // 메인 콘텐츠
                           controller.isLoading
                               ? const Center(
                                 child: CircularProgressIndicator(
@@ -141,7 +143,38 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
                                   ),
                                 ),
                               ),
+
+                          if (controller.activeTab == 0)
+                            Positioned(
+                              bottom: 5,
+                              left: 0,
+                              right: 0,
+                              child: Center(
+                                child: GestureDetector(
+                                  onTap:
+                                      () => controller.toggleAddExpenseModal(
+                                        true,
+                                      ),
+                                  child: Container(
+                                    width: 60,
+                                    height: 60,
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFB233B),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.add,
+                                      color: Colors.white,
+                                      size: 30,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                       bottomNavigationBar: Container(
+                        color: Colors.transparent,
                         padding: const EdgeInsets.symmetric(
                           vertical: 20,
                           horizontal: 20,
@@ -149,7 +182,7 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(25),
                           child: Container(
-                            height: 60,
+                            height: 60, // 원래 높이로 복원
                             decoration: BoxDecoration(
                               color: Colors.white,
                               boxShadow: [
@@ -170,7 +203,6 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
                                     MainAxisAlignment.spaceEvenly,
                                 children: [
                                   _buildBackButton(),
-                                  _buildAddButton(),
                                   _buildNavItem(0, Icons.directions_car, '홈'),
                                   _buildNavItem(1, Icons.pie_chart, '통계'),
                                   _buildNavItem(2, Icons.calendar_today, '캘린더'),
@@ -227,27 +259,31 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
     );
   }
 
-  // 하단 네비게이션 아이템 위젯
+  // 하단 네비게이션 아이템 위젯 (크기 증가, 터치 효과 제거)
   Widget _buildNavItem(int index, IconData icon, String label) {
     bool isActive = controller.activeTab == index;
-    return InkWell(
+    return GestureDetector(
+      // InkWell에서 GestureDetector로 변경 (터치 효과 제거)
       onTap: () => controller.changeTab(index),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+        padding: const EdgeInsets.symmetric(
+          horizontal: 12.0,
+          vertical: 6.0,
+        ), // vertical 패딩 줄임
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               icon,
               color: isActive ? const Color(0xFFFB233B) : Colors.grey,
-              size: 22,
+              size: 26, // 큰 아이콘 크기 유지
             ),
-            const SizedBox(height: 2),
+            const SizedBox(height: 1), // 간격을 1픽셀로 줄임
             Text(
               label,
               style: TextStyle(
                 color: isActive ? const Color(0xFFFB233B) : Colors.grey,
-                fontSize: 10,
+                fontSize: 12, // 큰 텍스트 크기 유지
                 fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
                 fontFamily: 'Pretendard',
               ),
@@ -258,34 +294,23 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
     );
   }
 
-  // 뒤로가기 버튼 위젯
+  // 뒤로가기 버튼 위젯 (터치 효과 제거)
   Widget _buildBackButton() {
-    return InkWell(
+    return GestureDetector(
+      // InkWell에서 GestureDetector로 변경
       onTap: () => Navigator.pop(context),
       child: Container(
-        width: 35,
+        width: 35, // 원래 크기로 복원
         height: 35,
         decoration: BoxDecoration(
           color: const Color(0xFFFB233B).withOpacity(0.1),
           shape: BoxShape.circle,
         ),
-        child: const Icon(Icons.arrow_back, color: Color(0xFFFB233B), size: 18),
-      ),
-    );
-  }
-
-  // 추가 버튼 위젯
-  Widget _buildAddButton() {
-    return InkWell(
-      onTap: () => controller.toggleAddExpenseModal(true),
-      child: Container(
-        width: 35,
-        height: 35,
-        decoration: BoxDecoration(
-          color: const Color(0xFFFB233B).withOpacity(0.1),
-          shape: BoxShape.circle,
-        ),
-        child: const Icon(Icons.add, color: Color(0xFFFB233B), size: 18),
+        child: const Icon(
+          Icons.arrow_back,
+          color: Color(0xFFFB233B),
+          size: 18,
+        ), // 원래 아이콘 크기로 복원
       ),
     );
   }
@@ -444,6 +469,9 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
                 ],
               ),
             ),
+
+            // 하단 여백 추가 (+ 버튼과 겹치지 않도록)
+            const SizedBox(height: 100),
           ],
         ),
       ),
@@ -1150,17 +1178,18 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
         '${controller.selectedDate!.month}월 ${controller.selectedDate!.day}일';
 
     // 총 금액 계산
-    double totalAmount = 0.0;
+    int totalAmount = 0; // double에서 int로 변경
     for (var expense in controller.selectedDateExpenses) {
       var amount = expense['amount'];
       if (amount is int) {
-        totalAmount += amount.toDouble();
-      } else if (amount is double) {
         totalAmount += amount;
+      } else if (amount is double) {
+        totalAmount += amount.round(); // 반올림 후 정수로 변환
       } else if (amount is String) {
-        totalAmount += double.tryParse(amount) ?? 0.0;
+        totalAmount += (double.tryParse(amount) ?? 0.0).round(); // 반올림 후 정수로 변환
       } else {
-        totalAmount += double.tryParse(amount.toString()) ?? 0.0;
+        totalAmount +=
+            (double.tryParse(amount.toString()) ?? 0.0).round(); // 반올림 후 정수로 변환
       }
     }
 
@@ -1198,7 +1227,7 @@ class _CarExpenseTrackerState extends State<CarExpenseTracker> {
                   ),
                   if (controller.selectedDateExpenses.isNotEmpty)
                     Text(
-                      '총 ${CarExpenseService.formatAmount(totalAmount.round())}원',
+                      '총 ${CarExpenseService.formatAmount(totalAmount)}원',
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
