@@ -383,31 +383,36 @@ class CarExpenseService {
   static String formatAmount(dynamic amount) {
     if (amount == null) return '0';
 
-    double numAmount = 0.0;
+    int intAmount = 0;
 
     try {
       if (amount is String) {
-        numAmount = double.tryParse(amount) ?? 0.0;
+        double doubleAmount = double.tryParse(amount) ?? 0.0;
+        intAmount = doubleAmount.round(); // 반올림 후 정수로 변환
       } else if (amount is double) {
-        numAmount = amount;
+        intAmount = amount.round(); // 반올림 후 정수로 변환
       } else if (amount is int) {
-        numAmount = amount.toDouble();
+        intAmount = amount;
       } else {
         // 다른 타입인 경우 문자열로 변환 후 파싱 시도
-        numAmount = double.tryParse(amount.toString()) ?? 0.0;
+        double doubleAmount = double.tryParse(amount.toString()) ?? 0.0;
+        intAmount = doubleAmount.round(); // 반올림 후 정수로 변환
       }
     } catch (e) {
       print('금액 파싱 오류: $e, 입력값: $amount (타입: ${amount.runtimeType})');
       return '0';
     }
 
-    // 정수로 변환 (소수점 제거)
-    int intAmount = numAmount.round();
+    // 음수 처리
+    if (intAmount < 0) {
+      intAmount = 0;
+    }
 
     String numStr = intAmount.toString();
     String result = '';
     int count = 0;
 
+    // 천 단위 콤마 추가
     for (int i = numStr.length - 1; i >= 0; i--) {
       result = numStr[i] + result;
       count++;
