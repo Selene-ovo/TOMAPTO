@@ -132,7 +132,6 @@ class _FriendScreenState extends State<FriendScreen> {
       await prefs.remove('token');
       await prefs.remove('user_id');
       await prefs.remove('is_logged_in');
-      // remember_me 설정은 사용자 편의를 위해 유지
     } catch (e) {
       print('로그아웃 처리 오류: $e');
     }
@@ -211,10 +210,8 @@ class _FriendScreenState extends State<FriendScreen> {
         );
         break;
       case 1:
-        // 이미 친구 페이지에 있으므로 아무 작업도 하지 않음
         break;
       case 2:
-        // 메뉴 페이지 구현 (향후 구현)
         break;
       case 3:
         Navigator.pushReplacement(
@@ -638,7 +635,7 @@ class _FriendScreenState extends State<FriendScreen> {
       return;
     }
 
-    // 현재 친구 목록에서 닉네임/이름/아이디로 검색 - 수정된 부분
+    // 현재 친구 목록에서 닉네임/이름/아이디로 검색
     setState(() {
       final allFriends = List<Map<String, dynamic>>.from(
         friends,
@@ -648,7 +645,7 @@ class _FriendScreenState extends State<FriendScreen> {
             final nickname = friend['nickname']?.toString().toLowerCase() ?? '';
             final name = friend['name']?.toString().toLowerCase() ?? '';
             final friendId =
-                friend['id']?.toString().toLowerCase() ?? ''; // 아이디 검색 추가
+                friend['id']?.toString().toLowerCase() ?? ''; // 아이디 검색
             final searchLower = query.toLowerCase();
 
             // 닉네임, 이름, 아이디 모두에서 검색
@@ -865,7 +862,7 @@ class _FriendScreenState extends State<FriendScreen> {
                       controller: _searchController,
                       focusNode: _searchFocus,
                       style: TextStyle(fontSize: 14),
-                      textAlignVertical: TextAlignVertical.center, // 수직 중앙 정렬
+                      textAlignVertical: TextAlignVertical.center,
                       decoration: InputDecoration(
                         hintText: '닉네임을 입력해주세요.',
                         hintStyle: TextStyle(
@@ -876,8 +873,8 @@ class _FriendScreenState extends State<FriendScreen> {
                         contentPadding: EdgeInsets.symmetric(
                           horizontal: 20,
                           vertical: 0,
-                        ), // 여기를 수정
-                        isDense: true, // 더 조밀한 레이아웃
+                        ),
+                        isDense: true,
                       ),
                       onChanged: (value) {
                         // 실시간 검색 기능은 유지
@@ -935,7 +932,6 @@ class _FriendScreenState extends State<FriendScreen> {
                   ),
                 ),
               ),
-              // 빨간색 선 - 더 얇게 수정
               Container(height: 3, color: Colors.red), // 2px → 3px
             ],
           ),
@@ -955,7 +951,6 @@ class _FriendScreenState extends State<FriendScreen> {
                       itemCount: friends.length,
                       itemBuilder: (context, index) {
                         final friend = friends[index];
-                        // 확장 메서드 대신 일반 함수 사용
                         final validFriend = _ensureValidFriend(
                           Map<String, dynamic>.from(friend),
                         );
@@ -983,7 +978,7 @@ class _FriendScreenState extends State<FriendScreen> {
                                         color: Colors.white,
                                         border: Border.all(
                                           color: Colors.grey[300]!,
-                                          width: 0.5, // 더 얇은 테두리
+                                          width: 0.5,
                                         ),
                                         borderRadius: BorderRadius.circular(8),
                                       ),
@@ -1015,7 +1010,7 @@ class _FriendScreenState extends State<FriendScreen> {
                                           shape: BoxShape.circle,
                                           border: Border.all(
                                             color: Colors.white,
-                                            width: 1, // 더 얇은 테두리
+                                            width: 1,
                                           ),
                                         ),
                                       ),
@@ -1066,10 +1061,10 @@ class _FriendScreenState extends State<FriendScreen> {
                                 ),
                               ),
                             ),
-                            // 줄바꿈 구분선 (모든 항목 아래 표시) - 더 얇게 수정
+                            // 줄바꿈 구분선 (모든 항목 아래 표시)
                             Divider(
                               height: 1,
-                              thickness: 0.5, // 더 얇은 구분선
+                              thickness: 0.5,
                               color: Colors.grey[300],
                             ),
                           ],

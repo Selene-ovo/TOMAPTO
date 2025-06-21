@@ -20,8 +20,6 @@ class LocationService {
   static Future<bool> updateMyLocation(
     double latitude,
     double longitude,
-    double? heading,
-    double? accuracy,
   ) async {
     try {
       // 토큰 가져오기
@@ -47,10 +45,6 @@ class LocationService {
         'latitude': latitude,
         'longitude': longitude,
       };
-
-      // 선택적 필드는 null이 아닐 때만 추가
-      if (heading != null) requestData['heading'] = heading;
-      if (accuracy != null) requestData['accuracy'] = accuracy;
 
       final response = await http.post(
         Uri.parse('$apiBaseUrl/location/update'),
