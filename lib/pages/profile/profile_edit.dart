@@ -1,4 +1,4 @@
-// profile_edit.dart - 디버깅 정보 제거된 완전한 버전
+// profile_edit.dart - 이미지 선택 영역 확장 및 저장 버튼 활성화 개선된 버전
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:http/http.dart' as http;
@@ -34,6 +34,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
  // 상태 변수
  bool _hasChanges = false;
  bool _isNicknameChanged = false;
+ bool _isImageChanged = false; // 이미지 변경 상태 추가
  bool _isLoading = false;
  bool _isNicknameValid = true;
  String? _nicknameValidationMessage;
@@ -48,9 +49,10 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
  // 이미지 관련 변수들
  File? _selectedImage;
  String? _currentProfileImageUrl;
+ String? _originalProfileImageUrl; // 원본 이미지 URL 추가
  bool _isImageUploading = false;
- bool _isImageRefreshing = false; // 이미지 URL 갱신 상태
- int _imageRetryCount = 0; // 이미지 로드 재시도 횟수
+ bool _isImageRefreshing = false;
+ int _imageRetryCount = 0;
 
  @override
  void initState() {
@@ -162,6 +164,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
            _originalUserId = data['data']['user_id'] ?? widget.currentUserId;
            _originalNickname = data['data']['user_nickname'] ?? widget.currentNickname;
            _currentProfileImageUrl = data['data']['user_profile_picture_url'];
+           _originalProfileImageUrl = _currentProfileImageUrl; // 원본 이미지 URL 저장
            
            _nicknameController.text = _originalNickname;
          });
@@ -319,6 +322,8 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
      if (image != null) {
        setState(() {
          _selectedImage = File(image.path);
+         _isImageChanged = true; // 이미지 변경 상태 업데이트
+         _updateHasChanges(); // 전체 변경 상태 업데이트
        });
        
        await _uploadProfileImage();
@@ -368,6 +373,8 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
        setState(() {
          _currentProfileImageUrl = data['data']['profile_image_url'];
          _imageRetryCount = 0; // 재시도 카운트 리셋
+         _isImageChanged = true; // 이미지가 성공적으로 변경됨
+         _updateHasChanges(); // 전체 변경 상태 업데이트
        });
        
        ScaffoldMessenger.of(context).showSnackBar(
@@ -383,10 +390,18 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
          ),
        );
      } else {
+       setState(() {
+         _isImageChanged = false; // 업로드 실패시 변경 상태 되돌림
+         _updateHasChanges();
+       });
        throw Exception(data['message'] ?? '이미지 업로드에 실패했습니다.');
      }
    } catch (e) {
      print('이미지 업로드 오류: $e');
+     setState(() {
+       _isImageChanged = false; // 오류 발생시 변경 상태 되돌림
+       _updateHasChanges();
+     });
      ScaffoldMessenger.of(context).showSnackBar(
        SnackBar(
          content: Text('이미지 업로드에 실패했습니다: $e'),
@@ -400,104 +415,111 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
    }
  }
  
- // 개선된 프로필 이미지 위젯
+ // 변경 사항 업데이트 함수
+ void _updateHasChanges() {
+   setState(() {
+     _hasChanges = _isNicknameChanged || _isImageChanged;
+   });
+ }
+ 
+ // 개선된 프로필 이미지 위젯 - 전체 영역 클릭 가능
  Widget _buildProfileImage() {
-   return Stack(
-     children: [
-       Container(
-         width: 80,
-         height: 80,
-         decoration: BoxDecoration(
-           shape: BoxShape.circle,
-           color: Colors.grey[100],
-           border: Border.all(color: Colors.grey[300]!, width: 2),
-         ),
-         child: ClipOval(
-           child: _selectedImage != null
-               ? Image.file(_selectedImage!, fit: BoxFit.cover)
-               : _currentProfileImageUrl != null && _currentProfileImageUrl!.isNotEmpty
-                   ? Stack(
-                       children: [
-                         Image.network(
-                           _currentProfileImageUrl!, 
-                           fit: BoxFit.cover,
-                           width: 80,
-                           height: 80,
-                           loadingBuilder: (context, child, loadingProgress) {
-                             if (loadingProgress == null) return child;
-                             return Center(
-                               child: CircularProgressIndicator(
-                                 strokeWidth: 2,
-                                 valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFB233B)),
-                               ),
-                             );
-                           },
-                           errorBuilder: (context, error, stackTrace) {
-                             print('이미지 로드 오류: $error');
-                             
-                             // 403 에러인 경우 자동으로 URL 갱신 시도
-                             if (error.toString().contains('403') && _imageRetryCount == 0) {
-                               WidgetsBinding.instance.addPostFrameCallback((_) {
-                                 _handleImageError();
-                               });
-                             }
-                             
-                             return Container(
-                               color: Colors.grey[200],
-                               child: SvgPicture.asset(
-                                 'assets/icons/profile_default.svg',
-                                 fit: BoxFit.contain,
-                                 width: 40,
-                                 height: 40,
-                               ),
-                             );
-                           },
-                         ),
-                         
-                         // URL 갱신 중 오버레이
-                         if (_isImageRefreshing)
-                           Container(
+   return GestureDetector(
+     onTap: () {
+       if (_isImageUploading || _isImageRefreshing) return;
+       
+       // 이미지가 있고 로드 오류가 발생한 경우 갱신 옵션 제공
+       if (_currentProfileImageUrl != null && _imageRetryCount > 2) {
+         _showImageActionDialog();
+       } else {
+         _pickImage();
+       }
+     },
+     child: Stack(
+       children: [
+         Container(
+           width: 80,
+           height: 80,
+           decoration: BoxDecoration(
+             shape: BoxShape.circle,
+             color: Colors.grey[100],
+             border: Border.all(color: Colors.grey[300]!, width: 2),
+           ),
+           child: ClipOval(
+             child: _selectedImage != null
+                 ? Image.file(_selectedImage!, fit: BoxFit.cover)
+                 : _currentProfileImageUrl != null && _currentProfileImageUrl!.isNotEmpty
+                     ? Stack(
+                         children: [
+                           Image.network(
+                             _currentProfileImageUrl!, 
+                             fit: BoxFit.cover,
                              width: 80,
                              height: 80,
-                             decoration: BoxDecoration(
-                               color: Colors.black.withOpacity(0.5),
-                               shape: BoxShape.circle,
-                             ),
-                             child: Center(
-                               child: SizedBox(
-                                 width: 20,
-                                 height: 20,
+                             loadingBuilder: (context, child, loadingProgress) {
+                               if (loadingProgress == null) return child;
+                               return Center(
                                  child: CircularProgressIndicator(
                                    strokeWidth: 2,
-                                   valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                   valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFB233B)),
+                                 ),
+                               );
+                             },
+                             errorBuilder: (context, error, stackTrace) {
+                               print('이미지 로드 오류: $error');
+                               
+                               // 403 에러인 경우 자동으로 URL 갱신 시도
+                               if (error.toString().contains('403') && _imageRetryCount == 0) {
+                                 WidgetsBinding.instance.addPostFrameCallback((_) {
+                                   _handleImageError();
+                                 });
+                               }
+                               
+                               return Container(
+                                 color: Colors.grey[200],
+                                 child: SvgPicture.asset(
+                                   'assets/icons/profile_default.svg',
+                                   fit: BoxFit.contain,
+                                   width: 40,
+                                   height: 40,
+                                 ),
+                               );
+                             },
+                           ),
+                           
+                           // URL 갱신 중 오버레이
+                           if (_isImageRefreshing)
+                             Container(
+                               width: 80,
+                               height: 80,
+                               decoration: BoxDecoration(
+                                 color: Colors.black.withOpacity(0.5),
+                                 shape: BoxShape.circle,
+                               ),
+                               child: Center(
+                                 child: SizedBox(
+                                   width: 20,
+                                   height: 20,
+                                   child: CircularProgressIndicator(
+                                     strokeWidth: 2,
+                                     valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                   ),
                                  ),
                                ),
                              ),
-                           ),
-                       ],
-                     )
-                   : SvgPicture.asset(
-                       'assets/icons/profile_default.svg',
-                       fit: BoxFit.contain,
-                     ),
+                         ],
+                       )
+                     : SvgPicture.asset(
+                         'assets/icons/profile_default.svg',
+                         fit: BoxFit.contain,
+                       ),
+           ),
          ),
-       ),
-       
-       // 카메라/갱신 버튼
-       Positioned(
-         bottom: 0,
-         right: 0,
-         child: GestureDetector(
-           onTap: () {
-             if (_isImageUploading || _isImageRefreshing) return;
-             
-             // 이미지가 있고 로드 오류가 발생한 경우 갱신 옵션 제공
-             if (_currentProfileImageUrl != null && _imageRetryCount > 2) {
-               _showImageActionDialog();
-             } else {
-               _pickImage();
-             }
-           },
+         
+         // 카메라/갱신 버튼
+         Positioned(
+           bottom: 0,
+           right: 0,
            child: Container(
              width: 28,
              height: 28,
@@ -524,8 +546,8 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
                    ),
            ),
          ),
-       ),
-     ],
+       ],
+     ),
    );
  }
  
@@ -591,7 +613,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
      _isNicknameChanged = nickname != _originalNickname;
      _nicknameValidationMessage = _getNicknameValidationMessage(nickname);
      _isNicknameValid = _nicknameValidationMessage == null;
-     _hasChanges = _isNicknameChanged;
+     _updateHasChanges(); // 전체 변경 상태 업데이트
    });
    
    _nicknameTimer?.cancel();
@@ -668,8 +690,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
  
  bool get _canSave {
    return _hasChanges && 
-          _isNicknameValid && 
-          _isNicknameAvailable &&
+          (!_isNicknameChanged || (_isNicknameValid && _isNicknameAvailable)) &&
           !_isLoading;
  }
  
@@ -689,6 +710,40 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
      Map<String, dynamic> requestBody = {};
      if (_isNicknameChanged) {
        requestBody['new_nickname'] = _nicknameController.text;
+     }
+     
+     // 이미지만 변경된 경우에도 처리
+     if (_isImageChanged && !_isNicknameChanged) {
+       // 이미지가 이미 업로드되었으므로 성공 메시지만 표시
+       ScaffoldMessenger.of(context).showSnackBar(
+         SnackBar(
+           content: Row(
+             children: [
+               Icon(Icons.check_circle, color: Colors.white, size: 20),
+               SizedBox(width: 8),
+               Expanded(
+                 child: Text(
+                   '프로필 이미지가 성공적으로 변경되었습니다.',
+                   style: TextStyle(fontFamily: 'Pretendard'),
+                 ),
+               ),
+             ],
+           ),
+           backgroundColor: Colors.green,
+           behavior: SnackBarBehavior.floating,
+           shape: RoundedRectangleBorder(
+             borderRadius: BorderRadius.circular(8),
+           ),
+         ),
+       );
+       
+       Navigator.of(context).pop({
+         'userId': _originalUserId,
+         'nickname': _originalNickname,
+         'updated': true,
+         'imageChanged': true,
+       });
+       return;
      }
      
      if (requestBody.isEmpty) {
@@ -726,7 +781,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
                SizedBox(width: 8),
                Expanded(
                  child: Text(
-                   data['message'] ?? '닉네임이 성공적으로 변경되었습니다.',
+                   data['message'] ?? '프로필이 성공적으로 변경되었습니다.',
                    style: TextStyle(fontFamily: 'Pretendard'),
                  ),
                ),
@@ -744,6 +799,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
          'userId': data['data']['user_id'],
          'nickname': data['data']['user_nickname'],
          'updated': true,
+         'imageChanged': _isImageChanged,
        });
      } else if (response.statusCode == 401) {
        _showTokenErrorDialog();
@@ -751,7 +807,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
        ScaffoldMessenger.of(context).showSnackBar(
          SnackBar(
            content: Text(
-             data['message'] ?? '닉네임 변경에 실패했습니다.',
+             data['message'] ?? '프로필 변경에 실패했습니다.',
              style: TextStyle(fontFamily: 'Pretendard'),
            ),
            backgroundColor: Colors.red,
@@ -796,386 +852,385 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
        ),
      ),
    );
-   
    if (result != null && result['passwordChanged'] == true) {
-     ScaffoldMessenger.of(context).showSnackBar(
-       SnackBar(
-         content: Row(
-           children: [
-             Icon(Icons.check_circle, color: Colors.white, size: 20),
-             SizedBox(width: 8),
-             Text(
-               '비밀번호가 성공적으로 변경되었습니다.',
-               style: TextStyle(fontFamily: 'Pretendard'),
-             ),
-           ],
-         ),
-         backgroundColor: Colors.green,
-         behavior: SnackBarBehavior.floating,
-         shape: RoundedRectangleBorder(
-           borderRadius: BorderRadius.circular(8),
-         ),
-       ),
-     );
-   }
- }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.check_circle, color: Colors.white, size: 20),
+            SizedBox(width: 8),
+            Text(
+              '비밀번호가 성공적으로 변경되었습니다.',
+              style: TextStyle(fontFamily: 'Pretendard'),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+    );
+  }
+}
 
- @override
- Widget build(BuildContext context) {
-   final screenHeight = MediaQuery.of(context).size.height;
-   final screenWidth = MediaQuery.of(context).size.width;
+@override
+Widget build(BuildContext context) {
+  final screenHeight = MediaQuery.of(context).size.height;
+  final screenWidth = MediaQuery.of(context).size.width;
 
-   return Scaffold(
-     backgroundColor: Colors.white,
-     appBar: AppBar(
-       backgroundColor: Colors.white,
-       elevation: 0,
-       title: const Text(
-         '프로필 수정',
-         style: TextStyle(
-           color: Colors.black,
-           fontSize: 18,
-           fontWeight: FontWeight.w600,
-           fontFamily: 'Pretendard',
-         ),
-       ),
-       leading: IconButton(
-         icon: const Icon(Icons.arrow_back, color: Colors.black, size: 24),
-         onPressed: () {
-           Navigator.pop(context);
-         },
-       ),
-       centerTitle: true,
-     ),
-     body: _isLoading
-         ? Center(
-             child: CircularProgressIndicator(
-               valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFB233B)),
-             ),
-           )
-         : SingleChildScrollView(
-             child: Padding(
-               padding: EdgeInsets.symmetric(
-                 horizontal: 24 * (screenWidth / 375),
-                 vertical: 20 * (screenHeight / 812),
-               ),
-               child: Column(
-                 crossAxisAlignment: CrossAxisAlignment.center,
-                 children: [
-                   SizedBox(height: 20 * (screenHeight / 812)),
-                   
-                   // 프로필 이미지
-                   _buildProfileImage(),
-                   
-                   SizedBox(height: 40 * (screenHeight / 812)),
-                   
-                   // 아이디 표시 필드 (수정 불가)
-                   _buildDisplayField(
-                     label: '아이디',
-                     value: _originalUserId,
-                   ),
-                   
-                   SizedBox(height: 20 * (screenHeight / 812)),
-                   
-                   // 닉네임 변경 필드
-                   _buildEditField(
-                     controller: _nicknameController,
-                     focusNode: _nicknameFocusNode,
-                     label: '닉네임',
-                     hintText: '닉네임을 입력해주세요',
-                     isChanged: _isNicknameChanged,
-                     isValid: _isNicknameValid && _isNicknameAvailable,
-                     validationMessage: _nicknameValidationMessage ?? _nicknameAvailabilityMessage,
-                     isError: !_isNicknameValid || (!_isNicknameAvailable && _isNicknameChanged),
-                   ),
-                   
-                   SizedBox(height: 20 * (screenHeight / 812)),
-                   
-                   // 비밀번호 변경 버튼
-                   Container(
-                     width: double.infinity,
-                     height: 54,
-                     decoration: BoxDecoration(
-                       color: Colors.grey[100],
-                       borderRadius: BorderRadius.circular(12),
-                       border: Border.all(
-                         color: Colors.grey.shade300,
-                         width: 1,
-                       ),
-                     ),
-                     child: Material(
-                       color: Colors.transparent,
-                       child: InkWell(
-                         borderRadius: BorderRadius.circular(12),
-                         onTap: _navigateToPasswordReset,
-                         child: Padding(
-                           padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                           child: Row(
-                             children: [
-                               SizedBox(
-                                 width: 56,
-                                 child: Text(
-                                   '비밀번호',
-                                   style: TextStyle(
-                                     color: Colors.grey[700],
-                                     fontSize: 15,
-                                     fontWeight: FontWeight.w400,
-                                     fontFamily: 'Pretendard',
-                                   ),
-                                 ),
-                               ),
-                               const SizedBox(width: 16),
-                               Expanded(
-                                 child: Text(
-                                   '비밀번호 변경',
-                                   style: TextStyle(
-                                     color: Colors.grey[600],
-                                     fontSize: 15,
-                                     fontFamily: 'Pretendard',
-                                   ),
-                                 ),
-                               ),
-                               Icon(
-                                 Icons.arrow_forward_ios,
-                                 color: Colors.grey[600],
-                                 size: 16,
-                               ),
-                             ],
-                           ),
-                         ),
-                       ),
-                     ),
-                   ),
-                   
-                   SizedBox(height: 60 * (screenHeight / 812)),
-                   
-                   // 저장하기 버튼 (닉네임 변경시에만 활성화)
-                   Container(
-                     width: double.infinity,
-                     height: 52,
-                     decoration: BoxDecoration(
-                       borderRadius: BorderRadius.circular(26),
-                     ),
-                     child: ElevatedButton(
-                       onPressed: _canSave ? _saveProfile : null,
-                       style: ElevatedButton.styleFrom(
-                         backgroundColor: _canSave 
-                             ? Color(0xFFFB233B) 
-                             : Color(0xFFFB233B).withOpacity(0.5),
-                         shape: RoundedRectangleBorder(
-                           borderRadius: BorderRadius.circular(26),
-                         ),
-                         elevation: 0,
-                         disabledBackgroundColor: Color(0xFFFB233B).withOpacity(0.5),
-                       ),
-                       child: _isLoading
-                           ? SizedBox(
-                               width: 20,
-                               height: 20,
-                               child: CircularProgressIndicator(
-                                 strokeWidth: 2,
-                                 valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                               ),
-                             )
-                           : Text(
-                               '저장하기',
-                               style: TextStyle(
-                                 color: _canSave ? Colors.white : Colors.white.withOpacity(0.7),
-                                 fontSize: 16,
-                                 fontWeight: FontWeight.w600,
-                                 fontFamily: 'Pretendard',
-                               ),
-                             ),
-                     ),
-                   ),
-                   
-                   SizedBox(height: 20 * (screenHeight / 812)),
-                 ],
-               ),
-             ),
-           ),
-   );
- }
- 
- // 표시용 필드 위젯 (수정 불가)
- Widget _buildDisplayField({
-   required String label,
-   required String value,
- }) {
-   return Container(
-     height: 54,
-     decoration: BoxDecoration(
-       color: Colors.grey[100],
-       borderRadius: BorderRadius.circular(12),
-       border: Border.all(
-         color: Colors.grey.shade300,
-         width: 1,
-       ),
-     ),
-     child: Padding(
-       padding: const EdgeInsets.symmetric(horizontal: 16.0),
-       child: Row(
-         children: [
-           SizedBox(
-             width: 56,
-             child: Text(
-               label,
-               style: TextStyle(
-                 color: Colors.grey[700],
-                 fontSize: 15,
-                 fontWeight: FontWeight.w400,
-                 fontFamily: 'Pretendard',
-               ),
-             ),
-           ),
-           const SizedBox(width: 16),
-           Expanded(
-             child: Text(
-               value,
-               style: TextStyle(
-                 fontSize: 15,
-                 fontFamily: 'Pretendard',
-                 color: Colors.grey[700],
-                 fontWeight: FontWeight.normal,
-               ),
-             ),
-           ),
-         ],
-       ),
-     ),
-   );
- }
- 
- // 수정 가능한 텍스트 필드 위젯
- Widget _buildEditField({
-   required TextEditingController controller,
-   required FocusNode focusNode,
-   required String label,
-   required String hintText,
-   required bool isChanged,
-   required bool isValid,
-   String? validationMessage,
-   bool isError = false,
- }) {
-   Color borderColor;
-   Color labelColor;
-   
-   if (isError) {
-     borderColor = Colors.red;
-     labelColor = Colors.red;
-   } else if (focusNode.hasFocus) {
-     borderColor = Color(0xFFFB233B);
-     labelColor = isChanged ? Color(0xFFFB233B) : Colors.grey[700]!;
-   } else if (isChanged && isValid) {
-     borderColor = Color(0xFFFB233B).withOpacity(0.3);
-     labelColor = Color(0xFFFB233B);
-   } else {
-     borderColor = Colors.grey.shade300;
-     labelColor = Colors.grey[700]!;
-   }
-   
-   return Column(
-     crossAxisAlignment: CrossAxisAlignment.start,
-     children: [
-       Container(
-         height: 54,
-         decoration: BoxDecoration(
-           color: isChanged ? Colors.white : Colors.grey[100],
-           borderRadius: BorderRadius.circular(12),
-           border: Border.all(
-             color: borderColor,
-             width: isChanged ? 1.5 : 1,
-           ),
-         ),
-         child: Padding(
-           padding: const EdgeInsets.symmetric(horizontal: 16.0),
-           child: Row(
-             children: [
-               SizedBox(
-                 width: 56,
-                 child: Text(
-                   label,
-                   style: TextStyle(
-                     color: labelColor,
-                     fontSize: 15,
-                     fontWeight: isChanged ? FontWeight.w500 : FontWeight.w400,
-                     fontFamily: 'Pretendard',
-                   ),
-                 ),
-               ),
-               const SizedBox(width: 16),
-               Expanded(
-                 child: TextField(
-                   controller: controller,
-                   focusNode: focusNode,
-                   decoration: InputDecoration(
-                     hintText: hintText,
-                     border: InputBorder.none,
-                     hintStyle: TextStyle(
-                       color: Colors.grey[400],
-                       fontSize: 15,
-                       fontFamily: 'Pretendard',
-                     ),
-                     contentPadding: EdgeInsets.zero,
-                   ),
-                   style: TextStyle(
-                     fontSize: 15,
-                     fontFamily: 'Pretendard',
-                     color: isChanged ? Colors.black : Colors.grey[700],
-                     fontWeight: isChanged ? FontWeight.w500 : FontWeight.normal,
-                   ),
-                 ),
-               ),
-               
-               // 상태 표시 아이콘
-               if (isChanged)
-                 Container(
-                   padding: EdgeInsets.all(4),
-                   decoration: BoxDecoration(
-                     color: isError 
-                         ? Colors.red 
-                         : isValid 
-                             ? Color(0xFFFB233B) 
-                             : Colors.orange,
-                     shape: BoxShape.circle,
-                   ),
-                   child: Icon(
-                     isError 
-                         ? Icons.close 
-                         : isValid 
-                             ? Icons.check 
-                             : Icons.warning,
-                     color: Colors.white,
-                     size: 12,
-                   ),
-                 ),
-             ],
-           ),
-         ),
-       ),
-       
-       // 유효성 검사 메시지
-       if (validationMessage != null && validationMessage.isNotEmpty)
-         Padding(
-           padding: const EdgeInsets.only(top: 8, left: 12),
-           child: Text(
-             validationMessage,
-             style: TextStyle(
-               color: isError ? Colors.red : Colors.green,
-               fontSize: 12,
-               fontFamily: 'Pretendard',
-             ),
-           ),
-         ),
-     ],
-   );
- }
+  return Scaffold(
+    backgroundColor: Colors.white,
+    appBar: AppBar(
+      backgroundColor: Colors.white,
+      elevation: 0,
+      title: const Text(
+        '프로필 수정',
+        style: TextStyle(
+          color: Colors.black,
+          fontSize: 18,
+          fontWeight: FontWeight.w600,
+          fontFamily: 'Pretendard',
+        ),
+      ),
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back, color: Colors.black, size: 24),
+        onPressed: () {
+          Navigator.pop(context);
+        },
+      ),
+      centerTitle: true,
+    ),
+    body: _isLoading
+        ? Center(
+            child: CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFB233B)),
+            ),
+          )
+        : SingleChildScrollView(
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: 24 * (screenWidth / 375),
+                vertical: 20 * (screenHeight / 812),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  SizedBox(height: 20 * (screenHeight / 812)),
+                  
+                  // 프로필 이미지 (전체 영역 클릭 가능)
+                  _buildProfileImage(),
+                  
+                  SizedBox(height: 40 * (screenHeight / 812)),
+                  
+                  // 아이디 표시 필드 (수정 불가)
+                  _buildDisplayField(
+                    label: '아이디',
+                    value: _originalUserId,
+                  ),
+                  
+                  SizedBox(height: 20 * (screenHeight / 812)),
+                  
+                  // 닉네임 변경 필드
+                  _buildEditField(
+                    controller: _nicknameController,
+                    focusNode: _nicknameFocusNode,
+                    label: '닉네임',
+                    hintText: '닉네임을 입력해주세요',
+                    isChanged: _isNicknameChanged,
+                    isValid: _isNicknameValid && _isNicknameAvailable,
+                    validationMessage: _nicknameValidationMessage ?? _nicknameAvailabilityMessage,
+                    isError: !_isNicknameValid || (!_isNicknameAvailable && _isNicknameChanged),
+                  ),
+                  
+                  SizedBox(height: 20 * (screenHeight / 812)),
+                  
+                  // 비밀번호 변경 버튼
+                  Container(
+                    width: double.infinity,
+                    height: 54,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Colors.grey.shade300,
+                        width: 1,
+                      ),
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: _navigateToPasswordReset,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                width: 56,
+                                child: Text(
+                                  '비밀번호',
+                                  style: TextStyle(
+                                    color: Colors.grey[700],
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w400,
+                                    fontFamily: 'Pretendard',
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Text(
+                                  '비밀번호 변경',
+                                  style: TextStyle(
+                                    color: Colors.grey[600],
+                                    fontSize: 15,
+                                    fontFamily: 'Pretendard',
+                                  ),
+                                ),
+                              ),
+                              Icon(
+                                Icons.arrow_forward_ios,
+                                color: Colors.grey[600],
+                                size: 16,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  
+                  SizedBox(height: 60 * (screenHeight / 812)),
+                  
+                  // 저장하기 버튼 (닉네임 변경 또는 이미지 변경시 활성화)
+                  Container(
+                    width: double.infinity,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(26),
+                    ),
+                    child: ElevatedButton(
+                      onPressed: _canSave ? _saveProfile : null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _canSave 
+                            ? Color(0xFFFB233B) 
+                            : Color(0xFFFB233B).withOpacity(0.5),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(26),
+                        ),
+                        elevation: 0,
+                        disabledBackgroundColor: Color(0xFFFB233B).withOpacity(0.5),
+                      ),
+                      child: _isLoading
+                          ? SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : Text(
+                              '저장하기',
+                              style: TextStyle(
+                                color: _canSave ? Colors.white : Colors.white.withOpacity(0.7),
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                fontFamily: 'Pretendard',
+                              ),
+                            ),
+                    ),
+                  ),
+                  
+                  SizedBox(height: 20 * (screenHeight / 812)),
+                ],
+              ),
+            ),
+          ),
+  );
+}
 
- @override
- void dispose() {
-   _nicknameController.dispose();
-   _nicknameFocusNode.dispose();
-   _nicknameTimer?.cancel();
-   super.dispose();
- }
+// 표시용 필드 위젯 (수정 불가)
+Widget _buildDisplayField({
+  required String label,
+  required String value,
+}) {
+  return Container(
+    height: 54,
+    decoration: BoxDecoration(
+      color: Colors.grey[100],
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(
+        color: Colors.grey.shade300,
+        width: 1,
+      ),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 56,
+            child: Text(
+              label,
+              style: TextStyle(
+                color: Colors.grey[700],
+                fontSize: 15,
+                fontWeight: FontWeight.w400,
+                fontFamily: 'Pretendard',
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 15,
+                fontFamily: 'Pretendard',
+                color: Colors.grey[700],
+                fontWeight: FontWeight.normal,
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+// 수정 가능한 텍스트 필드 위젯
+Widget _buildEditField({
+  required TextEditingController controller,
+  required FocusNode focusNode,
+  required String label,
+  required String hintText,
+  required bool isChanged,
+  required bool isValid,
+  String? validationMessage,
+  bool isError = false,
+}) {
+  Color borderColor;
+  Color labelColor;
+  
+  if (isError) {
+    borderColor = Colors.red;
+    labelColor = Colors.red;
+  } else if (focusNode.hasFocus) {
+    borderColor = Color(0xFFFB233B);
+    labelColor = isChanged ? Color(0xFFFB233B) : Colors.grey[700]!;
+  } else if (isChanged && isValid) {
+    borderColor = Color(0xFFFB233B).withOpacity(0.3);
+    labelColor = Color(0xFFFB233B);
+  } else {
+    borderColor = Colors.grey.shade300;
+    labelColor = Colors.grey[700]!;
+  }
+  
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Container(
+        height: 54,
+        decoration: BoxDecoration(
+          color: isChanged ? Colors.white : Colors.grey[100],
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: borderColor,
+            width: isChanged ? 1.5 : 1,
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 56,
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: labelColor,
+                    fontSize: 15,
+                    fontWeight: isChanged ? FontWeight.w500 : FontWeight.w400,
+                    fontFamily: 'Pretendard',
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  focusNode: focusNode,
+                  decoration: InputDecoration(
+                    hintText: hintText,
+                    border: InputBorder.none,
+                    hintStyle: TextStyle(
+                      color: Colors.grey[400],
+                      fontSize: 15,
+                      fontFamily: 'Pretendard',
+                    ),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontFamily: 'Pretendard',
+                    color: isChanged ? Colors.black : Colors.grey[700],
+                    fontWeight: isChanged ? FontWeight.w500 : FontWeight.normal,
+                  ),
+                ),
+              ),
+              
+              // 상태 표시 아이콘
+              if (isChanged)
+                Container(
+                  padding: EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: isError 
+                        ? Colors.red 
+                        : isValid 
+                            ? Color(0xFFFB233B) 
+                            : Colors.orange,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    isError 
+                        ? Icons.close 
+                        : isValid 
+                            ? Icons.check 
+                            : Icons.warning,
+                    color: Colors.white,
+                    size: 12,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+      
+      // 유효성 검사 메시지
+      if (validationMessage != null && validationMessage.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.only(top: 8, left: 12),
+          child: Text(
+            validationMessage,
+            style: TextStyle(
+              color: isError ? Colors.red : Colors.green,
+              fontSize: 12,
+              fontFamily: 'Pretendard',
+            ),
+          ),
+        ),
+    ],
+  );
+}
+
+@override
+void dispose() {
+  _nicknameController.dispose();
+  _nicknameFocusNode.dispose();
+  _nicknameTimer?.cancel();
+  super.dispose();
+}
 }
