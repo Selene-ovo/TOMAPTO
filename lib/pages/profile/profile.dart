@@ -7,6 +7,10 @@ import 'package:tomapto/setting/setting.dart';
 import 'package:tomapto/pages/profile/profile_edit.dart'; // 프로필 편집 페이지 import 추가
 import 'package:shared_preferences/shared_preferences.dart'; // SharedPreferences import 추가
 import 'package:tomapto/pages/car/car_account_book.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'dart:io' show Platform;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -59,6 +63,9 @@ class _ProfilePageState extends State<ProfilePage> {
   final GlobalKey<RefreshIndicatorState> _refreshKey =
       GlobalKey<RefreshIndicatorState>();
 
+  // 프로필 이미지 URL 상태 변수 추가
+  String? _profileImageUrl;
+
   void _navigateToCarAccountBook(BuildContext context) {
     Navigator.push(
       context,
@@ -76,14 +83,82 @@ class _ProfilePageState extends State<ProfilePage> {
     });
   }
 
+  // API 기본 URL 가져오기
+  String _getApiBaseUrl() {
+    String baseUrl = dotenv.env['API_BASE_URL'] ?? 'http://localhost:8080/api';
+    if (Platform.isAndroid && baseUrl.contains('localhost')) {
+      return baseUrl.replaceAll('localhost', '10.0.2.2');
+    }
+    return baseUrl;
+  }
+
+  // 토큰 가져오기
+  Future<String?> _getToken() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      
+      // 여러 가능한 키로 토큰 찾기
+      String? token = prefs.getString('auth_token');
+      if (token == null) {
+        token = prefs.getString('token');
+      }
+      if (token == null) {
+        token = prefs.getString('jwt_token');
+      }
+      if (token == null) {
+        token = prefs.getString('access_token');
+      }
+      
+      return token;
+    } catch (e) {
+      print('토큰 조회 오류: $e');
+      return null;
+    }
+  }
+
+  // 프로필 이미지 URL 로드
+  Future<void> _loadProfileImage() async {
+    try {
+      final token = await _getToken();
+      if (token == null) {
+        print('토큰이 없어서 프로필 이미지 로드 불가');
+        return;
+      }
+
+      final response = await http.get(
+        Uri.parse('${_getApiBaseUrl()}/account/profile-edit/current'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true && data['data'] != null) {
+          setState(() {
+            _profileImageUrl = data['data']['user_profile_picture_url'];
+          });
+          print('프로필 이미지 URL 로드 성공: $_profileImageUrl');
+        }
+      } else {
+        print('프로필 이미지 로드 실패: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('프로필 이미지 로드 오류: $e');
+    }
+  }
+
   // 토큰 유효성 검사 및 데이터 로드
   Future<void> _validateTokenAndLoadData() async {
     await _controller.loadUserData(context, setState);
+    await _loadProfileImage(); // 프로필 이미지도 함께 로드
   }
 
   // 새로고침 처리
   Future<void> _refreshData() async {
     await _controller.refreshProfile(context, setState);
+    await _loadProfileImage(); // 새로고침 시 프로필 이미지도 다시 로드
   }
 
   // 프로필 편집 페이지로 이동
@@ -201,6 +276,105 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  // 프로필 이미지 위젯
+  Widget _buildProfileImage() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    
+    return Container(
+      width: 48 * (screenWidth / 375),
+      height: 48 * (screenWidth / 375),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Stack(
+        children: [
+          // 프로필 이미지 컨테이너
+          Container(
+            width: 48 * (screenWidth / 375),
+            height: 48 * (screenWidth / 375),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.grey[100],
+              border: Border.all(
+                color: Colors.grey[200]!,
+                width: 1.5,
+              ),
+            ),
+            child: ClipOval(
+              child: _profileImageUrl != null && _profileImageUrl!.isNotEmpty
+                  ? Image.network(
+                      _profileImageUrl!,
+                      fit: BoxFit.cover,
+                      width: 48 * (screenWidth / 375),
+                      height: 48 * (screenWidth / 375),
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return Center(
+                          child: CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFB233B)),
+                            strokeWidth: 2,
+                          ),
+                        );
+                      },
+                      errorBuilder: (context, error, stackTrace) {
+                        print('이미지 로드 오류: $error');
+                        return SvgPicture.asset(
+                          'assets/icons/profile_default.svg',
+                          fit: BoxFit.cover,
+                          width: 48 * (screenWidth / 375),
+                          height: 48 * (screenWidth / 375),
+                        );
+                      },
+                    )
+                  : SvgPicture.asset(
+                      'assets/icons/profile_default.svg',
+                      fit: BoxFit.cover,
+                      width: 48 * (screenWidth / 375),
+                      height: 48 * (screenWidth / 375),
+                    ),
+            ),
+          ),
+          // 편집 버튼 아이콘 (우하단에 작은 아이콘)
+          Positioned(
+            bottom: -2,
+            right: -2,
+            child: Container(
+              width: 18,
+              height: 18,
+              decoration: BoxDecoration(
+                color: Color(0xFFFB233B),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: Colors.white,
+                  width: 2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 3,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
+              ),
+              child: Icon(
+                Icons.edit,
+                color: Colors.white,
+                size: 10,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
@@ -286,84 +460,10 @@ class _ProfilePageState extends State<ProfilePage> {
                           ),
                           child: Row(
                             children: [
-                              // 프로필 아이콘 - 클릭 가능하도록 GestureDetector로 감싸기 (원형 이미지로 수정)
+                              // 프로필 아이콘 - 수정된 버전
                               GestureDetector(
-                                onTap: _navigateToProfileEdit, // 프로필 편집 페이지로 이동
-                                child: Container(
-                                  width: 48 * (screenWidth / 375),
-                                  height: 48 * (screenWidth / 375),
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    // 그림자 효과 추가
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withOpacity(0.1),
-                                        blurRadius: 4,
-                                        offset: const Offset(0, 2),
-                                      ),
-                                    ],
-                                  ),
-                                  child: Stack(
-                                    children: [
-                                      // 프로필 이미지 컨테이너
-                                      Container(
-                                        width: 48 * (screenWidth / 375),
-                                        height: 48 * (screenWidth / 375),
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          color: Colors.grey[100], // 배경색
-                                          border: Border.all(
-                                            color: Colors.grey[200]!,
-                                            width: 1.5,
-                                          ),
-                                        ),
-                                        child: ClipOval(
-                                          // 원형으로 클립
-                                          child: SvgPicture.asset(
-                                            'assets/icons/profile_default.svg',
-                                            fit:
-                                                BoxFit
-                                                    .cover, // cover로 변경하여 원형에 꽉 채우기
-                                            width: 48 * (screenWidth / 375),
-                                            height: 48 * (screenWidth / 375),
-                                          ),
-                                        ),
-                                      ),
-                                      // 편집 버튼 아이콘 (우하단에 작은 아이콘)
-                                      Positioned(
-                                        bottom: -2,
-                                        right: -2,
-                                        child: Container(
-                                          width: 18,
-                                          height: 18,
-                                          decoration: BoxDecoration(
-                                            color: Color(0xFFFB233B),
-                                            shape: BoxShape.circle,
-                                            border: Border.all(
-                                              color: Colors.white,
-                                              width: 2,
-                                            ),
-                                            // 편집 버튼에도 그림자 효과 추가
-                                            boxShadow: [
-                                              BoxShadow(
-                                                color: Colors.black.withOpacity(
-                                                  0.2,
-                                                ),
-                                                blurRadius: 3,
-                                                offset: const Offset(0, 1),
-                                              ),
-                                            ],
-                                          ),
-                                          child: Icon(
-                                            Icons.edit,
-                                            color: Colors.white,
-                                            size: 10,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
+                                onTap: _navigateToProfileEdit,
+                                child: _buildProfileImage(),
                               ),
                               SizedBox(width: 16 * (screenWidth / 375)),
 
