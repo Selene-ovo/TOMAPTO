@@ -161,7 +161,7 @@ class _ProfilePageState extends State<ProfilePage> {
     await _loadProfileImage(); // 새로고침 시 프로필 이미지도 다시 로드
   }
 
-  // 프로필 편집 페이지로 이동
+  // 프로필 편집 페이지로 이동 - 수정된 버전
   void _navigateToProfileEdit() async {
     // SharedPreferences에서 사용자 ID 가져오기
     final prefs = await SharedPreferences.getInstance();
@@ -186,16 +186,24 @@ class _ProfilePageState extends State<ProfilePage> {
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder:
-            (context) => ProfileEditPage(
-              currentUserId: currentUserId, // SharedPreferences에서 가져온 사용자 ID 전달
-              currentNickname: _controller.userNickname,
-            ),
+        builder: (context) => ProfileEditPage(
+          currentUserId: currentUserId, // SharedPreferences에서 가져온 사용자 ID 전달
+          currentNickname: _controller.userNickname,
+        ),
       ),
     );
 
     // 프로필 편집에서 돌아온 후 데이터가 업데이트 되었으면 새로고침
     if (result != null && result['updated'] == true) {
+      // 이미지가 변경된 경우 즉시 새로운 이미지 URL로 업데이트
+      if (result['imageChanged'] == true && result['newImageUrl'] != null) {
+        setState(() {
+          _profileImageUrl = result['newImageUrl'];
+        });
+        print('프로필 이미지 즉시 업데이트: ${result['newImageUrl']}');
+      }
+      
+      // 전체 프로필 데이터도 새로고침
       await _refreshData();
 
       // 성공 메시지 표시 (선택사항)
@@ -276,7 +284,7 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  // 프로필 이미지 위젯
+  // 프로필 이미지 위젯 - 수정된 버전
   Widget _buildProfileImage() {
     final screenWidth = MediaQuery.of(context).size.width;
     
