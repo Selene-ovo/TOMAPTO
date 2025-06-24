@@ -1,4 +1,4 @@
-// profile_edit.dart - 이미지 선택 영역 확장 및 저장 버튼 활성화 개선된 버전
+// profile_edit.dart - 테두리 색상 수정된 버전
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:http/http.dart' as http;
@@ -34,7 +34,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
  // 상태 변수
  bool _hasChanges = false;
  bool _isNicknameChanged = false;
- bool _isImageChanged = false; // 이미지 변경 상태 추가
+ bool _isImageChanged = false;
  bool _isLoading = false;
  bool _isNicknameValid = true;
  String? _nicknameValidationMessage;
@@ -47,9 +47,9 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
  late String _originalNickname;
  
  // 이미지 관련 변수들
- File? _selectedImage;
- String? _currentProfileImageUrl;
- String? _originalProfileImageUrl; // 원본 이미지 URL 추가
+ File? _selectedImage; // 임시로 선택된 이미지 (아직 업로드되지 않음)
+ String? _currentProfileImageUrl; // 현재 서버에 저장된 이미지 URL
+ String? _originalProfileImageUrl; // 원본 이미지 URL
  bool _isImageUploading = false;
  bool _isImageRefreshing = false;
  int _imageRetryCount = 0;
@@ -164,7 +164,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
            _originalUserId = data['data']['user_id'] ?? widget.currentUserId;
            _originalNickname = data['data']['user_nickname'] ?? widget.currentNickname;
            _currentProfileImageUrl = data['data']['user_profile_picture_url'];
-           _originalProfileImageUrl = _currentProfileImageUrl; // 원본 이미지 URL 저장
+           _originalProfileImageUrl = _currentProfileImageUrl;
            
            _nicknameController.text = _originalNickname;
          });
@@ -235,7 +235,6 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
      print('응답 헤더: ${response.headers}');
      print('응답 내용: ${response.body}');
      
-     // HTML 응답인지 확인
      if (response.body.startsWith('<!DOCTYPE html>') || response.body.startsWith('<html>')) {
        throw Exception('서버에서 HTML 페이지를 반환했습니다. API 엔드포인트를 확인해주세요.');
      }
@@ -304,11 +303,11 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
    });
    
    if (_imageRetryCount <= 2) {
-     // 최대 2번까지 URL 갱신 시도
      _refreshImageUrl();
    }
  }
  
+ // 이미지 선택 (실제 업로드는 하지 않고 임시 저장만)
  Future<void> _pickImage() async {
    try {
      final ImagePicker picker = ImagePicker();
@@ -322,11 +321,23 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
      if (image != null) {
        setState(() {
          _selectedImage = File(image.path);
-         _isImageChanged = true; // 이미지 변경 상태 업데이트
-         _updateHasChanges(); // 전체 변경 상태 업데이트
+         _isImageChanged = true;
+         _updateHasChanges();
        });
        
-       await _uploadProfileImage();
+       ScaffoldMessenger.of(context).showSnackBar(
+         SnackBar(
+           content: Row(
+             children: [
+               Icon(Icons.info, color: Colors.white, size: 20),
+               SizedBox(width: 8),
+               Text('이미지가 선택되었습니다. 저장하기를 눌러 적용해주세요.'),
+             ],
+           ),
+           backgroundColor: Colors.blue,
+           duration: Duration(seconds: 2),
+         ),
+       );
      }
    } catch (e) {
      print('이미지 선택 오류: $e');
@@ -339,8 +350,9 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
    }
  }
  
- Future<void> _uploadProfileImage() async {
-   if (_selectedImage == null) return;
+ // 실제 이미지 업로드 (저장하기 버튼을 눌렀을 때만 실행)
+ Future<bool> _uploadProfileImage() async {
+   if (_selectedImage == null) return true;
    
    setState(() {
      _isImageUploading = true;
@@ -372,42 +384,23 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
      if (response.statusCode == 200 && data['success'] == true) {
        setState(() {
          _currentProfileImageUrl = data['data']['profile_image_url'];
-         _imageRetryCount = 0; // 재시도 카운트 리셋
-         _isImageChanged = true; // 이미지가 성공적으로 변경됨
-         _updateHasChanges(); // 전체 변경 상태 업데이트
+         _imageRetryCount = 0;
        });
        
-       ScaffoldMessenger.of(context).showSnackBar(
-         SnackBar(
-           content: Row(
-             children: [
-               Icon(Icons.check_circle, color: Colors.white, size: 20),
-               SizedBox(width: 8),
-               Text('프로필 이미지가 성공적으로 업로드되었습니다.'),
-             ],
-           ),
-           backgroundColor: Colors.green,
-         ),
-       );
+       print('프로필 이미지 업로드 성공: ${_currentProfileImageUrl}');
+       return true;
      } else {
-       setState(() {
-         _isImageChanged = false; // 업로드 실패시 변경 상태 되돌림
-         _updateHasChanges();
-       });
        throw Exception(data['message'] ?? '이미지 업로드에 실패했습니다.');
      }
    } catch (e) {
      print('이미지 업로드 오류: $e');
-     setState(() {
-       _isImageChanged = false; // 오류 발생시 변경 상태 되돌림
-       _updateHasChanges();
-     });
      ScaffoldMessenger.of(context).showSnackBar(
        SnackBar(
          content: Text('이미지 업로드에 실패했습니다: $e'),
          backgroundColor: Colors.red,
        ),
      );
+     return false;
    } finally {
      setState(() {
        _isImageUploading = false;
@@ -422,13 +415,12 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
    });
  }
  
- // 개선된 프로필 이미지 위젯 - 전체 영역 클릭 가능
+ // 개선된 프로필 이미지 위젯 - 테두리 색상 수정
  Widget _buildProfileImage() {
    return GestureDetector(
      onTap: () {
        if (_isImageUploading || _isImageRefreshing) return;
        
-       // 이미지가 있고 로드 오류가 발생한 경우 갱신 옵션 제공
        if (_currentProfileImageUrl != null && _imageRetryCount > 2) {
          _showImageActionDialog();
        } else {
@@ -443,7 +435,10 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
            decoration: BoxDecoration(
              shape: BoxShape.circle,
              color: Colors.grey[100],
-             border: Border.all(color: Colors.grey[300]!, width: 2),
+             border: Border.all(
+               color: _isImageChanged ? Colors.grey[400]! : Colors.grey[300]!, // 빨간색 대신 회색으로 변경
+               width: _isImageChanged ? 2.5 : 2
+             ),
            ),
            child: ClipOval(
              child: _selectedImage != null
@@ -468,7 +463,6 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
                              errorBuilder: (context, error, stackTrace) {
                                print('이미지 로드 오류: $error');
                                
-                               // 403 에러인 경우 자동으로 URL 갱신 시도
                                if (error.toString().contains('403') && _imageRetryCount == 0) {
                                  WidgetsBinding.instance.addPostFrameCallback((_) {
                                    _handleImageError();
@@ -487,7 +481,6 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
                              },
                            ),
                            
-                           // URL 갱신 중 오버레이
                            if (_isImageRefreshing)
                              Container(
                                width: 80,
@@ -524,7 +517,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
              width: 28,
              height: 28,
              decoration: BoxDecoration(
-               color: Color(0xFFFB233B),
+               color: Color(0xFFFB233B), // 색상 통일
                shape: BoxShape.circle,
                border: Border.all(color: Colors.white, width: 2),
              ),
@@ -540,7 +533,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
                  : Icon(
                      (_currentProfileImageUrl != null && _imageRetryCount > 2) 
                          ? Icons.refresh 
-                         : Icons.camera_alt,
+                         : Icons.camera_alt, // 아이콘 통일
                      color: Colors.white,
                      size: 16,
                    ),
@@ -613,7 +606,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
      _isNicknameChanged = nickname != _originalNickname;
      _nicknameValidationMessage = _getNicknameValidationMessage(nickname);
      _isNicknameValid = _nicknameValidationMessage == null;
-     _updateHasChanges(); // 전체 변경 상태 업데이트
+     _updateHasChanges();
    });
    
    _nicknameTimer?.cancel();
@@ -707,14 +700,28 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
        throw Exception('인증 토큰이 없습니다.');
      }
      
+     // 1. 먼저 이미지 업로드 처리 (선택된 이미지가 있는 경우)
+     bool imageUploadSuccess = true;
+     if (_isImageChanged && _selectedImage != null) {
+       imageUploadSuccess = await _uploadProfileImage();
+       if (!imageUploadSuccess) {
+         // 이미지 업로드 실패시 전체 저장 취소
+         setState(() {
+           _isLoading = false;
+         });
+         return;
+       }
+     }
+     
+     // 2. 닉네임 변경 처리
      Map<String, dynamic> requestBody = {};
      if (_isNicknameChanged) {
        requestBody['new_nickname'] = _nicknameController.text;
      }
      
-     // 이미지만 변경된 경우에도 처리
+     // 이미지만 변경된 경우
      if (_isImageChanged && !_isNicknameChanged) {
-       // 이미지가 이미 업로드되었으므로 성공 메시지만 표시
+       // 이미지가 성공적으로 업로드되었으므로 성공 처리
        ScaffoldMessenger.of(context).showSnackBar(
          SnackBar(
            content: Row(
@@ -742,81 +749,76 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
          'nickname': _originalNickname,
          'updated': true,
          'imageChanged': true,
+         'newImageUrl': _currentProfileImageUrl, // 새 이미지 URL 전달
        });
        return;
      }
      
-     if (requestBody.isEmpty) {
-       ScaffoldMessenger.of(context).showSnackBar(
-         SnackBar(
-           content: Text('변경할 정보가 없습니다.'),
-           backgroundColor: Colors.orange,
-         ),
-       );
-       return;
-     }
-     
-     print('프로필 업데이트 요청: $requestBody');
-     
-     final response = await http.put(
-       Uri.parse('${_getApiBaseUrl()}/account/profile-edit/update'),
-       headers: {
-         'Content-Type': 'application/json',
-         'Authorization': 'Bearer $token',
-       },
-       body: jsonEncode(requestBody),
-     );
-     
-     print('프로필 업데이트 응답: ${response.statusCode}');
-     print('프로필 업데이트 내용: ${response.body}');
-     
-     final data = jsonDecode(response.body);
-     
-     if (response.statusCode == 200 && data['success'] == true) {
-       ScaffoldMessenger.of(context).showSnackBar(
-         SnackBar(
-           content: Row(
-             children: [
-               Icon(Icons.check_circle, color: Colors.white, size: 20),
-               SizedBox(width: 8),
-               Expanded(
-                 child: Text(
-                   data['message'] ?? '프로필이 성공적으로 변경되었습니다.',
-                   style: TextStyle(fontFamily: 'Pretendard'),
-                 ),
-               ),
-             ],
-           ),
-           backgroundColor: Colors.green,
-           behavior: SnackBarBehavior.floating,
-           shape: RoundedRectangleBorder(
-             borderRadius: BorderRadius.circular(8),
-           ),
-         ),
+     // 닉네임 변경이 있는 경우 서버에 업데이트
+     if (requestBody.isNotEmpty) {
+       print('프로필 업데이트 요청: $requestBody');
+       
+       final response = await http.put(
+         Uri.parse('${_getApiBaseUrl()}/account/profile-edit/update'),
+         headers: {
+           'Content-Type': 'application/json',
+           'Authorization': 'Bearer $token',
+         },
+         body: jsonEncode(requestBody),
        );
        
-       Navigator.of(context).pop({
-         'userId': data['data']['user_id'],
-         'nickname': data['data']['user_nickname'],
-         'updated': true,
-         'imageChanged': _isImageChanged,
-       });
-     } else if (response.statusCode == 401) {
-       _showTokenErrorDialog();
-     } else {
-       ScaffoldMessenger.of(context).showSnackBar(
-         SnackBar(
-           content: Text(
-             data['message'] ?? '프로필 변경에 실패했습니다.',
-             style: TextStyle(fontFamily: 'Pretendard'),
+       print('프로필 업데이트 응답: ${response.statusCode}');
+       print('프로필 업데이트 내용: ${response.body}');
+       
+       final data = jsonDecode(response.body);
+       
+       if (response.statusCode == 200 && data['success'] == true) {
+         ScaffoldMessenger.of(context).showSnackBar(
+           SnackBar(
+             content: Row(
+               children: [
+                 Icon(Icons.check_circle, color: Colors.white, size: 20),
+                 SizedBox(width: 8),
+                 Expanded(
+                   child: Text(
+                     data['message'] ?? '프로필이 성공적으로 변경되었습니다.',
+                     style: TextStyle(fontFamily: 'Pretendard'),
+                   ),
+                 ),
+               ],
+             ),
+             backgroundColor: Colors.green,
+             behavior: SnackBarBehavior.floating,
+             shape: RoundedRectangleBorder(
+               borderRadius: BorderRadius.circular(8),
+             ),
            ),
-           backgroundColor: Colors.red,
-           behavior: SnackBarBehavior.floating,
-           shape: RoundedRectangleBorder(
-             borderRadius: BorderRadius.circular(8),
+         );
+         
+         Navigator.of(context).pop({
+           'userId': data['data']['user_id'],
+           'nickname': data['data']['user_nickname'],
+           'updated': true,
+           'imageChanged': _isImageChanged,
+           'newImageUrl': _currentProfileImageUrl, // 새 이미지 URL 전달
+         });
+       } else if (response.statusCode == 401) {
+         _showTokenErrorDialog();
+       } else {
+         ScaffoldMessenger.of(context).showSnackBar(
+           SnackBar(
+             content: Text(
+               data['message'] ?? '프로필 변경에 실패했습니다.',
+               style: TextStyle(fontFamily: 'Pretendard'),
+             ),
+             backgroundColor: Colors.red,
+             behavior: SnackBarBehavior.floating,
+             shape: RoundedRectangleBorder(
+               borderRadius: BorderRadius.circular(8),
+             ),
            ),
-         ),
-       );
+         );
+       }
      }
    } catch (e) {
      print('프로필 저장 오류: $e');
@@ -852,12 +854,13 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
        ),
      ),
    );
+   
    if (result != null && result['passwordChanged'] == true) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(Icons.check_circle, color: Colors.white, size: 20),
+     ScaffoldMessenger.of(context).showSnackBar(
+       SnackBar(
+         content: Row(
+           children: [
+             Icon(Icons.check_circle, color: Colors.white, size: 20),
             SizedBox(width: 8),
             Text(
               '비밀번호가 성공적으로 변경되었습니다.',
@@ -921,6 +924,20 @@ Widget build(BuildContext context) {
                   
                   // 프로필 이미지 (전체 영역 클릭 가능)
                   _buildProfileImage(),
+                  
+                  // 이미지 변경 안내 텍스트
+                  if (_isImageChanged)
+                    Padding(
+                      padding: EdgeInsets.only(top: 8),
+                      child: Text(
+                        '이미지가 선택되었습니다. 저장하기를 눌러주세요.',
+                        style: TextStyle(
+                          color: Colors.grey[600],
+                          fontSize: 12,
+                          fontFamily: 'Pretendard',
+                        ),
+                      ),
+                    ),
                   
                   SizedBox(height: 40 * (screenHeight / 812)),
                   
