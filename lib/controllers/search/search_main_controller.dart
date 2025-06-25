@@ -190,21 +190,31 @@ class SearchMainController extends ChangeNotifier {
   // 단순화된 검색 메서드 (위치 필터링은 클라이언트에서 처리)
   Future<List<NaverSearchResult>> searchPlaces(
     String query, {
-    int display = 50, // 기본 50개로 증가
+    int display = 5, // 지역 검색 API는 최대 5개로 제한됨
   }) async {
     try {
       if (_clientId.isEmpty || _clientSecret.isEmpty) {
         throw Exception('네이버 API 키가 설정되지 않았습니다. .env 파일을 확인해주세요.');
       }
 
-      final encodedQuery = Uri.encodeComponent(query);
+      // 현재 위치 정보가 있으면 지역명과 함께 검색
+      String searchQuery = query;
+      if (userPosition != null && userLocationAddress != null) {
+        // 사용자 주소에서 지역명 추출 (예: "강원도 강릉시")
+        String locationContext = _extractLocationContext(userLocationAddress!);
+        if (locationContext.isNotEmpty) {
+          searchQuery = '$locationContext $query';
+        }
+      }
 
-      // 기본 검색 URL (위치 파라미터 제거)
+      final encodedQuery = Uri.encodeComponent(searchQuery);
+
+      // 지역 검색 API URL 사용 (display는 최대 5개)
       String urlString =
-          '$_baseUrl?query=$encodedQuery&display=$display&sort=random';
+          '$_baseUrl?query=$encodedQuery&display=$display&sort=comment';
 
       final url = Uri.parse(urlString);
-      print('검색 요청 URL: $url');
+      print('지역 검색 요청 URL: $url');
 
       final response = await http.get(
         url,
@@ -220,10 +230,17 @@ class SearchMainController extends ChangeNotifier {
         final responseBody = utf8.decode(response.bodyBytes);
         final Map<String, dynamic> data = json.decode(responseBody);
 
+        print('응답 데이터: ${data.toString()}');
+
         if (data['total'] == 0 ||
             !data.containsKey('items') ||
             data['items'].isEmpty) {
           print('검색 결과가 없습니다.');
+          // 지역명 없이 다시 한 번 시도
+          if (searchQuery != query) {
+            print('지역명 없이 재시도: $query');
+            return await _searchWithoutLocation(query, display);
+          }
           return [];
         }
 
@@ -247,6 +264,84 @@ class SearchMainController extends ChangeNotifier {
     } catch (e) {
       print('검색 중 오류 발생: $e');
       throw Exception('검색 중 오류 발생: $e');
+    }
+  }
+
+  // 지역명 없이 검색하는 보조 메서드
+  Future<List<NaverSearchResult>> _searchWithoutLocation(
+    String query,
+    int display,
+  ) async {
+    final encodedQuery = Uri.encodeComponent(query);
+    String urlString =
+        '$_baseUrl?query=$encodedQuery&display=$display&sort=comment';
+
+    final url = Uri.parse(urlString);
+    print('지역명 없는 검색 요청 URL: $url');
+
+    final response = await http.get(
+      url,
+      headers: {
+        'X-Naver-Client-Id': _clientId,
+        'X-Naver-Client-Secret': _clientSecret,
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final responseBody = utf8.decode(response.bodyBytes);
+      final Map<String, dynamic> data = json.decode(responseBody);
+
+      if (data['total'] == 0 ||
+          !data.containsKey('items') ||
+          data['items'].isEmpty) {
+        return [];
+      }
+
+      final List<dynamic> items = data['items'];
+      return items
+          .map<NaverSearchResult>((item) => NaverSearchResult.fromJson(item))
+          .toList();
+    } else {
+      throw Exception('API 요청 실패: ${response.statusCode}');
+    }
+  }
+
+  // 사용자 주소에서 지역 정보 추출
+  String _extractLocationContext(String address) {
+    try {
+      // "강원특별자치도 강릉시 구정면 현천길 7" 형태에서 "강릉시" 추출
+      List<String> parts = address.split(' ');
+
+      for (String part in parts) {
+        if (part.contains('시') || part.contains('군') || part.contains('구')) {
+          // "강릉시", "속초시", "양양군" 등 추출
+          if (part.endsWith('시') || part.endsWith('군')) {
+            return part;
+          }
+          // "강남구" 등의 경우 상위 지역과 함께
+          if (part.endsWith('구') && parts.indexOf(part) > 0) {
+            String prevPart = parts[parts.indexOf(part) - 1];
+            if (prevPart.endsWith('시')) {
+              return '$prevPart $part';
+            }
+          }
+        }
+      }
+
+      // 특별시/광역시의 경우
+      if (address.contains('서울')) return '서울시';
+      if (address.contains('부산')) return '부산시';
+      if (address.contains('대구')) return '대구시';
+      if (address.contains('인천')) return '인천시';
+      if (address.contains('광주')) return '광주시';
+      if (address.contains('대전')) return '대전시';
+      if (address.contains('울산')) return '울산시';
+      if (address.contains('세종')) return '세종시';
+
+      return '';
+    } catch (e) {
+      print('지역명 추출 오류: $e');
+      return '';
     }
   }
 
