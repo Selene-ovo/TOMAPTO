@@ -1,4 +1,3 @@
-// navbar.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:tomapto/pages/friends/friends_list_screen.dart';
@@ -9,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tomapto/services/token_service.dart';
 import 'package:tomapto/services/real_time_location_service.dart';
 import 'package:tomapto/modal/login_services.dart';
+import 'package:tomapto/pages/categorys/category.dart';
 
 class BottomNavBar extends StatelessWidget {
   final int currentIndex;
@@ -123,10 +123,16 @@ class BottomNavBar extends StatelessWidget {
         }
         break;
       case 2:
-        // 메뉴 탭 - 로그인 확인 필요시 여기에 추가
-        if (!isLoggedIn) {
-          showLoginServicesModal(context);
-        }
+        // 메뉴(카테고리) 탭 - 카테고리 페이지로 이동
+        Navigator.pushReplacement(
+          context,
+          PageRouteBuilder(
+            pageBuilder:
+                (context, animation, secondaryAnimation) => CategoryPage(),
+            transitionDuration: Duration.zero,
+            reverseTransitionDuration: Duration.zero,
+          ),
+        );
         break;
       case 3:
         if (isLoggedIn) {
