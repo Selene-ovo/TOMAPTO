@@ -3,6 +3,8 @@ plugins {
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+    // Firebase Google Services 플러그인 주석처리
+    // id("com.google.gms.google-services")
 }
 
 val naverApiKey: String = run {
@@ -34,6 +36,12 @@ android {
 
     kotlinOptions {
         jvmTarget = JavaVersion.VERSION_11.toString()
+        // Kotlin 컴파일러 버전 강제 지정
+        freeCompilerArgs += listOf(
+            "-Xno-param-assertions",
+            "-Xno-call-assertions",
+            "-Xno-receiver-assertions"
+        )
     }
 
     defaultConfig {
@@ -69,5 +77,9 @@ flutter {
 }
 
 dependencies {
+    // Firebase 관련 의존성들 주석처리
+    // implementation(platform("com.google.firebase:firebase-bom:32.8.0"))
+    // implementation("com.google.firebase:firebase-analytics-ktx")
+    // implementation("com.google.firebase:firebase-messaging-ktx")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
