@@ -14,6 +14,7 @@ import 'dart:convert';
 import 'dart:io' show Platform;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:tomapto/pages/map/transit.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 class RealTimeLocationSharingPage extends StatefulWidget {
   final Map<String, dynamic> selectedFriend;
@@ -132,6 +133,7 @@ class _RealTimeLocationSharingPageState
     _loadLocations();
     _loadFollowStatus();
     _loadFindWayStartTime();
+    _saveFCMToken(); // FCM 토큰 저장 추가
 
     // 1초마다 위치 정보 갱신
     _locationUpdateTimer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -706,6 +708,42 @@ class _RealTimeLocationSharingPageState
     ).then((_) {
       _isModalCurrentlyShowing = false;
     });
+  }
+
+  // FCM 토큰 서버에 저장
+  Future<void> _saveFCMToken() async {
+    try {
+      print('🔥 real_time_location_sharing에서 FCM 토큰 저장 시작');
+
+      final token = await FirebaseMessaging.instance.getToken();
+      if (token != null) {
+        final prefs = await SharedPreferences.getInstance();
+        final authToken = prefs.getString('token');
+
+        if (authToken != null) {
+          final apiBaseUrl = _getApiBaseUrl();
+          final response = await http.post(
+            Uri.parse('$apiBaseUrl/account/profile/save-fcm-token'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $authToken',
+            },
+            body: json.encode({'fcm_token': token}),
+          );
+
+          print('🔥 FCM 토큰 서버 응답: ${response.statusCode}');
+          print('🔥 FCM 토큰 서버 응답 내용: ${response.body}');
+
+          if (response.statusCode == 200) {
+            print('🔥 FCM 토큰 서버에 저장 완료');
+          }
+        } else {
+          print('🔥 Auth Token 없음');
+        }
+      }
+    } catch (e) {
+      print('🔥 FCM 토큰 저장 오류: $e');
+    }
   }
 
   // 찾아가기 시작 시간 저장

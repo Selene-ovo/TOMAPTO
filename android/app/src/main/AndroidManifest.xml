@@ -6,12 +6,10 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     
-    <!-- Firebase 푸시알림 권한 주석처리 -->
-    <!-- 
+    <!-- Firebase 푸시알림 권한 -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="com.google.android.c2dm.permission.RECEIVE" />
-    -->
 
     <application
         android:label="tomapto"
@@ -28,10 +26,6 @@
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">
             
-            <!-- Specifies an Android theme to apply to this Activity as soon as
-                 the Android process has started. This theme is visible to the user
-                 while the Flutter UI initializes. After that, this theme continues
-                 to determine the Window background behind the Flutter UI. -->
             <meta-data
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
@@ -40,14 +34,6 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-            
-            <!-- 푸시알림 클릭 시 앱 열기 주석처리 -->
-            <!-- 
-            <intent-filter>
-                <action android:name="FLUTTER_NOTIFICATION_CLICK" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-            -->
         </activity>
         
         <!-- 네이버 맵 API 키 -->
@@ -55,8 +41,7 @@
             android:name="com.naver.maps.map.CLIENT_ID"
             android:value="${NAVER_API_KEY}" />
             
-        <!-- Firebase 메시징 서비스 주석처리 -->
-        <!-- 
+        <!-- Firebase 메시징 서비스 -->
         <service
             android:name="io.flutter.plugins.firebase.messaging.FlutterFirebaseMessagingService"
             android:exported="false">
@@ -64,22 +49,15 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
-        -->
         
-        <!-- FCM 관련 메타데이터 주석처리 -->
-        <!-- 
+        <!-- FCM 관련 메타데이터 -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_icon"
             android:resource="@mipmap/ic_launcher" />
             
         <meta-data
-            android:name="com.google.firebase.messaging.default_notification_color"
-            android:resource="@color/notification_color" />
-            
-        <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="find_way_channel" />
-        -->
             
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
