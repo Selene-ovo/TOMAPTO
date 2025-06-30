@@ -46,8 +46,8 @@ class _FollowModalState extends State<FollowModal> {
     return baseUrl;
   }
 
-  // 찾아가기 요청 보내기
-  Future<void> _sendFindWayRequest() async {
+  // 따라가기 요청 보내기
+  Future<void> _sendFollowRequest() async {
     if (_isLoading) return;
 
     setState(() {
@@ -70,16 +70,13 @@ class _FollowModalState extends State<FollowModal> {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
-        body: json.encode({
-          'friend_id': widget.friend['id'],
-          'type': 'find_way', // 찾아가기 타입 추가
-        }),
+        body: json.encode({'friend_id': widget.friend['id']}),
       );
 
       final data = json.decode(response.body);
 
       if (response.statusCode == 200) {
-        _showSnackBar('찾아가기 요청을 보냈습니다');
+        _showSnackBar('따라가기 요청을 보냈습니다');
         widget.onStatusChanged(); // 상태 갱신
         Navigator.pop(context);
       } else if (response.statusCode == 409) {
@@ -90,7 +87,7 @@ class _FollowModalState extends State<FollowModal> {
         _showSnackBar(data['error'] ?? '요청 실패');
       }
     } catch (e) {
-      print('찾아가기 요청 오류: $e');
+      print('따라가기 요청 오류: $e');
       _showSnackBar('네트워크 오류가 발생했습니다');
     } finally {
       setState(() {
@@ -99,8 +96,8 @@ class _FollowModalState extends State<FollowModal> {
     }
   }
 
-  // 찾아가기 요청 취소
-  Future<void> _cancelFindWayRequest() async {
+  // 따라가기 요청 취소
+  Future<void> _cancelFollowRequest() async {
     if (_isLoading) return;
 
     setState(() {
@@ -123,23 +120,20 @@ class _FollowModalState extends State<FollowModal> {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
-        body: json.encode({
-          'friend_id': widget.friend['id'],
-          'type': 'find_way', // 찾아가기 타입 추가
-        }),
+        body: json.encode({'friend_id': widget.friend['id']}),
       );
 
       final data = json.decode(response.body);
 
       if (response.statusCode == 200) {
-        _showSnackBar('찾아가기 요청을 취소했습니다');
+        _showSnackBar('따라가기 요청을 취소했습니다');
         widget.onStatusChanged(); // 상태 갱신
         Navigator.pop(context);
       } else {
         _showSnackBar(data['error'] ?? '취소 실패');
       }
     } catch (e) {
-      print('찾아가기 취소 오류: $e');
+      print('따라가기 취소 오류: $e');
       _showSnackBar('네트워크 오류가 발생했습니다');
     } finally {
       setState(() {
@@ -148,8 +142,8 @@ class _FollowModalState extends State<FollowModal> {
     }
   }
 
-  // 찾아가기 중단
-  Future<void> _stopFindWay() async {
+  // 따라가기 중단
+  Future<void> _stopFollowing() async {
     if (_isLoading) return;
 
     setState(() {
@@ -172,23 +166,20 @@ class _FollowModalState extends State<FollowModal> {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
-        body: json.encode({
-          'friend_id': widget.friend['id'],
-          'type': 'find_way', // 찾아가기 타입 추가
-        }),
+        body: json.encode({'friend_id': widget.friend['id']}),
       );
 
       final data = json.decode(response.body);
 
       if (response.statusCode == 200) {
-        _showSnackBar('찾아가기를 중단했습니다');
+        _showSnackBar('따라가기를 중단했습니다');
         widget.onStatusChanged(); // 상태 갱신
         Navigator.pop(context);
       } else {
         _showSnackBar(data['error'] ?? '중단 실패');
       }
     } catch (e) {
-      print('찾아가기 중단 오류: $e');
+      print('따라가기 중단 오류: $e');
       _showSnackBar('네트워크 오류가 발생했습니다');
     } finally {
       setState(() {
@@ -205,34 +196,31 @@ class _FollowModalState extends State<FollowModal> {
     }
   }
 
-  // 상태에 따른 버튼 텍스트 및 액션 결정 (허용된 상태 제외)
-  Widget _buildFindWayButton() {
+  // 상태에 따른 버튼 텍스트 및 액션 결정
+  Widget _buildFollowButton() {
     String buttonText;
     VoidCallback? onPressed;
 
     switch (widget.currentStatus) {
       case 'pending':
         if (widget.isRequester) {
-          buttonText = '찾아가기 중단';
-          onPressed = _cancelFindWayRequest;
+          buttonText = '찾아가기 취소하기';
+          onPressed = _cancelFollowRequest;
         } else {
           // 상대방이 요청한 경우 - 이 모달에서는 처리하지 않음
           return SizedBox.shrink();
         }
         break;
       case 'accepted':
-        // 허용된 상태는 위의 build 함수에서 별도 처리하므로 여기서는 처리하지 않음
-        if (!widget.isRequester) {
-          buttonText = '찾아가기 해제';
-          onPressed = _stopFindWay;
-        } else {
-          // 요청자는 위에서 처리
-          return SizedBox.shrink();
-        }
+        buttonText = '찾아가기';
+        onPressed = () {
+          // 이미 따라가기 중이면 스낵바 표시
+          _showSnackBar('이미 따라가기중입니다');
+        };
         break;
       default: // 'none'
-        buttonText = '찾아가기 요청';
-        onPressed = _sendFindWayRequest;
+        buttonText = '찾아가기';
+        onPressed = _sendFollowRequest;
         break;
     }
 
@@ -243,7 +231,10 @@ class _FollowModalState extends State<FollowModal> {
         padding: EdgeInsets.all(12.0),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(16),
+            topRight: Radius.circular(16),
+          ),
         ),
         child: Padding(
           padding: EdgeInsets.only(left: 16.0),
@@ -291,125 +282,40 @@ class _FollowModalState extends State<FollowModal> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // 🔥 허용된 상태에서 요청자인 경우: 길찾기 시작 + 찾아가기 취소 (붙어있는 디자인)
-            if (widget.currentStatus == 'accepted' && widget.isRequester) ...[
-              // 길찾기 시작 버튼 (첫 번째)
-              InkWell(
-                onTap:
-                    _isLoading
-                        ? null
-                        : () {
-                          print('🔥 길찾기 시작 버튼 클릭');
-                          Navigator.pop(context);
-                          widget.onStatusChanged(); // Transit 페이지로 이동
-                        },
-                child: Container(
-                  width: double.infinity,
-                  padding: EdgeInsets.all(12.0),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(16),
-                      topRight: Radius.circular(16),
-                    ),
+            // 따라가기 버튼
+            _buildFollowButton(),
+
+            // 구분선
+            Container(height: 1, color: Colors.grey[300]),
+
+            // 그만하기 버튼
+            InkWell(
+              onTap:
+                  _isLoading
+                      ? null
+                      : () {
+                        Navigator.pop(context);
+                      },
+              child: Container(
+                width: double.infinity,
+                padding: EdgeInsets.all(12.0),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.only(
+                    bottomLeft: Radius.circular(16),
+                    bottomRight: Radius.circular(16),
                   ),
-                  child: Padding(
-                    padding: EdgeInsets.only(left: 16.0),
-                    child:
-                        _isLoading
-                            ? Row(
-                              children: [
-                                SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                ),
-                                SizedBox(width: 12),
-                                Text(
-                                  '처리중...',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                  textAlign: TextAlign.left,
-                                ),
-                              ],
-                            )
-                            : Text(
-                              '길찾기 시작',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              textAlign: TextAlign.left,
-                            ),
+                ),
+                child: Padding(
+                  padding: EdgeInsets.only(left: 16.0),
+                  child: Text(
+                    '그만하기',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                    textAlign: TextAlign.left,
                   ),
                 ),
               ),
-
-              // 구분선
-              Container(height: 1, color: Colors.grey[300]),
-
-              // 찾아가기 취소 버튼 (두 번째)
-              InkWell(
-                onTap:
-                    _isLoading
-                        ? null
-                        : () {
-                          print('🔥 찾아가기 취소 버튼 클릭');
-                          _cancelFindWayRequest(); // 취소 로직만 호출
-                          Navigator.pop(context); // 🔥 추가: 모달 닫기
-                        },
-                child: Container(
-                  width: double.infinity,
-                  padding: EdgeInsets.all(12.0),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.only(
-                      bottomLeft: Radius.circular(16),
-                      bottomRight: Radius.circular(16),
-                    ),
-                  ),
-                  child: Padding(
-                    padding: EdgeInsets.only(left: 16.0),
-                    child:
-                        _isLoading
-                            ? Row(
-                              children: [
-                                SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                ),
-                                SizedBox(width: 12),
-                                Text(
-                                  '처리중...',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                  textAlign: TextAlign.left,
-                                ),
-                              ],
-                            )
-                            : Text(
-                              '찾아가기 취소',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              textAlign: TextAlign.left,
-                            ),
-                  ),
-                ),
-              ),
-            ] else ...[
-              _buildFindWayButton(),
-            ],
+            ),
           ],
         ),
       ),
