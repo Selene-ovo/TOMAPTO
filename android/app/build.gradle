@@ -52,9 +52,10 @@ android {
         if (naverApiKey.isEmpty()) {
             logger.warn('Building with empty NAVER_API_KEY - map functionality may not work')
         }
+        
         manifestPlaceholders = [
             'NAVER_API_KEY': naverApiKey,
-            'applicationName': 'io.flutter.app.FlutterApplication'
+            'applicationName': 'io.flutter.app.FlutterApplication'  // 🔥 이 줄이 핵심!
         ]
         
         multiDexEnabled true
