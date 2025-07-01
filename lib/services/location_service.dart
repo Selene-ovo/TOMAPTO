@@ -5,13 +5,24 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tomapto/services/token_service.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'dart:io' show Platform;
 
 class LocationService {
   // API 서버 기본 URL 가져오기
   static String getApiBaseUrl() {
-    String baseUrl = dotenv.env['API_BASE_URL'] ?? 'http://172.30.1.42:8080';
-    if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
-      baseUrl = 'http://$baseUrl';
+    // api_service.dart와 동일한 로직 사용
+    String baseUrl = dotenv.env['API_BASE_URL'] ?? 'http://localhost:8080/api';
+    String? localIp = dotenv.env['LOCAL_IP'];
+
+    if (Platform.isAndroid) {
+      if (baseUrl.contains('localhost') &&
+          localIp != null &&
+          localIp.isNotEmpty) {
+        return baseUrl.replaceAll('localhost', localIp);
+      }
+      if (baseUrl.contains('localhost')) {
+        return baseUrl.replaceAll('localhost', '10.0.2.2');
+      }
     }
     return baseUrl;
   }

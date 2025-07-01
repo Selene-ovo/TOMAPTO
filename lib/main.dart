@@ -4,9 +4,58 @@ import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:provider/provider.dart';
 import 'package:tomapto/controllers/map/transit_provider.dart';
 import 'package:tomapto/pages/intro.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:tomapto/services/push_notification_service.dart';
+
+// Firebase 백그라운드 메시지 핸들러
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  print('백그라운드 메시지 처리: ${message.messageId}');
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Firebase 초기화
+  await Firebase.initializeApp();
+  print('🔥 Firebase 초기화 완료');
+
+  // Firebase 백그라운드 메시지 핸들러 설정
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
+  // FCM 초기 설정
+  await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
+    alert: true,
+    badge: true,
+    sound: true,
+  );
+  print('🔥 FCM 포그라운드 설정 완료');
+
+  // 알림 권한 요청
+  final settings = await FirebaseMessaging.instance.requestPermission(
+    alert: true,
+    badge: true,
+    sound: true,
+  );
+  print('🔥 알림 권한 상태: ${settings.authorizationStatus}');
+
+  // FCM 토큰 확인
+  final fcmToken = await FirebaseMessaging.instance.getToken();
+  print('🔥 FCM Token: $fcmToken');
+  // 푸시알림 서비스 초기화
+  final pushService = PushNotificationService();
+  await pushService.initialize();
+
+  // 알림 채널 생성 (Android)
+  await pushService.createNotificationChannel();
+
+  print('🔥 푸시알림 서비스 초기화 완료');
+  // 토큰 새로고침 리스너
+  FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
+    print('🔥 FCM Token 새로고침: $newToken');
+  });
 
   try {
     await dotenv.load(fileName: ".env");
