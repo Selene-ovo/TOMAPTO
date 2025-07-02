@@ -7,19 +7,20 @@ import 'package:tomapto/pages/intro.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:tomapto/services/push_notification_service.dart';
+import 'firebase_options.dart';
 
 // Firebase 백그라운드 메시지 핸들러
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   print('백그라운드 메시지 처리: ${message.messageId}');
 }
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Firebase 초기화
-  await Firebase.initializeApp();
+  // 2️⃣ 메인 함수 수정
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   print('🔥 Firebase 초기화 완료');
 
   // Firebase 백그라운드 메시지 핸들러 설정

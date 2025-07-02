@@ -1,0 +1,100 @@
+plugins {
+    id 'com.android.application'
+    id 'kotlin-android'
+    id 'dev.flutter.flutter-gradle-plugin'
+    id 'com.google.gms.google-services'
+}
+
+def getNaverApiKey() {
+    def envFile = file('../../.env')
+    if (envFile.exists()) {
+        def props = new Properties()
+        envFile.withInputStream { props.load(it) }
+        def apiKey = props.getProperty('NAVER_API_KEY')
+        if (apiKey != null) {
+            return apiKey.trim()
+        }
+    }
+    logger.warn('WARNING: NAVER_API_KEY not found in .env file!')
+    logger.warn('Please create a .env file in the project root with NAVER_API_KEY=your_api_key')
+    return ''
+}
+
+def naverApiKey = getNaverApiKey()
+
+android {
+    namespace 'com.example.tomapto'
+    compileSdk 35
+    ndkVersion '27.0.12077973'
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+        coreLibraryDesugaringEnabled true
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
+        freeCompilerArgs += [
+            '-Xno-param-assertions',
+            '-Xno-call-assertions',
+            '-Xno-receiver-assertions'
+        ]
+    }
+
+    defaultConfig {
+        applicationId 'com.example.tomapto'
+        minSdk 23
+        targetSdk 35
+        versionCode 1
+        versionName "1.0.0"
+        
+        if (naverApiKey.isEmpty()) {
+            logger.warn('Building with empty NAVER_API_KEY - map functionality may not work')
+        }
+        
+        manifestPlaceholders = [
+            'NAVER_API_KEY': naverApiKey,
+            'applicationName': 'io.flutter.app.FlutterApplication'  // 🔥 이 줄이 핵심!
+        ]
+        
+        multiDexEnabled true
+    }
+
+    buildTypes {
+        debug {
+            minifyEnabled false
+            shrinkResources false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.debug
+        }
+    }
+    
+    packaging {
+        resources {
+            pickFirsts += ['**/libc++_shared.so', '**/libjsc.so']
+        }
+    }
+}
+
+flutter {
+    source '../..'
+}
+
+dependencies {
+    // Firebase BOM
+    implementation platform('com.google.firebase:firebase-bom:33.6.0')
+    implementation 'com.google.firebase:firebase-analytics-ktx'
+    implementation 'com.google.firebase:firebase-messaging-ktx'
+    
+    // Core library desugaring
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
+    
+    // Multidex support
+    implementation 'androidx.multidex:multidex:2.0.1'
+}

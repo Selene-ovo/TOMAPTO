@@ -44,6 +44,18 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
+# Android 빌드 파일들 (추가)
+android/build/
+android/app/build/
+android/.gradle/
+android/gradle.properties
+android/local.properties
+
+# APK/AAB 파일들
+*.apk
+*.aab
+*.ipa
+
 # Firebase
 google-services.json
 GoogleService-Info.plist
