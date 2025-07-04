@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'dart:io';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:provider/provider.dart';
@@ -19,58 +21,52 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  print('✅ 1. WidgetsFlutterBinding 초기화 완료');
 
-  // 2️⃣ 메인 함수 수정
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  print('🔥 Firebase 초기화 완료');
-
-  // Firebase 백그라운드 메시지 핸들러 설정
-  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-
-  // FCM 초기 설정
-  await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
-    alert: true,
-    badge: true,
-    sound: true,
-  );
-  print('🔥 FCM 포그라운드 설정 완료');
-
-  // 알림 권한 요청
-  final settings = await FirebaseMessaging.instance.requestPermission(
-    alert: true,
-    badge: true,
-    sound: true,
-  );
-  print('🔥 알림 권한 상태: ${settings.authorizationStatus}');
-
-  // FCM 토큰 확인 (iOS APNS 오류 수정)
   try {
-    // iOS에서만 APNS 토큰 확인
-    if (Platform.isIOS) {
-      String? apnsToken = await FirebaseMessaging.instance.getAPNSToken();
-      if (apnsToken == null) {
-        await Future.delayed(Duration(seconds: 2));
-        apnsToken = await FirebaseMessaging.instance.getAPNSToken();
-      }
-      print('🍎 APNS Token: $apnsToken');
-    }
+    // Firebase 초기화
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    print('✅ 2. Firebase 초기화 완료');
 
-    // 모든 플랫폼에서 FCM 토큰 가져오기
+    // Firebase 백그라운드 메시지 핸들러 설정
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+    print('✅ 3. 백그라운드 메시지 핸들러 설정 완료');
+
+    // FCM 초기 설정
+    await FirebaseMessaging.instance
+        .setForegroundNotificationPresentationOptions(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
+    print('✅ 4. FCM 포그라운드 설정 완료');
+
+    // 알림 권한 요청
+    final settings = await FirebaseMessaging.instance.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+    print('🔥 알림 권한 상태: ${settings.authorizationStatus}');
+
+    // FCM 토큰 확인
     final fcmToken = await FirebaseMessaging.instance.getToken();
     print('🔥 FCM Token: $fcmToken');
+    // 푸시알림 서비스 초기화
+    final pushService = PushNotificationService();
+    await pushService.initialize();
+
+    // 알림 채널 생성 (Android)
+    await pushService.createNotificationChannel();
+    print('✅ 8. 알림 채널 생성 완료');
   } catch (e) {
-    print('토큰 가져오기 실패: $e');
+    print('❌ 7-8. 푸시알림 서비스 초기화 실패: $e');
+    print('⚠️ 푸시알림 기능 제외하고 앱 계속 실행');
   }
 
-  // 푸시알림 서비스 초기화
-  final pushService = PushNotificationService();
-  await pushService.initialize();
-
-  // 알림 채널 생성 (Android)
-  await pushService.createNotificationChannel();
-
   print('🔥 푸시알림 서비스 초기화 완료');
-
   // 토큰 새로고침 리스너
   FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
     print('🔥 FCM Token 새로고침: $newToken');
@@ -78,18 +74,21 @@ void main() async {
 
   try {
     await dotenv.load(fileName: ".env");
+    print('✅ 10. dotenv 로드 완료');
 
     await FlutterNaverMap().init(
       clientId: dotenv.env['NAVER_API_KEY'] ?? '',
       onAuthFailed: (NAuthFailedException ex) {
-        print('네이버 맵 인증 실패: ${ex.message}');
+        print('❌ 네이버 맵 인증 실패: ${ex.message}');
       },
     );
-    print('네이버 맵 초기화 성공');
+    print('✅ 11. 네이버 맵 초기화 성공');
   } catch (e) {
-    print('앱 초기화 중 오류: $e');
+    print('❌ 10-11. 앱 초기화 중 오류: $e');
+    print('⚠️ 일부 기능 제한되지만 앱 계속 실행');
   }
 
+  print('🚀 모든 초기화 완료 - 앱 시작');
   runApp(const MyApp());
 }
 
