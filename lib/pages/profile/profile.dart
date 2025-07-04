@@ -34,12 +34,11 @@ class ArcPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Rect.fromLTWH(0, 0, size.width, size.height);
-    final paint =
-        Paint()
-          ..color = color
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = strokeWidth
-          ..strokeCap = StrokeCap.round;
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round;
 
     // 원의 시작은 맨 위(-90도)에서부터, 그리고 진행도에 따라 원호를 그림
     canvas.drawArc(
@@ -99,9 +98,15 @@ class _ProfilePageState extends State<ProfilePage> {
 
       // 여러 가능한 키로 토큰 찾기
       String? token = prefs.getString('auth_token');
-      token ??= prefs.getString('token');
-      token ??= prefs.getString('jwt_token');
-      token ??= prefs.getString('access_token');
+      if (token == null) {
+        token = prefs.getString('token');
+      }
+      if (token == null) {
+        token = prefs.getString('jwt_token');
+      }
+      if (token == null) {
+        token = prefs.getString('access_token');
+      }
 
       return token;
     } catch (e) {
@@ -180,11 +185,10 @@ class _ProfilePageState extends State<ProfilePage> {
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder:
-            (context) => ProfileEditPage(
-              currentUserId: currentUserId, // SharedPreferences에서 가져온 사용자 ID 전달
-              currentNickname: _controller.userNickname,
-            ),
+        builder: (context) => ProfileEditPage(
+          currentUserId: currentUserId, // SharedPreferences에서 가져온 사용자 ID 전달
+          currentNickname: _controller.userNickname,
+        ),
       ),
     );
 
@@ -232,36 +236,32 @@ class _ProfilePageState extends State<ProfilePage> {
     final bool confirm =
         await showDialog(
           context: context,
-          builder:
-              (context) => AlertDialog(
-                title: const Text(
-                  '로그아웃',
+          builder: (context) => AlertDialog(
+            title: const Text(
+              '로그아웃',
+              style: TextStyle(fontFamily: 'Pretendard'),
+            ),
+            content: const Text(
+              '정말 로그아웃 하시겠습니까?',
+              style: TextStyle(fontFamily: 'Pretendard'),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text(
+                  '취소',
                   style: TextStyle(fontFamily: 'Pretendard'),
                 ),
-                content: const Text(
-                  '정말 로그아웃 하시겠습니까?',
-                  style: TextStyle(fontFamily: 'Pretendard'),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(false),
-                    child: const Text(
-                      '취소',
-                      style: TextStyle(fontFamily: 'Pretendard'),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(true),
-                    child: const Text(
-                      '로그아웃',
-                      style: TextStyle(
-                        color: Colors.red,
-                        fontFamily: 'Pretendard',
-                      ),
-                    ),
-                  ),
-                ],
               ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text(
+                  '로그아웃',
+                  style: TextStyle(color: Colors.red, fontFamily: 'Pretendard'),
+                ),
+              ),
+            ],
+          ),
         ) ??
         false;
 
@@ -283,59 +283,89 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget _buildProfileImage() {
     final screenWidth = MediaQuery.of(context).size.width;
 
-    return GestureDetector(
-      onTap: _navigateToProfileEdit, // 이미지 클릭 시 프로필 편집 페이지로 이동
-      child: Container(
-        width: 48 * (screenWidth / 375),
-        height: 48 * (screenWidth / 375),
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: Colors.grey[100],
-          border: Border.all(color: Colors.grey[200]!, width: 1.5),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
+    return Container(
+      width: 48 * (screenWidth / 375),
+      height: 48 * (screenWidth / 375),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Stack(
+        children: [
+          // 프로필 이미지 컨테이너
+          Container(
+            width: 48 * (screenWidth / 375),
+            height: 48 * (screenWidth / 375),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.grey[100],
+              border: Border.all(color: Colors.grey[200]!, width: 1.5),
             ),
-          ],
-        ),
-        child: ClipOval(
-          child:
-              _profileImageUrl != null && _profileImageUrl!.isNotEmpty
+            child: ClipOval(
+              child: _profileImageUrl != null && _profileImageUrl!.isNotEmpty
                   ? Image.network(
-                    _profileImageUrl!,
-                    fit: BoxFit.cover,
-                    width: 48 * (screenWidth / 375),
-                    height: 48 * (screenWidth / 375),
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) return child;
-                      return Center(
-                        child: CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            Color(0xFFFB233B),
+                      _profileImageUrl!,
+                      fit: BoxFit.cover,
+                      width: 48 * (screenWidth / 375),
+                      height: 48 * (screenWidth / 375),
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return Center(
+                          child: CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Color(0xFFFB233B),
+                            ),
+                            strokeWidth: 2,
                           ),
-                          strokeWidth: 2,
-                        ),
-                      );
-                    },
-                    errorBuilder: (context, error, stackTrace) {
-                      print('이미지 로드 오류: $error');
-                      return SvgPicture.asset(
-                        'assets/icons/profile_default.svg',
-                        fit: BoxFit.cover,
-                        width: 48 * (screenWidth / 375),
-                        height: 48 * (screenWidth / 375),
-                      );
-                    },
-                  )
+                        );
+                      },
+                      errorBuilder: (context, error, stackTrace) {
+                        print('이미지 로드 오류: $error');
+                        return SvgPicture.asset(
+                          'assets/icons/profile_default.svg',
+                          fit: BoxFit.cover,
+                          width: 48 * (screenWidth / 375),
+                          height: 48 * (screenWidth / 375),
+                        );
+                      },
+                    )
                   : SvgPicture.asset(
-                    'assets/icons/profile_default.svg',
-                    fit: BoxFit.cover,
-                    width: 48 * (screenWidth / 375),
-                    height: 48 * (screenWidth / 375),
+                      'assets/icons/profile_default.svg',
+                      fit: BoxFit.cover,
+                      width: 48 * (screenWidth / 375),
+                      height: 48 * (screenWidth / 375),
+                    ),
+            ),
+          ),
+          // 편집 버튼 아이콘 (우하단에 작은 아이콘)
+          Positioned(
+            bottom: -2,
+            right: -2,
+            child: Container(
+              width: 18,
+              height: 18,
+              decoration: BoxDecoration(
+                color: Color(0xFFFB233B),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 3,
+                    offset: const Offset(0, 1),
                   ),
-        ),
+                ],
+              ),
+              child: Icon(Icons.edit, color: Colors.white, size: 10),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -353,281 +383,238 @@ class _ProfilePageState extends State<ProfilePage> {
     return Scaffold(
       backgroundColor: const Color(0xFFFDFDFD),
       body: SafeArea(
-        child:
-            _controller.isLoading
-                ? const Center(
-                  child: CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      Color(0xFFFB233B),
-                    ),
-                  ),
-                )
-                : RefreshIndicator(
-                  key: _refreshKey,
-                  onRefresh: _refreshData,
-                  color: const Color(0xFFFB233B),
-                  child: SingleChildScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    child: Column(
-                      children: [
-                        // 앱바 - 프로필 제목
-                        Padding(
-                          padding: EdgeInsets.all(cardMargin),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                '프로필',
-                                style: TextStyle(
-                                  fontSize: 20 * (screenWidth / 375),
-                                  fontWeight: FontWeight.bold,
-                                  color: const Color(0xFF363636),
-                                  fontFamily: 'Pretendard',
-                                ),
-                              ),
-                              IconButton(
-                                icon: Icon(
-                                  Icons.settings,
-                                  color: const Color(0xFF363636),
-                                  size: 24 * (screenWidth / 375),
-                                ),
-                                onPressed: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder:
-                                          (context) => const SettingsScreen(),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        // 프로필 정보 카드
-                        Container(
-                          margin: EdgeInsets.all(cardMargin),
-                          padding: EdgeInsets.all(cardPadding),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(
-                              cardBorderRadius,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.05),
-                                blurRadius: 10,
-                                spreadRadius: 1,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            children: [
-                              // 프로필 아이콘 - 수정된 버전
-                              GestureDetector(
-                                onTap: _navigateToProfileEdit,
-                                child: _buildProfileImage(),
-                              ),
-                              SizedBox(width: 16 * (screenWidth / 375)),
-
-                              // 사용자 정보
-                              Expanded(
-                                child: GestureDetector(
-                                  onTap:
-                                      _navigateToProfileEdit, // 닉네임 클릭 시 프로필 편집 페이지로 이동
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Text(
-                                            _controller.userNickname,
-                                            style: TextStyle(
-                                              fontSize:
-                                                  18 * (screenWidth / 375),
-                                              fontWeight: FontWeight.bold,
-                                              color: const Color(0xFF363636),
-                                              fontFamily: 'Pretendard',
-                                            ),
-                                          ),
-                                          SizedBox(width: 15), // 닉네임과 이메일 사이 간격
-                                          // 이메일 표시 추가
-                                          Text(
-                                            _controller.userEmail ??
-                                                '', // 이메일 정보
-                                            style: TextStyle(
-                                              fontSize:
-                                                  14 *
-                                                  (screenWidth /
-                                                      500), // 닉네임보다 작은 글씨
-                                              color: Colors.grey[600], // 흐린 회색
-                                              fontFamily: 'Pretendard',
-                                              fontWeight:
-                                                  FontWeight.normal, // 일반 굵기
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-
-                                      SizedBox(
-                                        height: 4 * (screenHeight / 812),
-                                      ),
-                                      Row(
-                                        children: [
-                                          Text(
-                                            'Lv.${_controller.userLevel} 씨앗',
-                                            style: TextStyle(
-                                              fontSize:
-                                                  14 * (screenWidth / 375),
-                                              color: Colors.grey[600],
-                                              fontFamily: 'Pretendard',
-                                            ),
-                                          ),
-                                          const SizedBox(width: 4),
-                                          const Icon(
-                                            Icons.info_outline,
-                                            color: Colors.grey,
-                                            size: 12,
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-
-                              // 경험치 프로그래스 바 (원형)
-                              Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  // 배경 원
-                                  Container(
-                                    width: 40.78,
-                                    height: 40.78,
-                                    decoration: const ShapeDecoration(
-                                      shape: OvalBorder(
-                                        side: BorderSide(
-                                          width: 6,
-                                          strokeAlign:
-                                              BorderSide.strokeAlignCenter,
-                                          color: Color(0xFFF5F5F5),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  // 진행률 원 - 원의 일부만 그리기 위해 CustomPaint를 사용
-                                  SizedBox(
-                                    width: 40.78,
-                                    height: 40.78,
-                                    child: CustomPaint(
-                                      painter: ArcPainter(
-                                        progress: _controller.userExp / 1000,
-                                        color: const Color(0xFFFB233B),
-                                        strokeWidth: 6,
-                                      ),
-                                    ),
-                                  ),
-                                  // 퍼센트 텍스트
-                                  Text(
-                                    '${(_controller.userExp ~/ 10)}%',
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w400,
-                                      fontFamily: 'Pretendard',
-                                      color: Color(0xFF363636),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        // 네비게이션 카드 - 차계부
-                        _buildCardWithStack(
-                          context: context,
-                          margin: cardMargin,
-                          title: '차계부 확인하기',
-                          label: '차량',
-                          imagePath:
-                              'assets/icons/car_account_book_card.png', // 차량 관련 이미지로 변경하면 더 좋음
-                          labelColor: const Color(0xFFFB233B),
-                          onTap: () => _navigateToCarAccountBook(context),
-                        ),
-
-                        // 네비게이션 카드 - 공지사항
-                        _buildCardWithStack(
-                          context: context,
-                          margin: cardMargin,
-                          title: '공지사항 확인하기',
-                          label: '공지',
-                          imagePath: 'assets/icons/default_profile_card.png',
-                          labelColor: const Color(0xFFFB233B),
-                          onTap: () => _controller.navigateToNotices(context),
-                        ),
-
-                        // 네비게이션 카드 - 고객센터
-                        // 이미지 변경 - calendar 이미지와 같은 이미지를 사용하고 있으므로 구분을 위해 다른 이미지를 사용하도록 권장
-                        _buildCardWithStack(
-                          context: context,
-                          margin: cardMargin,
-                          title: '고객센터 문의하기',
-                          label: '문의',
-                          imagePath: 'assets/icons/default_profile_card.png',
-                          labelColor: const Color(0xFFFB233B),
-                          onTap: () => _controller.navigateToSupport(context),
-                        ),
-
-                        // 로그아웃 버튼
-                        Padding(
-                          padding: EdgeInsets.all(cardMargin),
-                          child: TextButton(
-                            onPressed: _handleLogout,
-                            child: Text(
-                              '로그아웃',
+        child: _controller.isLoading
+            ? const Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFB233B)),
+                ),
+              )
+            : RefreshIndicator(
+                key: _refreshKey,
+                onRefresh: _refreshData,
+                color: const Color(0xFFFB233B),
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  child: Column(
+                    children: [
+                      // 앱바 - 프로필 제목
+                      Padding(
+                        padding: EdgeInsets.all(cardMargin),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              '프로필',
                               style: TextStyle(
-                                color: Colors.grey[600],
-                                fontSize: 16 * (screenWidth / 375),
+                                fontSize: 20 * (screenWidth / 375),
+                                fontWeight: FontWeight.bold,
+                                color: const Color(0xFF363636),
                                 fontFamily: 'Pretendard',
                               ),
                             ),
+                            IconButton(
+                              icon: Icon(
+                                Icons.settings,
+                                color: const Color(0xFF363636),
+                                size: 24 * (screenWidth / 375),
+                              ),
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        const SettingsScreen(),
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // 프로필 정보 카드
+                      Container(
+                        margin: EdgeInsets.all(cardMargin),
+                        padding: EdgeInsets.all(cardPadding),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(cardBorderRadius),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.05),
+                              blurRadius: 10,
+                              spreadRadius: 1,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            // 프로필 아이콘 - 수정된 버전
+                            GestureDetector(
+                              onTap: _navigateToProfileEdit,
+                              child: _buildProfileImage(),
+                            ),
+                            SizedBox(width: 16 * (screenWidth / 375)),
+
+                            // 사용자 정보
+                            Expanded(
+                              child: GestureDetector(
+                                onTap:
+                                    _navigateToProfileEdit, // 닉네임 클릭 시 프로필 편집 페이지로 이동
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Text(
+                                          _controller.userNickname,
+                                          style: TextStyle(
+                                            fontSize: 18 * (screenWidth / 375),
+                                            fontWeight: FontWeight.bold,
+                                            color: const Color(0xFF363636),
+                                            fontFamily: 'Pretendard',
+                                          ),
+                                        ),
+                                        SizedBox(width: 6),
+                                        // 편집 가능함을 알려주는 작은 아이콘
+                                        Icon(
+                                          Icons.edit_outlined,
+                                          color: Colors.grey[400],
+                                          size: 14,
+                                        ),
+                                      ],
+                                    ),
+                                    SizedBox(height: 4 * (screenHeight / 812)),
+                                    Row(
+                                      children: [
+                                        Text(
+                                          'Lv.${_controller.userLevel} 씨앗',
+                                          style: TextStyle(
+                                            fontSize: 14 * (screenWidth / 375),
+                                            color: Colors.grey[600],
+                                            fontFamily: 'Pretendard',
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        const Icon(
+                                          Icons.info_outline,
+                                          color: Colors.grey,
+                                          size: 12,
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+
+                            // 경험치 프로그래스 바 (원형)
+                            Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                // 배경 원
+                                Container(
+                                  width: 40.78,
+                                  height: 40.78,
+                                  decoration: const ShapeDecoration(
+                                    shape: OvalBorder(
+                                      side: BorderSide(
+                                        width: 6,
+                                        strokeAlign:
+                                            BorderSide.strokeAlignCenter,
+                                        color: Color(0xFFF5F5F5),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                // 진행률 원 - 원의 일부만 그리기 위해 CustomPaint를 사용
+                                SizedBox(
+                                  width: 40.78,
+                                  height: 40.78,
+                                  child: CustomPaint(
+                                    painter: ArcPainter(
+                                      progress: _controller.userExp / 1000,
+                                      color: const Color(0xFFFB233B),
+                                      strokeWidth: 6,
+                                    ),
+                                  ),
+                                ),
+                                // 퍼센트 텍스트
+                                Text(
+                                  '${(_controller.userExp ~/ 10)}%',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w400,
+                                    fontFamily: 'Pretendard',
+                                    color: Color(0xFF363636),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // 네비게이션 카드 - 차계부
+                      _buildCardWithStack(
+                        context: context,
+                        margin: cardMargin,
+                        title: '차계부 확인하기',
+                        label: '차량',
+                        imagePath:
+                            'assets/icons/profile_card.png', // 차량 관련 이미지로 변경하면 더 좋음
+                        labelColor: const Color(0xFFFB233B),
+                        onTap: () => _navigateToCarAccountBook(context),
+                      ),
+
+                      // 로그아웃 버튼
+                      Padding(
+                        padding: EdgeInsets.all(cardMargin),
+                        child: TextButton(
+                          onPressed: _handleLogout,
+                          child: Text(
+                            '로그아웃',
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 16 * (screenWidth / 375),
+                              fontFamily: 'Pretendard',
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      // 오류 메시지 표시
+                      if (_controller.errorMessage.isNotEmpty)
+                        Padding(
+                          padding: EdgeInsets.all(cardMargin),
+                          child: Container(
+                            padding: EdgeInsets.all(cardPadding),
+                            decoration: BoxDecoration(
+                              color: Colors.red[50],
+                              borderRadius: BorderRadius.circular(
+                                cardBorderRadius,
+                              ),
+                              border: Border.all(color: Colors.red[200]!),
+                            ),
+                            child: Text(
+                              _controller.errorMessage,
+                              style: TextStyle(
+                                color: Colors.red[700],
+                                fontSize: 14 * (screenWidth / 375),
+                                fontFamily: 'Pretendard',
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
                           ),
                         ),
 
-                        // 오류 메시지 표시
-                        if (_controller.errorMessage.isNotEmpty)
-                          Padding(
-                            padding: EdgeInsets.all(cardMargin),
-                            child: Container(
-                              padding: EdgeInsets.all(cardPadding),
-                              decoration: BoxDecoration(
-                                color: Colors.red[50],
-                                borderRadius: BorderRadius.circular(
-                                  cardBorderRadius,
-                                ),
-                                border: Border.all(color: Colors.red[200]!),
-                              ),
-                              child: Text(
-                                _controller.errorMessage,
-                                style: TextStyle(
-                                  color: Colors.red[700],
-                                  fontSize: 14 * (screenWidth / 375),
-                                  fontFamily: 'Pretendard',
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                          ),
-
-                        // 하단 여백
-                        SizedBox(height: 70 * (screenHeight / 812)),
-                      ],
-                    ),
+                      // 하단 여백
+                      SizedBox(height: 70 * (screenHeight / 812)),
+                    ],
                   ),
                 ),
+              ),
       ),
 
       // 하단 네비게이션 바
@@ -653,7 +640,7 @@ class _ProfilePageState extends State<ProfilePage> {
   }) {
     final screenWidth = MediaQuery.of(context).size.width;
     final cardWidth = screenWidth - (margin * 2); // 양쪽 마진을 고려한 카드 너비
-    final cardHeight = 180.0 * (screenWidth / 375); // 카드 높이 조정
+    final cardHeight = 200.0 * (screenWidth / 375); // 카드 높이 조정
     final imageHeight = 120.0 * (screenWidth / 375); // 이미지 높이 조정
 
     return GestureDetector(
@@ -692,8 +679,8 @@ class _ProfilePageState extends State<ProfilePage> {
             Positioned(
               bottom: 0,
               child: Container(
-                width: cardWidth * 0.92,
-                height: (cardHeight - imageHeight) * 0.8, // 약간 작게 설정
+                width: screenWidth - (margin * 2),
+                height: (cardHeight - imageHeight) * 0.65, // 약간 작게 설정
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
