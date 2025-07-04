@@ -96,19 +96,13 @@ class _ProfilePageState extends State<ProfilePage> {
   Future<String?> _getToken() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      
+
       // 여러 가능한 키로 토큰 찾기
       String? token = prefs.getString('auth_token');
-      if (token == null) {
-        token = prefs.getString('token');
-      }
-      if (token == null) {
-        token = prefs.getString('jwt_token');
-      }
-      if (token == null) {
-        token = prefs.getString('access_token');
-      }
-      
+      token ??= prefs.getString('token');
+      token ??= prefs.getString('jwt_token');
+      token ??= prefs.getString('access_token');
+
       return token;
     } catch (e) {
       print('토큰 조회 오류: $e');
@@ -186,10 +180,11 @@ class _ProfilePageState extends State<ProfilePage> {
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => ProfileEditPage(
-          currentUserId: currentUserId, // SharedPreferences에서 가져온 사용자 ID 전달
-          currentNickname: _controller.userNickname,
-        ),
+        builder:
+            (context) => ProfileEditPage(
+              currentUserId: currentUserId, // SharedPreferences에서 가져온 사용자 ID 전달
+              currentNickname: _controller.userNickname,
+            ),
       ),
     );
 
@@ -202,7 +197,7 @@ class _ProfilePageState extends State<ProfilePage> {
         });
         print('프로필 이미지 즉시 업데이트: ${result['newImageUrl']}');
       }
-      
+
       // 전체 프로필 데이터도 새로고침
       await _refreshData();
 
@@ -284,101 +279,63 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  // 프로필 이미지 위젯 - 수정된 버전
+  // 프로필 이미지 위젯
   Widget _buildProfileImage() {
     final screenWidth = MediaQuery.of(context).size.width;
-    
-    return Container(
-      width: 48 * (screenWidth / 375),
-      height: 48 * (screenWidth / 375),
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Stack(
-        children: [
-          // 프로필 이미지 컨테이너
-          Container(
-            width: 48 * (screenWidth / 375),
-            height: 48 * (screenWidth / 375),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.grey[100],
-              border: Border.all(
-                color: Colors.grey[200]!,
-                width: 1.5,
-              ),
+
+    return GestureDetector(
+      onTap: _navigateToProfileEdit, // 이미지 클릭 시 프로필 편집 페이지로 이동
+      child: Container(
+        width: 48 * (screenWidth / 375),
+        height: 48 * (screenWidth / 375),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Colors.grey[100],
+          border: Border.all(color: Colors.grey[200]!, width: 1.5),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
             ),
-            child: ClipOval(
-              child: _profileImageUrl != null && _profileImageUrl!.isNotEmpty
+          ],
+        ),
+        child: ClipOval(
+          child:
+              _profileImageUrl != null && _profileImageUrl!.isNotEmpty
                   ? Image.network(
-                      _profileImageUrl!,
-                      fit: BoxFit.cover,
-                      width: 48 * (screenWidth / 375),
-                      height: 48 * (screenWidth / 375),
-                      loadingBuilder: (context, child, loadingProgress) {
-                        if (loadingProgress == null) return child;
-                        return Center(
-                          child: CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFB233B)),
-                            strokeWidth: 2,
+                    _profileImageUrl!,
+                    fit: BoxFit.cover,
+                    width: 48 * (screenWidth / 375),
+                    height: 48 * (screenWidth / 375),
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return Center(
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Color(0xFFFB233B),
                           ),
-                        );
-                      },
-                      errorBuilder: (context, error, stackTrace) {
-                        print('이미지 로드 오류: $error');
-                        return SvgPicture.asset(
-                          'assets/icons/profile_default.svg',
-                          fit: BoxFit.cover,
-                          width: 48 * (screenWidth / 375),
-                          height: 48 * (screenWidth / 375),
-                        );
-                      },
-                    )
+                          strokeWidth: 2,
+                        ),
+                      );
+                    },
+                    errorBuilder: (context, error, stackTrace) {
+                      print('이미지 로드 오류: $error');
+                      return SvgPicture.asset(
+                        'assets/icons/profile_default.svg',
+                        fit: BoxFit.cover,
+                        width: 48 * (screenWidth / 375),
+                        height: 48 * (screenWidth / 375),
+                      );
+                    },
+                  )
                   : SvgPicture.asset(
-                      'assets/icons/profile_default.svg',
-                      fit: BoxFit.cover,
-                      width: 48 * (screenWidth / 375),
-                      height: 48 * (screenWidth / 375),
-                    ),
-            ),
-          ),
-          // 편집 버튼 아이콘 (우하단에 작은 아이콘)
-          Positioned(
-            bottom: -2,
-            right: -2,
-            child: Container(
-              width: 18,
-              height: 18,
-              decoration: BoxDecoration(
-                color: Color(0xFFFB233B),
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: Colors.white,
-                  width: 2,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
-                    blurRadius: 3,
-                    offset: const Offset(0, 1),
+                    'assets/icons/profile_default.svg',
+                    fit: BoxFit.cover,
+                    width: 48 * (screenWidth / 375),
+                    height: 48 * (screenWidth / 375),
                   ),
-                ],
-              ),
-              child: Icon(
-                Icons.edit,
-                color: Colors.white,
-                size: 10,
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -496,15 +453,25 @@ class _ProfilePageState extends State<ProfilePage> {
                                               fontFamily: 'Pretendard',
                                             ),
                                           ),
-                                          SizedBox(width: 6),
-                                          // 편집 가능함을 알려주는 작은 아이콘
-                                          Icon(
-                                            Icons.edit_outlined,
-                                            color: Colors.grey[400],
-                                            size: 14,
+                                          SizedBox(width: 15), // 닉네임과 이메일 사이 간격
+                                          // 이메일 표시 추가
+                                          Text(
+                                            _controller.userEmail ??
+                                                '', // 이메일 정보
+                                            style: TextStyle(
+                                              fontSize:
+                                                  14 *
+                                                  (screenWidth /
+                                                      500), // 닉네임보다 작은 글씨
+                                              color: Colors.grey[600], // 흐린 회색
+                                              fontFamily: 'Pretendard',
+                                              fontWeight:
+                                                  FontWeight.normal, // 일반 굵기
+                                            ),
                                           ),
                                         ],
                                       ),
+
                                       SizedBox(
                                         height: 4 * (screenHeight / 812),
                                       ),
@@ -579,14 +546,14 @@ class _ProfilePageState extends State<ProfilePage> {
                           ),
                         ),
 
-                        // 네비게이션 카드 - 캘린더
+                        // 네비게이션 카드 - 차계부
                         _buildCardWithStack(
                           context: context,
                           margin: cardMargin,
                           title: '차계부 확인하기',
                           label: '차량',
                           imagePath:
-                              'assets/icons/default_profile_card.png', // 차량 관련 이미지로 변경하면 더 좋음
+                              'assets/icons/car_account_book_card.png', // 차량 관련 이미지로 변경하면 더 좋음
                           labelColor: const Color(0xFFFB233B),
                           onTap: () => _navigateToCarAccountBook(context),
                         ),

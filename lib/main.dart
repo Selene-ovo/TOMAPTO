@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
@@ -42,9 +43,25 @@ void main() async {
   );
   print('🔥 알림 권한 상태: ${settings.authorizationStatus}');
 
-  // FCM 토큰 확인
-  final fcmToken = await FirebaseMessaging.instance.getToken();
-  print('🔥 FCM Token: $fcmToken');
+  // FCM 토큰 확인 (iOS APNS 오류 수정)
+  try {
+    // iOS에서만 APNS 토큰 확인
+    if (Platform.isIOS) {
+      String? apnsToken = await FirebaseMessaging.instance.getAPNSToken();
+      if (apnsToken == null) {
+        await Future.delayed(Duration(seconds: 2));
+        apnsToken = await FirebaseMessaging.instance.getAPNSToken();
+      }
+      print('🍎 APNS Token: $apnsToken');
+    }
+
+    // 모든 플랫폼에서 FCM 토큰 가져오기
+    final fcmToken = await FirebaseMessaging.instance.getToken();
+    print('🔥 FCM Token: $fcmToken');
+  } catch (e) {
+    print('토큰 가져오기 실패: $e');
+  }
+
   // 푸시알림 서비스 초기화
   final pushService = PushNotificationService();
   await pushService.initialize();
@@ -53,6 +70,7 @@ void main() async {
   await pushService.createNotificationChannel();
 
   print('🔥 푸시알림 서비스 초기화 완료');
+
   // 토큰 새로고침 리스너
   FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
     print('🔥 FCM Token 새로고침: $newToken');
