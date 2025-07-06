@@ -47,7 +47,10 @@ class FriendsService {
 
       final response = await http.get(
         Uri.parse('$apiBaseUrl/friends/search?term=$searchTerm'),
-        headers: {'Authorization': 'Bearer $token'},
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Cache-Control': 'no-cache', // 🔥 캐시 방지 추가
+        },
       );
 
       print('검색 응답 코드: ${response.statusCode}');

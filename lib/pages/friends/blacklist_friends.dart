@@ -111,6 +111,29 @@ class _BlacklistFriendsState extends State<BlacklistFriends> {
     }
   }
 
+  // 프로필 이미지 URL 갱신
+  Future<void> _refreshImageUrl() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+
+      if (token == null) return;
+
+      final apiBaseUrl = _getApiBaseUrl();
+      final response = await http.post(
+        Uri.parse('$apiBaseUrl/profils/refresh-image-url'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (response.statusCode == 200) {
+        // 차단 목록 다시 로드
+        _loadBlockedUsers();
+      }
+    } catch (e) {
+      print('이미지 URL 갱신 실패: $e');
+    }
+  }
+
   // 차단 해제
   Future<void> _unblockUser(String userId) async {
     setState(() {
@@ -278,6 +301,32 @@ class _BlacklistFriendsState extends State<BlacklistFriends> {
     );
   }
 
+  Widget _buildProfileImage(String? imageUrl) {
+    print('프로필 이미지 URL: $imageUrl'); // 디버깅용
+    if (imageUrl != null && imageUrl.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.network(
+          imageUrl,
+          width: 50,
+          height: 50,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            print('이미지 로드 에러: $error'); // 디버깅용
+            // 🔥 추가: 400 에러 시 URL 갱신 시도
+            if (error.toString().contains('400')) {
+              _refreshImageUrl();
+            }
+            return Icon(Icons.person, color: Colors.black, size: 30);
+          },
+        ),
+      );
+    } else {
+      print('이미지 URL이 null이거나 비어있음'); // 디버깅용
+      return Icon(Icons.person, color: Colors.black, size: 30);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -292,6 +341,7 @@ class _BlacklistFriendsState extends State<BlacklistFriends> {
             fontWeight: FontWeight.bold,
             fontSize: 18,
           ),
+          textAlign: TextAlign.center,
         ),
         centerTitle: true,
         leading: IconButton(
@@ -432,10 +482,8 @@ class _BlacklistFriendsState extends State<BlacklistFriends> {
                                     ),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
-                                  child: Icon(
-                                    Icons.person,
-                                    color: Colors.black,
-                                    size: 30,
+                                  child: _buildProfileImage(
+                                    user['user_profile_picture_url'],
                                   ),
                                 ),
                                 title: Column(

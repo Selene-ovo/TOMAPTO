@@ -2,11 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:tomapto/modal/friends_show.dart';
 
 // 친구 목록에서 친구를 선택했을 때 호출되는 함수
-void showFriendOptions(BuildContext context, Map<String, dynamic> friend) {
+void showFriendOptions(
+  BuildContext context,
+  Map<String, dynamic> friend,
+  Function onShareStatusChanged,
+) {
   // 친구 모달을 다이얼로그로 표시 (바텀시트 대신)
   showDialog(
     context: context,
-    builder: (context) => FriendsShowModal(friend: friend),
+    builder:
+        (context) => FriendsShowModal(
+          friend: friend,
+          onShareStatusChanged: onShareStatusChanged,
+        ),
   );
 }
 

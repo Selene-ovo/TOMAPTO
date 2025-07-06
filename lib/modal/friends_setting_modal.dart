@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'dart:io' show Platform;
 import 'package:tomapto/services/socket_service.dart';
+import 'package:tomapto/pages/friends/real_time_location_sharing.dart';
 
 class FriendsSettingModal extends StatefulWidget {
   final Map<String, dynamic> friend;
@@ -22,14 +23,11 @@ class FriendsSettingModal extends StatefulWidget {
 }
 
 class _FriendsSettingModalState extends State<FriendsSettingModal> {
-  bool _isLocationSharingActive = false;
   bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    // 위치 공유 상태 확인
-    _checkLocationSharingStatus();
   }
 
   // API 서버 기본 URL 가져오기
@@ -57,153 +55,12 @@ class _FriendsSettingModalState extends State<FriendsSettingModal> {
     return baseUrl;
   }
 
-  // 위치 공유 상태 확인 - 내 공유 상태만 체크하도록 수정
-  Future<void> _checkLocationSharingStatus() async {
-    try {
-      setState(() {
-        _isLoading = true;
-      });
-
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('token');
-      final myUserId = prefs.getString('user_id'); // 내 사용자 ID 가져오기
-
-      if (token == null || myUserId == null) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('로그인이 필요합니다')));
-        setState(() {
-          _isLoading = false;
-        });
-        return;
-      }
-
-      final apiBaseUrl = _getApiBaseUrl();
-      final response = await http.get(
-        Uri.parse('$apiBaseUrl/location/active-sharings'),
-        headers: {'Authorization': 'Bearer $token'},
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-
-        // 🔥 핵심 변경: 양방향 체크 → 내가 친구에게 공유하는지만 체크
-        final iAmSharingToFriend = data.any(
-          (sharing) =>
-              sharing['sharer_id'] == myUserId && // 내가 공유자이고
-              sharing['sharee_id'] == widget.friend['id'], // 친구가 수신자인 경우만
-        );
-
-        setState(() {
-          _isLocationSharingActive = iAmSharingToFriend; // 내 공유 상태만 표시
-          _isLoading = false;
-        });
-      } else {
-        print('위치 공유 상태 조회 실패: ${response.statusCode} - ${response.body}');
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      print('위치 공유 상태 조회 오류: $e');
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
-
-  // 위치 공유 토글 (활성화/비활성화)
-  Future<void> _toggleLocationSharing() async {
-    // 🔥 중복 요청 방지
-    if (_isLoading) {
-      print('이미 처리 중입니다. 중복 요청을 무시합니다.');
-      return;
-    }
-
-    try {
-      setState(() {
-        _isLoading = true;
-      });
-
-      // SharedPreferences에서 토큰 가져오기
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('token');
-
-      if (token == null) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('로그인이 필요합니다')));
-        setState(() {
-          _isLoading = false;
-        });
-        return;
-      }
-
-      // 소켓 서비스 초기화
-      final socketService = SocketService();
-      if (!socketService.isConnected) {
-        await socketService.initSocket();
-      }
-
-      // 공유 상태에 따라 시작 또는 종료
-      if (_isLocationSharingActive) {
-        // 위치 공유 종료 - 소켓만 사용
-        socketService.stopLocationSharing(widget.friend['id']);
-
-        // 🔥 소켓 성공을 기다림 (API 호출 제거)
-        await Future.delayed(Duration(seconds: 1));
-
-        setState(() {
-          _isLocationSharingActive = false;
-          _isLoading = false;
-        });
-
-        // 콜백 호출
-        widget.onShareStatusChanged(false);
-
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('위치 공유가 비활성화되었습니다')));
-
-        // 모달 닫기
-        Navigator.pop(context);
-      } else {
-        // 위치 공유 시작 - 소켓만 사용
-        socketService.startLocationSharing(widget.friend['id'], null);
-
-        // 🔥 소켓 성공 이벤트를 기다림 (API 호출 제거)
-        // 소켓 응답을 기다리거나 타이머로 처리
-        await Future.delayed(Duration(seconds: 1));
-
-        setState(() {
-          _isLocationSharingActive = true;
-          _isLoading = false;
-        });
-
-        // 콜백 호출
-        widget.onShareStatusChanged(true);
-
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('위치 공유가 활성화되었습니다')));
-
-        // 모달 닫기
-        Navigator.pop(context);
-      }
-    } catch (e) {
-      print('위치 공유 상태 변경 오류: $e');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('네트워크 오류가 발생했습니다')));
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
-
   // 친구 차단하기
   Future<void> _blockFriend() async {
     try {
+      // mounted 체크 추가
+      if (!mounted) return;
+
       // 차단 확인 다이얼로그 표시
       final confirm =
           await showDialog<bool>(
@@ -212,7 +69,7 @@ class _FriendsSettingModalState extends State<FriendsSettingModal> {
                 (context) => AlertDialog(
                   title: Text('친구 차단'),
                   content: Text(
-                    '${widget.friend['name']}님을 차단하시겠습니까?\n차단 시 서로의 위치를 볼 수 없습니다.',
+                    '${widget.friend['name']}님을 차단하시겠습니까?\n차단 시 서로 친구 목록에서 제거되며, 위치 공유도 종료됩니다.',
                   ),
                   actions: [
                     TextButton(
@@ -231,6 +88,9 @@ class _FriendsSettingModalState extends State<FriendsSettingModal> {
 
       if (!confirm) return;
 
+      //  mounted 체크 추가
+      if (!mounted) return;
+
       setState(() {
         _isLoading = true;
       });
@@ -240,12 +100,14 @@ class _FriendsSettingModalState extends State<FriendsSettingModal> {
       final token = prefs.getString('token');
 
       if (token == null) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('로그인이 필요합니다')));
-        setState(() {
-          _isLoading = false;
-        });
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('로그인이 필요합니다')));
+          setState(() {
+            _isLoading = false;
+          });
+        }
         return;
       }
 
@@ -261,38 +123,51 @@ class _FriendsSettingModalState extends State<FriendsSettingModal> {
       );
 
       if (response.statusCode == 200) {
-        //
         // 차단 성공
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${widget.friend['name']}님을 차단했습니다')),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('${widget.friend['name']}님을 차단했습니다')),
+          );
+        }
 
         // 콜백 호출을 통해 친구 목록 갱신
         widget.onShareStatusChanged(false);
 
         // 모달 닫기
-        Navigator.pop(context);
+        if (mounted) {
+          Navigator.pop(context);
+        }
       } else {
         final errorData = json.decode(response.body);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(errorData['message'] ?? '친구 차단 실패')),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(errorData['message'] ?? '친구 차단 실패')),
+          );
+        }
       }
     } catch (e) {
       print('친구 차단 오류: $e');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('네트워크 오류가 발생했습니다')));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('네트워크 오류가 발생했습니다')));
+      }
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      //  mounted 체크 추가
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
   // 친구 삭제하기
   Future<void> _deleteFriend() async {
     try {
+      //  mounted 체크 추가
+      if (!mounted) return;
+
       // 삭제 확인 다이얼로그 표시
       final confirm =
           await showDialog<bool>(
@@ -318,6 +193,9 @@ class _FriendsSettingModalState extends State<FriendsSettingModal> {
 
       if (!confirm) return;
 
+      //  mounted 체크 추가
+      if (!mounted) return;
+
       setState(() {
         _isLoading = true;
       });
@@ -327,12 +205,14 @@ class _FriendsSettingModalState extends State<FriendsSettingModal> {
       final token = prefs.getString('token');
 
       if (token == null) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('로그인이 필요합니다')));
-        setState(() {
-          _isLoading = false;
-        });
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('로그인이 필요합니다')));
+          setState(() {
+            _isLoading = false;
+          });
+        }
         return;
       }
 
@@ -349,30 +229,43 @@ class _FriendsSettingModalState extends State<FriendsSettingModal> {
 
       if (response.statusCode == 200) {
         // 친구 삭제 성공
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${widget.friend['name']}님을 친구 목록에서 삭제했습니다')),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${widget.friend['name']}님을 친구 목록에서 삭제했습니다'),
+            ),
+          );
+        }
 
         // 콜백 호출을 통해 친구 목록 갱신
         widget.onShareStatusChanged(false);
 
         // 모달 닫기
-        Navigator.pop(context);
+        if (mounted) {
+          Navigator.pop(context);
+        }
       } else {
         final errorData = json.decode(response.body);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(errorData['message'] ?? '친구 삭제 실패')),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(errorData['message'] ?? '친구 삭제 실패')),
+          );
+        }
       }
     } catch (e) {
       print('친구 삭제 오류: $e');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('네트워크 오류가 발생했습니다')));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('네트워크 오류가 발생했습니다')));
+      }
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      //  mounted 체크 추가
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -381,126 +274,98 @@ class _FriendsSettingModalState extends State<FriendsSettingModal> {
     return Dialog(
       backgroundColor: Colors.transparent,
       elevation: 0,
-      child:
-          _isLoading
-              ? Center(
-                child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    const Color(0xFFFB233B),
+      child: Container(
+        padding: EdgeInsets.symmetric(vertical: 16.0),
+        decoration: BoxDecoration(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 차단하기 버튼
+            InkWell(
+              onTap: () async {
+                // 모달을 먼저 닫지 않고 함수에서 처리하도록 변경
+                await _blockFriend();
+              },
+              child: Container(
+                width: double.infinity,
+                padding: EdgeInsets.all(12.0),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
                   ),
                 ),
-              )
-              : Container(
-                padding: EdgeInsets.symmetric(vertical: 16.0),
-                decoration: BoxDecoration(
-                  color: Colors.transparent,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // 1. 친구 차단하기 버튼 (빨간색 텍스트)
-                    InkWell(
-                      onTap: _blockFriend,
-                      child: Container(
-                        width: double.infinity,
-                        padding: EdgeInsets.all(12.0),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.only(
-                            topLeft: Radius.circular(16),
-                            topRight: Radius.circular(16),
-                          ),
-                        ),
-                        child: Padding(
-                          padding: EdgeInsets.only(left: 16.0),
-                          child: Text(
-                            '차단하기',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.red,
-                            ),
-                            textAlign: TextAlign.left,
-                          ),
-                        ),
-                      ),
+                child: Padding(
+                  padding: EdgeInsets.only(left: 16.0),
+                  child: Text(
+                    '차단하기',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.red, // 빨간색
                     ),
-
-                    // 구분선
-                    Container(height: 1, color: Colors.grey[300]),
-
-                    // 2. 친구 삭제하기 버튼
-                    InkWell(
-                      onTap: _deleteFriend,
-                      child: Container(
-                        width: double.infinity,
-                        padding: EdgeInsets.all(12.0),
-                        decoration: BoxDecoration(color: Colors.white),
-                        child: Padding(
-                          padding: EdgeInsets.only(left: 16.0),
-                          child: Text(
-                            '친구 삭제하기',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                            ),
-                            textAlign: TextAlign.left,
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    // 구분선
-                    Container(height: 1, color: Colors.grey[300]),
-
-                    // 3. 위치 공유 활성화/비활성화 버튼
-                    InkWell(
-                      onTap: _toggleLocationSharing,
-                      child: Container(
-                        width: double.infinity,
-                        padding: EdgeInsets.all(12.0),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.only(
-                            bottomLeft: Radius.circular(16),
-                            bottomRight: Radius.circular(16),
-                          ),
-                        ),
-                        child: Padding(
-                          padding: EdgeInsets.only(left: 16.0),
-                          child: Text(
-                            _isLocationSharingActive
-                                ? '위치 공유 비활성화'
-                                : '위치 공유 활성화',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                            ),
-                            textAlign: TextAlign.left,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+                    textAlign: TextAlign.left,
+                  ),
                 ),
               ),
+            ),
+
+            // 구분선
+            Container(height: 1, color: Colors.grey[300]),
+
+            // 삭제하기 버튼
+            InkWell(
+              onTap: () async {
+                // 수정: 모달을 먼저 닫지 않고 함수에서 처리하도록 변경
+                await _deleteFriend();
+              },
+              child: Container(
+                width: double.infinity,
+                padding: EdgeInsets.all(12.0),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.only(
+                    bottomLeft: Radius.circular(16),
+                    bottomRight: Radius.circular(16),
+                  ),
+                ),
+                child: Padding(
+                  padding: EdgeInsets.only(left: 16.0),
+                  child: Text(
+                    '친구 삭제하기',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.black, // 검정색
+                    ),
+                    textAlign: TextAlign.left,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
-}
 
-// 친구 설정 모달을 표시하는 함수
-void showFriendSettings(
-  BuildContext context,
-  Map<String, dynamic> friend,
-  Function onShareStatusChanged,
-) {
-  showDialog(
-    context: context,
-    builder:
-        (context) => FriendsSettingModal(
-          friend: friend,
-          onShareStatusChanged: onShareStatusChanged,
-        ),
-  );
+  // 친구 설정 모달을 표시하는 함수
+  void showFriendSettings(
+    BuildContext context,
+    Map<String, dynamic> friend,
+    Function onShareStatusChanged,
+  ) {
+    showDialog(
+      context: context,
+      builder:
+          (context) => FriendsSettingModal(
+            friend: friend,
+            onShareStatusChanged: onShareStatusChanged,
+          ),
+    );
+  }
 }

@@ -6,6 +6,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
 import 'package:tomapto/services/real_time_location_service.dart';
 import 'package:tomapto/services/socket_service.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 class ApiService {
   static String getApiBaseUrl() {
@@ -76,6 +77,35 @@ class ApiService {
 
         // remember_me 값 저장 - 앱 종료 후에도 로그인 상태 유지할지 결정
         await prefs.setBool('remember_me', rememberMe);
+
+        // 🔥 추가: 로그인 성공 후 FCM 토큰 새로 생성 및 전송
+        try {
+          // 기존 토큰 삭제 후 새로 생성
+          await FirebaseMessaging.instance.deleteToken();
+          await Future.delayed(Duration(milliseconds: 500)); // 잠깐 대기
+          final newToken = await FirebaseMessaging.instance.getToken();
+
+          if (newToken != null) {
+            print('🔥 로그인 후 새 FCM 토큰 생성: $newToken');
+
+            // 서버에 새 토큰 전송
+            final tokenResponse = await http.post(
+              Uri.parse('${getApiBaseUrl()}/account/fcm-token'),
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ${responseData['token']}',
+              },
+              body: json.encode({'fcm_token': newToken}),
+            );
+
+            print('🔥 FCM 토큰 서버 전송 결과: ${tokenResponse.statusCode}');
+
+            // 로컬에도 저장
+            await prefs.setString('fcm_token', newToken);
+          }
+        } catch (e) {
+          print('🔥 FCM 토큰 처리 실패: $e');
+        }
       }
 
       return responseData;

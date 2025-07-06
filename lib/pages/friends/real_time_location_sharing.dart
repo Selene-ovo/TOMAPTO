@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'dart:ui';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tomapto/services/socket_service.dart';
@@ -81,52 +82,9 @@ class _RealTimeLocationSharingPageState
   DateTime? _lastManualCameraControl;
   double _currentZoom = 15.0;
 
-  // 파동 애니메이션 컨트롤러들
-  late AnimationController _waveController1;
-  late AnimationController _waveController2;
-  late AnimationController _waveController3;
-  late Animation<double> _waveAnimation1;
-  late Animation<double> _waveAnimation2;
-  late Animation<double> _waveAnimation3;
-
   @override
   void initState() {
     super.initState();
-
-    // 파동 애니메이션 초기화
-    _waveController1 = AnimationController(
-      duration: const Duration(milliseconds: 2000),
-      vsync: this,
-    )..repeat();
-
-    _waveController2 = AnimationController(
-      duration: const Duration(milliseconds: 2000),
-      vsync: this,
-    )..repeat();
-
-    _waveController3 = AnimationController(
-      duration: const Duration(milliseconds: 2000),
-      vsync: this,
-    )..repeat();
-
-    _waveAnimation1 = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _waveController1, curve: Curves.easeOut));
-
-    _waveAnimation2 = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _waveController2,
-        curve: Interval(0.3, 1.0, curve: Curves.easeOut),
-      ),
-    );
-
-    _waveAnimation3 = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _waveController3,
-        curve: Interval(0.6, 1.0, curve: Curves.easeOut),
-      ),
-    );
 
     _socketService = SocketService();
     _initSocket();
@@ -155,11 +113,6 @@ class _RealTimeLocationSharingPageState
     _followResponseSubscription?.cancel();
     _followCancelledSubscription?.cancel();
     _followStoppedSubscription?.cancel();
-
-    // 애니메이션 컨트롤러 정리
-    _waveController1.dispose();
-    _waveController2.dispose();
-    _waveController3.dispose();
 
     super.dispose();
   }
@@ -1466,7 +1419,7 @@ class _RealTimeLocationSharingPageState
               ),
             ),
 
-          // 위치 공유 상태 메시지 - 트렌디한 레이더 디자인
+          // 위치 공유 상태 메시지
           if (!_isLoading &&
               _errorMessage.isEmpty &&
               !_iAmSharingLocation &&
@@ -1478,266 +1431,95 @@ class _RealTimeLocationSharingPageState
                   margin: const EdgeInsets.all(20.0),
                   padding: const EdgeInsets.all(32.0),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        Color(0xFF1F2937),
-                        Color(0xFF111827),
-                        Color(0xFF0F172A),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(24),
+                    color: Colors.white.withOpacity(0.95), // 거의 불투명
+                    borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withOpacity(0.8),
                       width: 1,
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.5),
-                        blurRadius: 20,
-                        spreadRadius: 5,
-                      ),
-                      BoxShadow(
-                        color: Color(0xFF3B82F6).withOpacity(0.1),
-                        blurRadius: 40,
-                        spreadRadius: 10,
+                        color: Colors.black.withOpacity(0.25),
+                        blurRadius: 25,
+                        spreadRadius: 3,
+                        offset: Offset(0, 8),
                       ),
                     ],
                   ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // 파동 효과와 중앙 아이콘 - 실제 애니메이션 적용
-                      AnimatedBuilder(
-                        animation: Listenable.merge([
-                          _waveAnimation1,
-                          _waveAnimation2,
-                          _waveAnimation3,
-                        ]),
-                        builder: (context, child) {
-                          return Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              // 파동 효과 1 - 가장 큰 원
-                              Transform.scale(
-                                scale: 0.5 + (_waveAnimation1.value * 0.5),
-                                child: Container(
-                                  width: 128,
-                                  height: 128,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: Color(0xFF3B82F6).withOpacity(
-                                        0.4 * (1 - _waveAnimation1.value),
-                                      ),
-                                      width: 2,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              // 파동 효과 2 - 중간 원
-                              Transform.scale(
-                                scale: 0.6 + (_waveAnimation2.value * 0.4),
-                                child: Container(
-                                  width: 96,
-                                  height: 96,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: Color(0xFF8B5CF6).withOpacity(
-                                        0.5 * (1 - _waveAnimation2.value),
-                                      ),
-                                      width: 2,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              // 파동 효과 3 - 작은 원
-                              Transform.scale(
-                                scale: 0.7 + (_waveAnimation3.value * 0.3),
-                                child: Container(
-                                  width: 64,
-                                  height: 64,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: Color(0xFFEC4899).withOpacity(
-                                        0.7 * (1 - _waveAnimation3.value),
-                                      ),
-                                      width: 2,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              // 중앙 아이콘 - 맥박 효과
-                              AnimatedContainer(
-                                duration: Duration(milliseconds: 1200),
-                                curve: Curves.easeInOut,
-                                width: 80,
-                                height: 80,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                    colors: [
-                                      Color(0xFF3B82F6),
-                                      Color(0xFF8B5CF6),
-                                    ],
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Color(0xFF3B82F6).withOpacity(0.4),
-                                      blurRadius: 20,
-                                      spreadRadius: 5,
-                                    ),
-                                    BoxShadow(
-                                      color: Color(0xFF8B5CF6).withOpacity(0.3),
-                                      blurRadius: 40,
-                                      spreadRadius: 10,
-                                    ),
-                                  ],
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    '📡',
-                                    style: TextStyle(fontSize: 32),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-
-                      SizedBox(height: 24),
-
-                      // 제목
-                      Column(
-                        children: [
-                          Text(
-                            'CONNECTION STATUS',
-                            style: TextStyle(
-                              color: Colors.grey[400],
-                              fontSize: 10,
-                              fontWeight: FontWeight.w500,
-                              letterSpacing: 2,
-                            ),
-                          ),
-                          SizedBox(height: 4),
-                          Text(
-                            '위치 공유 대기중',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      SizedBox(height: 20),
-
-                      // 상태 박스
+                      // 심플한 아이콘
                       Container(
-                        width: double.infinity,
-                        padding: EdgeInsets.all(16),
+                        width: 80,
+                        height: 80,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.05),
-                          borderRadius: BorderRadius.circular(16),
+                          color: const Color(0xFF3B82F6).withOpacity(0.1),
+                          shape: BoxShape.circle,
                           border: Border.all(
-                            color: Colors.white.withOpacity(0.1),
+                            color: const Color(0xFF3B82F6).withOpacity(0.3),
                             width: 1,
                           ),
                         ),
-                        child: Column(
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Container(
-                                  width: 8,
-                                  height: 8,
-                                  decoration: BoxDecoration(
-                                    color: Colors.red,
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                                SizedBox(width: 8),
-                                Text(
-                                  'Disconnected',
-                                  style: TextStyle(
-                                    color: Colors.white.withOpacity(0.8),
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            SizedBox(height: 12),
-                            Text(
-                              '친구 설정에서 위치 공유를 활성화하면\n실시간 추적이 시작됩니다',
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.7),
-                                fontSize: 12,
-                                height: 1.4,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
+                        child: const Center(
+                          child: Text('📡', style: TextStyle(fontSize: 32)),
                         ),
                       ),
 
-                      SizedBox(height: 24),
+                      const SizedBox(height: 20),
 
-                      // 버튼
+                      // 제목
+                      const Text(
+                        '위치 공유 대기중',
+                        style: TextStyle(
+                          color: const Color(0xFF1F2937), // 진한 회색
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+
+                      const SizedBox(height: 8),
+
+                      // 설명
+                      const Text(
+                        '친구와 위치를 공유하여\n실시간 추적을 시작하세요',
+                        style: TextStyle(
+                          color: Color(0xFF6B7280), // 중간 회색
+                          fontSize: 14,
+                          height: 1.4,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // 심플한 버튼
                       Container(
                         width: double.infinity,
+                        height: 48,
                         child: ElevatedButton(
                           onPressed: () {
                             Navigator.of(context).pop(); // 뒤로가기
                           },
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.transparent,
+                            backgroundColor: const Color.fromARGB(
+                              255,
+                              249,
+                              36,
+                              24,
+                            ),
                             foregroundColor: Colors.white,
                             elevation: 0,
-                            padding: EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                          ).copyWith(
-                            backgroundColor: MaterialStateProperty.all(
-                              Colors.transparent,
-                            ),
+                            shadowColor: Colors.transparent,
                           ),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  Color(0xFF2563EB),
-                                  Color(0xFF8B5CF6),
-                                  Color(0xFFEC4899),
-                                ],
-                              ),
-                              borderRadius: BorderRadius.circular(16),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Color(0xFF3B82F6).withOpacity(0.3),
-                                  blurRadius: 20,
-                                  spreadRadius: 2,
-                                ),
-                              ],
-                            ),
-                            padding: EdgeInsets.symmetric(vertical: 16),
-                            child: Center(
-                              child: Text(
-                                '🔗 연결하러 가기',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
+                          child: const Text(
+                            '연결하기',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ),

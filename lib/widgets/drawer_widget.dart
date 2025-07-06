@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:tomapto/pages/friends/friends_add.dart';
 import 'package:tomapto/pages/friends/blacklist_friends.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:tomapto/pages/profile/profile_edit.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -27,6 +28,7 @@ class _DrawerWidgetState extends State<DrawerWidget> {
   String _userName = '사용자'; // 기본값 설정
   String _userNickname = '';
   String _userId = ''; // 사용자 ID 추가
+  String? _profileImageUrl; // 프로필 이미지 URL 추가
   bool _isLoading = true;
 
   @override
@@ -35,6 +37,7 @@ class _DrawerWidgetState extends State<DrawerWidget> {
     // 위젯이 화면에 마운트된 후에 데이터를 로드
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadUserProfile();
+      _loadProfileImage();
     });
   }
 
@@ -103,6 +106,8 @@ class _DrawerWidgetState extends State<DrawerWidget> {
             _userName = userData['user_name'] ?? '사용자';
             _userNickname = userData['user_nickname'] ?? '';
             _userId = userData['user_id'] ?? ''; // 사용자 ID 저장
+            _profileImageUrl =
+                userData['user_profile_picture_url']; // 프로필 이미지 URL 저장
             _isLoading = false;
           });
         } else {
@@ -120,6 +125,56 @@ class _DrawerWidgetState extends State<DrawerWidget> {
       setState(() {
         _isLoading = false;
       });
+    }
+  }
+
+  // 프로필 이미지 URL 로드 (추가로 호출하는 메서드)
+  Future<void> _loadProfileImage() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+
+      if (token == null) return;
+
+      final apiBaseUrl = _getApiBaseUrl();
+      final response = await http.get(
+        Uri.parse('$apiBaseUrl/account/profile-edit/current'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true && data['data'] != null) {
+          setState(() {
+            _profileImageUrl = data['data']['user_profile_picture_url'];
+          });
+        }
+      }
+    } catch (e) {
+      print('프로필 이미지 로드 오류: $e');
+    }
+  }
+
+  // 프로필 이미지 위젯 빌드
+  Widget _buildProfileImage() {
+    if (_profileImageUrl != null && _profileImageUrl!.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.network(
+          _profileImageUrl!,
+          width: 50,
+          height: 50,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            return const Icon(Icons.person, color: Colors.black, size: 30);
+          },
+        ),
+      );
+    } else {
+      return const Icon(Icons.person, color: Colors.black, size: 30);
     }
   }
 
@@ -165,42 +220,77 @@ class _DrawerWidgetState extends State<DrawerWidget> {
                       ),
                     ),
                   ),
-                  // "친구" 텍스트 제거됨
                 ],
               ),
             ),
 
             // 사용자 프로필 영역 - 간격 조정됨
-            Padding(
-              padding: const EdgeInsets.only(
-                top: 10, // 줄어든 상단 여백
-                left: 16,
-                right: 16,
-                bottom: 10, // 줄어든 하단 여백
-              ),
-              child: Row(
-                children: [
-                  // 사각형 프로필 이미지
-                  Container(
-                    width: 50,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      border: Border.all(color: Colors.grey[300]!, width: 0.5),
-                      borderRadius: BorderRadius.circular(8),
+            InkWell(
+              onTap: () async {
+                // 프로필 편집 페이지로 이동
+                final prefs = await SharedPreferences.getInstance();
+                final String currentUserId =
+                    prefs.getString('user_id') ?? _userId;
+
+                if (currentUserId.isEmpty) {
+                  // 사용자 ID가 없으면 오류 메시지 표시
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('사용자 정보를 찾을 수 없습니다.'),
+                      backgroundColor: Colors.red,
                     ),
-                    child: const Icon(
-                      Icons.person,
-                      color: Colors.black,
-                      size: 30,
+                  );
+                  return;
+                }
+
+                // DrawerWidget 닫기
+                Navigator.pop(context);
+
+                // 프로필 편집 페이지로 이동
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ProfileEditPage(
+                      currentUserId: currentUserId,
+                      currentNickname: _userNickname.isNotEmpty
+                          ? _userNickname
+                          : _userName,
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  // 사용자 정보 표시 - 닉네임과 마스킹된 아이디로 변경
-                  Expanded(
-                    child:
-                        _isLoading
-                            ? Column(
+                ).then((_) {
+                  // 프로필 편집 페이지에서 돌아왔을 때 프로필 정보 다시 로드
+                  _loadUserProfile();
+                  _loadProfileImage();
+                });
+              },
+              child: Padding(
+                padding: const EdgeInsets.only(
+                  top: 10,
+                  left: 16,
+                  right: 16,
+                  bottom: 10,
+                ),
+                child: Row(
+                  children: [
+                    // 사각형 프로필 이미지
+                    Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        border: Border.all(
+                          color: Colors.grey[300]!,
+                          width: 0.5,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: _buildProfileImage(),
+                    ),
+                    const SizedBox(width: 12),
+                    // 사용자 정보 표시 - 닉네임과 마스킹된 아이디로 변경
+                    Expanded(
+                      child: _isLoading
+                          ? Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
@@ -214,7 +304,7 @@ class _DrawerWidgetState extends State<DrawerWidget> {
                                 ),
                               ],
                             )
-                            : Column(
+                          : Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 // 닉네임 (메인 표시)
@@ -244,9 +334,10 @@ class _DrawerWidgetState extends State<DrawerWidget> {
                                   ),
                               ],
                             ),
-                  ),
-                  const Icon(Icons.chevron_right, color: Colors.black),
-                ],
+                    ),
+                    const Icon(Icons.chevron_right, color: Colors.black),
+                  ],
+                ),
               ),
             ),
 
@@ -296,14 +387,10 @@ class _DrawerWidgetState extends State<DrawerWidget> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder:
-                        (context) => FriendsAddPage(
-                          initialSearchTerm: '',
-                          initialTabIndex:
-                              widget.newRequestsCount > 0
-                                  ? 1
-                                  : 0, // 새 요청이 있으면 요청 알림 탭(1), 없으면 검색 결과 탭(0)
-                        ),
+                    builder: (context) => FriendsAddPage(
+                      initialSearchTerm: '',
+                      initialTabIndex: widget.newRequestsCount > 0 ? 1 : 0,
+                    ),
                   ),
                 ).then((_) {
                   // 친구 추가 페이지에서 돌아왔을 때 갱신 콜백 호출
