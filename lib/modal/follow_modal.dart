@@ -181,7 +181,7 @@ class _FollowModalState extends State<FollowModal> {
       final data = json.decode(response.body);
 
       if (response.statusCode == 200) {
-        _showSnackBar('찾아가기를 중단했습니다');
+        _showSnackBar('찾아가기를 해제했습니다');
         widget.onStatusChanged(); // 상태 갱신
         Navigator.pop(context);
       } else {
@@ -213,7 +213,7 @@ class _FollowModalState extends State<FollowModal> {
     switch (widget.currentStatus) {
       case 'pending':
         if (widget.isRequester) {
-          buttonText = '찾아가기 중단';
+          buttonText = '찾아가기 요청 취소';
           onPressed = _cancelFindWayRequest;
         } else {
           // 상대방이 요청한 경우 - 이 모달에서는 처리하지 않음

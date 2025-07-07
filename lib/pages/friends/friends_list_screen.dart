@@ -884,7 +884,8 @@ class _FriendScreenState extends State<FriendScreen>
       builder:
           (context) => FriendsShowModal(
             friend: friend,
-            hasFollowRequest: hasFollowRequest, // 따라가기 요청 여부 전달
+            hasFollowRequest: hasFollowRequest,
+            onShareStatusChanged: _onShareStatusChanged, // 콜백 추가
           ),
     );
   }
@@ -1034,6 +1035,28 @@ class _FriendScreenState extends State<FriendScreen>
     );
   }
 
+  Widget _buildProfileImage(String? imageUrl) {
+    print('프로필 이미지 URL: $imageUrl'); // 디버깅용
+    if (imageUrl != null && imageUrl.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.network(
+          imageUrl,
+          width: 50,
+          height: 50,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            print('이미지 로드 에러: $error'); // 디버깅용
+            return Icon(Icons.person, color: Colors.black, size: 30);
+          },
+        ),
+      );
+    } else {
+      print('이미지 URL이 null이거나 비어있음'); // 디버깅용
+      return Icon(Icons.person, color: Colors.black, size: 30);
+    }
+  }
+
   // 친구 목록 컨텐츠 위젯 (로그인 시)
   Widget _buildFriendsListContent() {
     return Column(
@@ -1154,7 +1177,7 @@ class _FriendScreenState extends State<FriendScreen>
                             // ListView.builder 안의 리스트 아이템 부분
                             InkWell(
                               onTap: () {
-                                // 친구 항목 전체를 탭했을 때 친구 프로필 모달 표시 (위치 보기 등)
+                                // 친구 프로필 표시 (위치보기, 위치공유)
                                 showFriendProfile(context, validFriend);
                               },
                               child: ListTile(
@@ -1176,15 +1199,8 @@ class _FriendScreenState extends State<FriendScreen>
                                         ),
                                         borderRadius: BorderRadius.circular(8),
                                       ),
-                                      child: Icon(
-                                        Icons.person,
-                                        color: const Color.fromARGB(
-                                          255,
-                                          0,
-                                          0,
-                                          0,
-                                        ),
-                                        size: 30,
+                                      child: _buildProfileImage(
+                                        validFriend['user_profile_picture_url'],
                                       ),
                                     ),
                                     // 상태 표시 아이콘 - 오른쪽 위 위치
@@ -1286,7 +1302,7 @@ class _FriendScreenState extends State<FriendScreen>
                                     color: const Color.fromARGB(255, 0, 0, 0),
                                   ),
                                   onPressed: () {
-                                    // 더 보기 메뉴 - 친구 설정 모달 표시 (차단, 삭제 등)
+                                    // 더 보기 메뉴 - 친구 설정 모달 표시 (차단, 삭제)
                                     showFriendSettings(
                                       context,
                                       validFriend,

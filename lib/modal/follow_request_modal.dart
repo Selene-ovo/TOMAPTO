@@ -133,7 +133,7 @@ class _FollowRequestModalState extends State<FollowRequestModal> {
                     text: widget.requesterName,
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: Colors.blue,
+                      color: const Color.fromARGB(255, 245, 34, 34),
                     ),
                   ),
                   TextSpan(text: '님이 찾아가기를 요청했습니다.'),
@@ -191,7 +191,7 @@ class _FollowRequestModalState extends State<FollowRequestModal> {
                     child: ElevatedButton(
                       onPressed: () => _respondToRequest('accept'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
+                        backgroundColor: const Color.fromARGB(255, 243, 34, 34),
                         padding: EdgeInsets.symmetric(vertical: 12),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),

@@ -7,6 +7,8 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class PushNotificationService {
   static final PushNotificationService _instance =
@@ -107,6 +109,9 @@ class PushNotificationService {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('fcm_token', token);
         print('FCM 토큰 저장됨: $token');
+
+        // 🔥 추가: 서버에 토큰 전송
+        await _sendTokenToServer(token);
       }
     } catch (e) {
       print('FCM 토큰 저장 실패: $e');
@@ -220,7 +225,8 @@ class PushNotificationService {
       print('FCM 토큰 새로고침됨: $newToken');
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('fcm_token', newToken);
-      // 서버에 새 토큰 전송 (필요 시 구현)
+      // 🔥 수정: 서버에 새 토큰 전송
+      await _sendTokenToServer(newToken);
     });
   }
 
@@ -257,11 +263,36 @@ class PushNotificationService {
       final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
           FlutterLocalNotificationsPlugin();
 
-      await flutterLocalNotificationsPlugin
-          .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin
-          >()
-          ?.createNotificationChannel(channel);
+      final AndroidFlutterLocalNotificationsPlugin? androidImplementation =
+          flutterLocalNotificationsPlugin
+              .resolvePlatformSpecificImplementation<
+                AndroidFlutterLocalNotificationsPlugin
+              >();
+
+      await androidImplementation?.createNotificationChannel(channel);
+    }
+  }
+
+  /// 서버에 FCM 토큰 전송
+  Future<void> _sendTokenToServer(String token) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userToken = prefs.getString('token');
+      if (userToken == null) return;
+
+      final apiBaseUrl =
+          dotenv.env['API_BASE_URL'] ?? 'http://localhost:8080/api';
+      final response = await http.post(
+        Uri.parse('$apiBaseUrl/account/fcm-token'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $userToken',
+        },
+        body: json.encode({'fcm_token': token}),
+      );
+      print('FCM 토큰 서버 전송 완료: ${response.statusCode}');
+    } catch (e) {
+      print('FCM 토큰 서버 전송 실패: $e');
     }
   }
 

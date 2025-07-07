@@ -188,6 +188,7 @@ class FriendsController {
         for (var user in searchResults) {
           if (_ensureStringId(user['request_id']) == stringRequestId) {
             user['request_sent'] = false;
+            user['request_id'] = null;
             break;
           }
         }
